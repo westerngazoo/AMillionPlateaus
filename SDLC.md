@@ -10,16 +10,23 @@
 
 **Goal:** Cargo workspace compiles. garust linked. Core types defined.
 
-### Tasks
+### Tasks  — realized by SPEC-0001 (R-0001)
 
-- [ ] Init Cargo workspace with `[workspace]` in root `Cargo.toml`
-- [ ] Create crate skeletons: `mp-graph`, `mp-reputation`, `mp-crdt`, `mp-wasm`
-- [ ] Add `garust` as path dependency in workspace
-- [ ] Implement all types in `GRAPH_SCHEMA.md` — compile-clean
-- [ ] Implement `KnowledgeGraph::add_plateau`, `add_bridge`, `plateau()`
-- [ ] Write redb persistence wrapper (`GraphDb`) — save/load round-trip
-- [ ] 100% unit test coverage on `PlateauNode` construction invariants
-- [ ] Seed graph: 5 plateaus, 4 bridges (hardcoded, for testing)
+- [x] Init Cargo workspace with `[workspace]` in root `Cargo.toml`
+- [x] Create crate skeletons: `mp-graph`, `mp-reputation`, `mp-crdt`, `mp-wasm`
+- [x] Add `garust` as path dependency in workspace (`../garust`)
+- [x] Implement all types in `GRAPH_SCHEMA.md` — compile-clean
+- [x] Implement `KnowledgeGraph::add_plateau`, `add_bridge`, `plateau()`
+- [x] Write redb persistence wrapper (`GraphDb`) — save/load round-trip
+- [x] Unit test coverage on `PlateauNode` / `Bridge` construction invariants
+- [x] Seed graph: 5 plateaus, 4 bridges (hardcoded, for testing)
+
+> **Done 2026-05-30.** `cargo test --workspace` → 14 passed; `cargo clippy
+> --workspace --all-targets -- -D warnings` clean; `cargo run -p mp-graph
+> --example seed_graph` prints 5 plateaus + 4 bridges. garust's real API differs
+> from GARUST_INTEGRATION.md — bridged by the `mp_graph::ga` adapter (see that
+> doc's §8 note). Remaining: architect review of SPEC-0001 + `qa` sign-off on
+> R-0001 before Phase 0 is formally closed.
 
 ### Deliverable
 

@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "crates/mp-graph",
+    "crates/mp-reputation",
+    "crates/mp-crdt",
+    "crates/mp-wasm",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Gustavo Delgadillo <gustavo.delgadillo@gmail.com>"]
+
+[workspace.dependencies]
+# garust is the only math layer. Path points one folder back from the repo root.
+garust       = { path = "../garust" }
+serde        = { version = "1", features = ["derive"] }
+uuid         = { version = "1", features = ["v4", "serde"] }
+petgraph     = "0.6"
+redb         = "1"
+bincode      = "1"
+thiserror    = "1"
+automerge    = "0.5"
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+tokio        = { version = "1", features = ["full"] }
+
+# Internal crates
+mp-graph      = { path = "crates/mp-graph" }
+mp-reputation = { path = "crates/mp-reputation" }

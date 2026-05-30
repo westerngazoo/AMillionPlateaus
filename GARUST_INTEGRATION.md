@@ -236,4 +236,26 @@ The following methods are required from garust. Mark as ✅ if already implement
 | Vector constructor | `Multivector::vector(f32, f32, f32) -> Multivector` | ✅ |
 | Norm / magnitude | `Multivector.norm() -> f32` | ✅ |
 
-All marked ✅ per project author confirmation. No garust modifications required for Phase 1.
+> **Reality check (2026-05-30, from reading `../garust` source).** The table
+> above is *aspirational* — it does not match the shipped garust API. garust's
+> real surface for `Cl(3,0,0)` over f32 is the concrete alias `garust::Vga3f`
+> (`Multivector<f32, 3, 0, 0, 8>`), with a **public** `coeffs: [f32; 8]` array
+> and these methods:
+>
+> | This doc assumes | garust actually provides |
+> |---|---|
+> | `Multivector::vector(a,b,c)` | *(none)* — build via `coeffs` / `basis()` |
+> | `.inner_product(x)` | `.inner(&x)` |
+> | `.dominant_grade()` | *(none)* — derive from `.grade(k)` |
+> | `.even_grade()` | *(none)* — `grade(0) + grade(2)` |
+> | `.normalize()`, `.norm()` | *(none)* — derive from `.norm_squared()` |
+> | `.scale(s)`, `.add(x)` | `*` (scalar mul) and `+` operators |
+> | `.slerp(t)` | *(none)* — build from `.exp()` of a bivector |
+> | `.grade(u8)` | `.grade(usize)` ✅ |
+> | `.reverse()`, `.scalar_part()`, `.sandwich(&x)`, geometric product `*` | ✅ as documented |
+> | serde `Serialize`/`Deserialize` | *(not derived)* — persist `coeffs` |
+>
+> The gap is bridged in **`mp_graph::ga`** (a thin adapter built only from
+> garust primitives — no other math lib). Phase 1 (`mp-reputation`) should reuse
+> that adapter and extend it (e.g. a `slerp` for Alebrije flight paths) rather
+> than assume the methods above exist on garust directly.

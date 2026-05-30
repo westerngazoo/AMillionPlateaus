@@ -35,4 +35,4 @@ field. The build order across requirements and specs is in
 
 | Spec | Title | Realizes | Status |
 |------|-------|----------|--------|
-| _none yet_ | | | |
+| [SPEC-0001](0001-mp-graph-foundation.md) | mp-graph foundation crate | R-0001 | Implemented |

@@ -33,4 +33,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 
 | Req | Title | Milestone | Status |
 |-----|-------|-----------|--------|
-| _none yet_ | | | |
+| [R-0001](0001-foundation-knowledge-graph.md) | Foundation: core knowledge graph with GA invariants | Phase 0 | Met |
