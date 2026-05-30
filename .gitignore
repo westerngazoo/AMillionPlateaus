@@ -1,0 +1,30 @@
+# Rust
+/target/
+**/target/
+Cargo.lock.bak
+
+# Node / pnpm
+node_modules/
+dist/
+pkg/
+.pnpm-store/
+
+# WASM build output
+**/pkg/
+
+# Local env / secrets
+.env
+.env.*
+*.local
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# redb local databases
+*.redb
+
+# Backups
+*.bak
