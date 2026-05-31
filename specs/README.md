@@ -37,3 +37,5 @@ field. The build order across requirements and specs is in
 |------|-------|----------|--------|
 | [SPEC-0001](0001-mp-graph-foundation.md) | mp-graph foundation crate | R-0001 | Implemented |
 | [SPEC-0002](0002-ga-reputation-and-fog.md) | GA reputation engine + fog reachability | R-0002 | Implemented |
+| [SPEC-0003](0003-wasm-graph-bridge.md) | mp-wasm: the WASM graph bridge | R-0003 | Implemented |
+| [SPEC-0004](0004-crdt-sync.md) | mp-crdt: Automerge-backed graph sync | R-0004 | Implemented |

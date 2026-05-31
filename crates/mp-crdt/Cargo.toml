@@ -9,4 +9,10 @@ authors.workspace = true
 mp-graph = { workspace = true }
 automerge = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 uuid = { workspace = true }
+redb = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
