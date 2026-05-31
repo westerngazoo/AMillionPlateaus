@@ -34,3 +34,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | Req | Title | Milestone | Status |
 |-----|-------|-----------|--------|
 | [R-0001](0001-foundation-knowledge-graph.md) | Foundation: core knowledge graph with GA invariants | Phase 0 | Met |
+| [R-0002](0002-ga-reputation-and-fog.md) | GA reputation, Sybil resistance, and fog reachability | Phase 1 | Met |

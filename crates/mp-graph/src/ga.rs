@@ -73,6 +73,18 @@ pub fn normalize(mv: &Mv) -> Mv {
     }
 }
 
+/// Fog projection: how strongly reputation `rep` "faces" a plateau `position`.
+///
+/// Defined as the scalar part of the Hestenes inner product
+/// `⟨rep · position⟩₀`. The Hestenes inner product contributes **nothing** for a
+/// Grade-0 (scalar) operand, so a scalar-only (Sybil) reputation projects to 0
+/// and sees only fog — the fog mechanic is Sybil-resistant for free. For this
+/// reason `project` uses garust's `inner`, never `scalar_product`: the two
+/// differ precisely on scalar inputs, and that difference *is* the resistance.
+pub fn project(rep: &Mv, position: &Mv) -> f32 {
+    rep.inner(position).scalar_part()
+}
+
 /// serde glue for `Mv`, used via `#[serde(with = "crate::ga::serde_mv")]`.
 /// garust's `Multivector` has a public `[f32; DIM]` coefficient array; we
 /// persist exactly that.

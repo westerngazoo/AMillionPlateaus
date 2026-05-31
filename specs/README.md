@@ -36,3 +36,4 @@ field. The build order across requirements and specs is in
 | Spec | Title | Realizes | Status |
 |------|-------|----------|--------|
 | [SPEC-0001](0001-mp-graph-foundation.md) | mp-graph foundation crate | R-0001 | Implemented |
+| [SPEC-0002](0002-ga-reputation-and-fog.md) | GA reputation engine + fog reachability | R-0002 | Implemented |

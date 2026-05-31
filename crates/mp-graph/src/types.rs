@@ -187,6 +187,31 @@ pub struct WizardReputation {
     pub synthesis: Mv,
 }
 
+impl WizardReputation {
+    /// A fresh wizard: no domain reputation, zero synthesis. Reports
+    /// `dominant_grade() == 0` (raw) — every plateau is fogged until they
+    /// traverse something.
+    pub fn new(wizard_id: WizardId) -> Self {
+        Self {
+            wizard_id,
+            domain_reps: HashMap::new(),
+            synthesis: Mv::zero(),
+        }
+    }
+
+    /// The wizard's "rank grade": the maximum dominant grade across all domain
+    /// reputations and the synthesis. 0 = raw, 1 = domain depth, 2 = synthesis,
+    /// 3 = grand wizard. A fresh wizard (zero everywhere) reports 0.
+    pub fn dominant_grade(&self) -> u8 {
+        self.domain_reps
+            .values()
+            .chain(std::iter::once(&self.synthesis))
+            .map(ga::dominant_grade)
+            .max()
+            .unwrap_or(0)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlebrijeState {
     pub name: String,
@@ -320,5 +345,24 @@ mod tests {
     fn validate_accepts_constructed_plateau() {
         let p = PlateauNode::new("Topology", domain(), 0.8, 0.2, 0.1);
         p.validate().expect("constructed plateau passes validation");
+    }
+
+    // ─── AC1 — reputation shape ──────────────────────────────
+
+    #[test]
+    fn fresh_reputation_is_empty_and_grade_zero() {
+        let w = WizardReputation::new(Uuid::new_v4());
+        assert!(w.domain_reps.is_empty());
+        assert!(w.synthesis.scalar_part().abs() < ga::EPSILON);
+        assert_eq!(w.dominant_grade(), 0);
+    }
+
+    /// Reputation is a multivector whose *grade* — never a scalar magnitude — is
+    /// the measure of trust. A large scalar-only domain rep is still grade 0.
+    #[test]
+    fn scalar_reputation_is_grade_zero_regardless_of_magnitude() {
+        let mut w = WizardReputation::new(Uuid::new_v4());
+        w.domain_reps.insert(domain(), Mv::scalar(1_000.0));
+        assert_eq!(w.dominant_grade(), 0, "magnitude must not promote grade");
     }
 }
