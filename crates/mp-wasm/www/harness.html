@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mp-wasm harness — A Million Plateaus (SPEC-0003 AC7)</title>
+  <style>
+    body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+           margin: 2rem; max-width: 70ch; color: #1a1a2e; }
+    h1 { font-size: 1.1rem; }
+    pre { background: #f4f4f8; padding: 1rem; border-radius: 6px; white-space: pre-wrap; }
+    .fog { color: #888; }
+    .lit { color: #1a7f37; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>mp-wasm — graph queryable in the browser</h1>
+  <p>Builds the 5-plateau seed graph, logs the plateau list, then prints the
+     reachable set <em>before</em> (fresh wizard — all fog) and <em>after</em> a
+     sample traversal reputation. Open the console for the full log.</p>
+  <pre id="out">loading wasm…</pre>
+
+  <script type="module">
+    // wasm-pack build crates/mp-wasm --target web  →  ../pkg/
+    import init, { WasmGraph } from "../pkg/mp_wasm.js";
+
+    const out = document.getElementById("out");
+    const log = (line) => { out.textContent += line + "\n"; console.log(line); };
+
+    async function main() {
+      await init();
+      out.textContent = "";
+
+      // One knowledge domain for the seed (e1=Formal, e2=Empirical, e3=Creative).
+      const DOMAIN = "11111111-1111-1111-1111-111111111111";
+      const g = new WasmGraph();
+
+      // 5-plateau seed. Positions echo mp-graph's seed_graph example.
+      const seed = [
+        ["Linear Algebra",        0.9, 0.1, 0.0],
+        ["Differential Geometry", 0.6, 0.5, 0.1],
+        ["Symmetry",              0.7, 0.2, 0.4],
+        ["Group Theory",          0.8, 0.1, 0.3],
+        ["Music Theory",          0.3, 0.4, 0.8],
+      ];
+      const ids = {};
+      for (const [name, e1, e2, e3] of seed) {
+        ids[name] = g.add_plateau(name, DOMAIN, e1, e2, e3);
+      }
+      // A couple of bridges (rotor derived in mp-graph).
+      g.add_bridge(ids["Linear Algebra"], ids["Symmetry"], "linear transformation");
+      g.add_bridge(ids["Symmetry"], ids["Group Theory"], "invariance");
+
+      log("Plateaus:");
+      for (const [name] of seed) {
+        const p = g.plateau(ids[name]);
+        log(`  ${p.name.padEnd(22)} @ (e1=${p.position.e1}, e2=${p.position.e2}, e3=${p.position.e3})`);
+      }
+
+      const idToName = Object.fromEntries(Object.entries(ids).map(([n, i]) => [i, n]));
+      const showReachable = (label, json) => {
+        const reachable = g.reachable_plateaus(json);
+        const names = reachable.map((i) => idToName[i]).sort();
+        const cls = names.length ? "lit" : "fog";
+        log(`\n${label}: ${reachable.length} reachable`);
+        out.innerHTML += `<span class="${cls}">  ${names.length ? names.join(", ") : "(all fog)"}</span>\n`;
+      };
+
+      // Fresh wizard: empty reputation → everything fogged.
+      showReachable("Before (fresh wizard)", `{}`);
+
+      // Sample traversal reputation: moderate depth along Linear Algebra's
+      // direction (0.4 · [0.9, 0.1, 0]). Strong enough to lift fog on the
+      // math-leaning plateaus, but the creative Music Theory plateau (e3-heavy)
+      // stays fogged — you only see what your understanding faces.
+      const rep = JSON.stringify({
+        domain_reps: { [DOMAIN]: [0.0, 0.36, 0.04, 0.0, 0.0, 0.0, 0.0, 0.0] },
+      });
+      showReachable("After (traversed Linear Algebra)", rep);
+
+      // Sybil check: a huge scalar-only reputation still sees only fog.
+      const sybil = JSON.stringify({
+        domain_reps: { [DOMAIN]: [1000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+      });
+      showReachable("Sybil (scalar-only, magnitude 1000)", sybil);
+    }
+
+    main().catch((e) => { out.textContent = "error: " + e; console.error(e); });
+  </script>
+</body>
+</html>

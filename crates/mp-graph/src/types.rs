@@ -295,11 +295,24 @@ pub const REACHABILITY_THRESHOLD: f32 = 0.15;
 pub const CRYSTALLIZE_THRESHOLD: f32 = 50.0;
 pub const DECAY_THRESHOLD: f32 = -10.0;
 
+/// Wall-clock seconds since the Unix epoch, for non-authoritative `created_at`
+/// metadata.
+#[cfg(not(target_arch = "wasm32"))]
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+/// `wasm32-unknown-unknown` has no wall clock — `SystemTime::now()` *panics*
+/// there. `created_at` is non-authoritative metadata (never read by reachability
+/// or any graph invariant), so on wasm we return 0 rather than let a panic cross
+/// the WASM FFI (CLAUDE.md §5). A real browser timestamp can be supplied from JS
+/// in a later phase if the world ever needs it.
+#[cfg(target_arch = "wasm32")]
+fn now_unix() -> u64 {
+    0
 }
 
 #[cfg(test)]

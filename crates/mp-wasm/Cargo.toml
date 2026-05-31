@@ -9,8 +9,22 @@ authors.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Thin bridge: delegates all graph/GA/reputation math to mp-graph. The
+# reputation *engine* mutators (mp-reputation) are a Phase-2 non-goal — reputation
+# crosses the boundary as JSON and is decoded into mp-graph's WizardReputation.
 mp-graph = { workspace = true }
-mp-reputation = { workspace = true }
 wasm-bindgen = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+# On wasm32 the engine's `Uuid::new_v4` needs a browser randomness source;
+# uuid's `js` feature wires getrandom to the Web Crypto API. Host builds don't
+# need it, so it's target-gated.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
