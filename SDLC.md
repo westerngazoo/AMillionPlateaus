@@ -143,6 +143,48 @@ cargo test -p mp-crdt → all green including two-peer sync test
 
 ---
 
+## POC — Web fog-world (vertical slice across Phases 0–3)
+
+**Goal:** A playable, shareable static web page that makes the core idea legible:
+the knowledge graph drawn *as geometry*, fog that lifts on traverse, and
+serverless convergence between two browser tabs — all from the existing audited
+Rust core. Pulled ahead of Phase 4 to stand up the first browser-CRDT plumbing.
+
+### Tasks — realized by SPEC-0005 (R-0005)
+
+- [x] Feature-gate `redb`/`CrdtStore` behind a default-on `storage` feature so
+      `mp-crdt` builds for `wasm32` with `--no-default-features`
+- [x] Expose the CRDT to JS: `WasmCrdtDoc` + `WasmSyncSession` bindings in
+      `mp-wasm` (+ additive `WasmGraph::plateaus()/bridges()` and
+      `add_bridge`/`seed_plateau`/`seed_bridge` for rendering + a non-doubling seed)
+- [x] AC3 `wasm-bindgen-test`: two independent replicas converge over the byte API
+- [x] `apps/web` static page: render geometry + labelled bridges, fog vs lit
+- [x] Click-to-traverse lifts fog (local, un-synced demo reputation)
+- [x] Two-tab sync over `BroadcastChannel` (CRDT bytes only)
+
+### Deliverable
+
+```
+apps/web → open in two tabs; an edit in one converges in the other, no server
+```
+
+> **Done 2026-05-31.** R-0005 **Met** / SPEC-0005 **Implemented**. `cargo test
+> --workspace` → 59 host tests green; `wasm-pack test --node` → 4 wasm tests
+> (incl. the AC3 two-replica sync); clippy `-D warnings` clean on host **and**
+> `wasm32` (mp-wasm + mp-crdt `--no-default-features`); fmt clean; `project.js`
+> node unit test green. `redb`/`CrdtStore`/`CrdtError::Storage` gated behind a
+> default-on `storage` feature (native API unchanged); wasm randomness flows
+> through `uuid`'s `js` feature — no `getrandom` dep. `mp-wasm` stays a thin skin
+> (all branching in the host-tested `convert.rs`); the CRDT reader routes through
+> the audited `CrdtDoc::to_graph` → `WasmGraph`. Verified in-browser: the page
+> loads clean, draws 5 plateaus + 5 labelled bridges with only the entry lit, fog
+> lifts on traverse (1→3→5), and a fresh peer converges over `BroadcastChannel`
+> to a **non-doubled** 6/6 map carrying only `Uint8Array` bytes — reputation never
+> on the wire, `root_keys` == {bridges, plateaus, resources, votes} (CLAUDE.md §7).
+> Architect approved the PR; `qa` signed off on AC1–AC8.
+
+---
+
 ## Phase 4 — Alebrije Service (Weeks 9–10)
 
 **Goal:** AI companion works with plateau-specific context.

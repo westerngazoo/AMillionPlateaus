@@ -8,8 +8,8 @@
 //! collapse holds under arbitrarily many propagation rounds. Only genuine
 //! traversal (`record_traversal`) introduces a Grade-1 part.
 
-use mp_graph::ga::{self, EPSILON};
-use mp_graph::WizardReputation;
+use mp_domain::ga::{self, EPSILON};
+use mp_domain::WizardReputation;
 
 /// The wizard's maximum grade across all domain reputations and synthesis.
 /// Convenience alias for [`WizardReputation::dominant_grade`].
@@ -38,8 +38,8 @@ pub fn is_grade_collapsed(rep: &WizardReputation) -> bool {
 mod tests {
     use super::*;
     use crate::ReputationEngine;
-    use mp_graph::ga::Mv;
-    use mp_graph::{Bridge, DomainId, PlateauNode, WizardReputation};
+    use mp_domain::ga::Mv;
+    use mp_domain::{Bridge, DomainId, PlateauNode, WizardReputation};
     use uuid::Uuid;
 
     #[test]

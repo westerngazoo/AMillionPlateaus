@@ -6,7 +6,7 @@
 //! reputation; plateaus the reputation "faces" (high inner-product projection)
 //! emerge from the fog, while geometrically distant ones stay hidden.
 
-use mp_graph::{Bridge, KnowledgeGraph, PlateauNode, WizardReputation};
+use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, WizardReputation};
 use mp_reputation::ReputationEngine;
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ fn print_reachable(graph: &KnowledgeGraph, wizard: &WizardReputation, caption: &
         let proj = wizard
             .domain_reps
             .values()
-            .map(|rep| mp_graph::ga::project(rep, p.position()))
+            .map(|rep| mp_domain::ga::project(rep, p.position()))
             .fold(f32::NEG_INFINITY, f32::max);
         let proj = if proj.is_finite() { proj } else { 0.0 };
         println!(

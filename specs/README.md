@@ -39,3 +39,8 @@ field. The build order across requirements and specs is in
 | [SPEC-0002](0002-ga-reputation-and-fog.md) | GA reputation engine + fog reachability | R-0002 | Implemented |
 | [SPEC-0003](0003-wasm-graph-bridge.md) | mp-wasm: the WASM graph bridge | R-0003 | Implemented |
 | [SPEC-0004](0004-crdt-sync.md) | mp-crdt: Automerge-backed graph sync | R-0004 | Implemented |
+| [SPEC-0005](0005-web-fog-world-poc.md) | Web fog-world POC: CRDT-in-wasm + a 2D synced map | R-0005 | Implemented |
+| [SPEC-0006](0006-persona-creator.md) | Persona creator: a client-side starting-orientation lens | R-0006 | Implemented |
+| [SPEC-0007](0007-companion-graph-grounded.md) | Companion: provider-agnostic model client + GA-graph-grounded context | R-0007 | Implemented |
+| [SPEC-0008](0008-ga-graph-store-generalization.md) | Generalize `mp-graph` into a domain-agnostic geometric graph store (RFC-0001 Scope A) | R-0008 | Implemented |
+| [SPEC-0009](0009-visitor-authored-personas.md) | Visitor-authored personas: a pure `authorPersona` factory + authoring UI over the existing seed mapping | R-0009 | Implemented |

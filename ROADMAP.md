@@ -17,6 +17,7 @@ P3 — Polish (Phase 9)
 | 1 — GA Reputation | 3–4 | P0 | Fog mechanic works via multivector |
 | 2 — WASM Bridge | 5–6 | P1 | Graph queryable from browser JS |
 | 3 — CRDT Sync | 7–8 | P1 | Two clients sync without server |
+| POC — Web fog-world | slice 0–3 | P1 | ✅ Playable 2D fog map; two tabs converge over BroadcastChannel (R-0005); persona creator seeds per-visitor orientation across two domains (R-0006); always-present companion embodies the persona, talks to a bring-your-own model (hosted/local), grounded in the GA graph (R-0007 — Phase 4 brought forward) |
 | 4 — Alebrije Service | 9–10 | P1 | AI companion live per plateau |
 | 5 — Multiplayer Presence | 11–12 | P2 | Two players see each other |
 | 6 — 3D World | 13–18 | P2 | Navigable world in browser |

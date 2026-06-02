@@ -5,7 +5,7 @@
 //! reachable, while a creative (e3-dominant) plateau the reputation does not
 //! "face" stays in the fog.
 
-use mp_graph::{KnowledgeGraph, PlateauNode, WizardReputation};
+use mp_domain::{KnowledgeGraph, PlateauNode, WizardReputation};
 use mp_reputation::ReputationEngine;
 use uuid::Uuid;
 

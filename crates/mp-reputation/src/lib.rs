@@ -7,7 +7,7 @@
 //!   * [`sybil`] — grade-collapse detection (Sybil resistance).
 //!
 //! Fog reachability itself is a graph query and lives on
-//! `mp_graph::KnowledgeGraph` (`is_reachable` / `reachable_plateaus`), keeping
+//! `mp_domain::KnowledgeGraph` (`is_reachable` / `reachable_plateaus`), keeping
 //! the dependency direction inward (mp-graph ← mp-reputation).
 
 mod reputation;

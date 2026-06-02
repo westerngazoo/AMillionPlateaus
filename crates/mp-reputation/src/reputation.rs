@@ -6,8 +6,8 @@
 //! rule). All math flows through garust (CLAUDE.md §1); reputation is always a
 //! multivector, never a scalar (CLAUDE.md §4).
 
-use mp_graph::ga::Mv;
-use mp_graph::{Bridge, DomainId, WizardReputation};
+use mp_domain::ga::Mv;
+use mp_domain::{Bridge, DomainId, WizardReputation};
 
 /// Tunable parameters for trust propagation.
 pub struct ReputationEngine {
@@ -93,8 +93,8 @@ impl ReputationEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mp_graph::ga::{self, EPSILON};
-    use mp_graph::PlateauNode;
+    use mp_domain::ga::{self, EPSILON};
+    use mp_domain::PlateauNode;
     use uuid::Uuid;
 
     fn engine() -> ReputationEngine {

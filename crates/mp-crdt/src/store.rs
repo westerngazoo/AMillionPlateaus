@@ -78,7 +78,7 @@ fn store_err<E: std::fmt::Display>(e: E) -> CrdtError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mp_graph::{KnowledgeGraph, PlateauNode};
+    use mp_domain::{KnowledgeGraph, PlateauNode};
     use uuid::Uuid;
 
     #[test]

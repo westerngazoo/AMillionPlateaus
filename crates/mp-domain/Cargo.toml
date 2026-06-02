@@ -1,0 +1,20 @@
+[package]
+name = "mp-domain"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# The generic geometric store. mp-domain's types implement its Positioned /
+# Rotored traits; the KnowledgeGraph wraps a GeoGraph<PlateauNode, Bridge>.
+garust = { workspace = true }
+mp-graph = { workspace = true }
+serde = { workspace = true }
+uuid = { workspace = true }
+petgraph = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+bincode = { workspace = true }
+serde_json = { workspace = true }

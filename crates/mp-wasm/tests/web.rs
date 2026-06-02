@@ -7,7 +7,7 @@
 //! these with `wasm-pack test --node crates/mp-wasm`.
 #![cfg(target_arch = "wasm32")]
 
-use mp_wasm::WasmGraph;
+use mp_wasm::{WasmCrdtDoc, WasmGraph, WasmSyncSession};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
@@ -66,4 +66,89 @@ fn fog_queries_smoke() {
     );
     assert!(!g.is_reachable(&a, &sybil).expect("query"));
     assert!(g.reachable_plateaus(&sybil).expect("query").is_empty());
+}
+
+/// R-0007 — the graph-grounded retrieval ranking crosses the boundary: rows
+/// come back ordered by descending projection score, and an invalid `k` is a
+/// graceful thrown `Error`, never a panic across the FFI.
+#[wasm_bindgen_test]
+fn nearest_plateaus_ranks_and_validates_k() {
+    #[derive(serde::Deserialize)]
+    struct NearestRow {
+        id: String,
+        #[allow(dead_code)]
+        name: String,
+        score: f32,
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let mut g = WasmGraph::new();
+    let a = g.add_plateau("A", domain, 1.0, 0.0, 0.0).expect("add A");
+    let _b = g.add_plateau("B", domain, 0.0, 0.0, 1.0).expect("add B");
+    // Reputation faces A (e1).
+    let rep = format!(
+        r#"{{ "domain_reps": {{ "{domain}": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }} }}"#
+    );
+
+    let val = g.nearest_plateaus(&rep, 2.0).expect("nearest query");
+    let rows: Vec<NearestRow> = serde_wasm_bindgen::from_value(val).expect("decode rows");
+    assert_eq!(rows.len(), 2, "k rows returned");
+    assert_eq!(rows[0].id, a, "A (e1) is nearest the e1 orientation");
+    assert!(
+        rows[0].score >= rows[1].score,
+        "rows are descending by score"
+    );
+
+    // Invalid k crosses the FFI as a graceful Err, not a panic.
+    assert!(g.nearest_plateaus(&rep, -1.0).is_err(), "negative k errors");
+    assert!(g.nearest_plateaus(&rep, f64::NAN).is_err(), "NaN k errors");
+}
+
+/// R-0005 AC3 — two **independently constructed** CRDT replicas, each with its
+/// own sync session, converge on a plateau over the wasm/JS runtime: exactly the
+/// shape the two-tab BroadcastChannel POC drives. Replica A adds a plateau; we
+/// pump byte messages both ways until quiescence; B must then see the plateau,
+/// and both replicas must agree on the four root keys (no reputation key on the
+/// wire — AC7). This is the binding-level guarantee under R-0004's convergence.
+#[wasm_bindgen_test]
+fn two_independent_replicas_sync_a_plateau_to_quiescence() {
+    let domain = "00000000-0000-0000-0000-000000000001";
+
+    let mut a = WasmCrdtDoc::new().expect("replica A");
+    let mut b = WasmCrdtDoc::new().expect("replica B");
+    let mut sa = WasmSyncSession::new();
+    let mut sb = WasmSyncSession::new();
+
+    let id = a
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .expect("A adds a plateau");
+
+    // Pump A↔B until neither side has anything left to send (convergence).
+    let mut quiet = false;
+    let mut guard = 0;
+    while !quiet {
+        quiet = true;
+        if let Some(msg) = a.generate_message(&mut sa) {
+            b.receive_message(&mut sb, &msg).expect("B applies A's msg");
+            quiet = false;
+        }
+        if let Some(msg) = b.generate_message(&mut sb) {
+            a.receive_message(&mut sa, &msg).expect("A applies B's msg");
+            quiet = false;
+        }
+        guard += 1;
+        assert!(guard < 100, "sync did not reach quiescence");
+    }
+
+    // B now sees the plateau A authored.
+    let bg = b.to_graph().expect("project B");
+    let seen = bg.plateau(&id).expect("query B for the plateau");
+    assert!(!seen.is_null(), "B must see the plateau A authored");
+
+    // Both replicas agree on exactly the four data maps — no reputation key.
+    assert_eq!(a.root_keys(), b.root_keys());
+    assert_eq!(
+        a.root_keys(),
+        vec!["bridges", "plateaus", "resources", "votes"]
+    );
 }

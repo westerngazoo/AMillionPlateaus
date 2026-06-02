@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 
 use mp_crdt::{CrdtDoc, SyncSession};
-use mp_graph::{Bridge, PlateauNode};
+use mp_domain::{Bridge, PlateauNode};
 use uuid::Uuid;
 
 /// Pump both peers to quiescence: each generates messages, the other applies

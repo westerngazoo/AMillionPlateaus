@@ -85,6 +85,21 @@ pub fn project(rep: &Mv, position: &Mv) -> f32 {
     rep.inner(position).scalar_part()
 }
 
+/// Reverse (a.k.a. dagger, `~M`) of a multivector: flips the sign of grades 2
+/// and 3, leaving grades 0 and 1 unchanged — the `(-1)^{k(k-1)/2}` per-grade
+/// sign. Built from garust grade projections and scalar multiplication; no new
+/// math library (CLAUDE.md §1).
+pub fn reverse(mv: &Mv) -> Mv {
+    mv.grade(0) + mv.grade(1) + mv.grade(2) * (-1.0) + mv.grade(3) * (-1.0)
+}
+
+/// Transport `v` along a rotor by the sandwich product `R · v · ~R`. For a unit
+/// rotor this rotates `v`, preserving its grade and Euclidean norm — the
+/// geometry of moving a multivector across a [`crate::Rotored`] edge.
+pub fn sandwich(rotor: &Mv, v: &Mv) -> Mv {
+    *rotor * *v * reverse(rotor)
+}
+
 /// serde glue for `Mv`, used via `#[serde(with = "crate::ga::serde_mv")]`.
 /// garust's `Multivector` has a public `[f32; DIM]` coefficient array; we
 /// persist exactly that.
@@ -129,5 +144,36 @@ mod tests {
             &(vector(0.9, 0.1, 0.0) * vector(0.3, 0.4, 0.8)),
         ));
         assert!((norm(&r) - 1.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn reverse_is_an_involution() {
+        let m = even_grade(&(vector(0.9, 0.1, 0.0) * vector(0.3, 0.4, 0.8)));
+        let back = reverse(&reverse(&m));
+        for (a, b) in m.coeffs.iter().zip(back.coeffs.iter()) {
+            assert!((a - b).abs() < EPSILON);
+        }
+    }
+
+    #[test]
+    fn identity_rotor_transports_unchanged() {
+        let v = vector(0.3, 0.4, 0.8);
+        let out = sandwich(&Mv::scalar(1.0), &v);
+        for (a, b) in v.coeffs.iter().zip(out.coeffs.iter()) {
+            assert!((a - b).abs() < EPSILON);
+        }
+    }
+
+    #[test]
+    fn rotor_sandwich_preserves_grade_and_norm() {
+        // A normalized even-grade rotor rotates a vector: grade-1 in, grade-1
+        // out, same Euclidean length.
+        let r = normalize(&even_grade(
+            &(vector(1.0, 0.0, 0.0) * vector(0.0, 1.0, 0.0)),
+        ));
+        let v = vector(0.6, 0.0, 0.8);
+        let out = sandwich(&r, &v);
+        assert_eq!(dominant_grade(&out), 1);
+        assert!((norm(&out) - norm(&v)).abs() < EPSILON);
     }
 }

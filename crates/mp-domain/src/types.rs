@@ -1,4 +1,12 @@
-//! Core graph types. Geometry flows through garust — see GARUST_INTEGRATION.md.
+//! AMP's knowledge-graph vocabulary. Geometry flows through garust via the
+//! `mp_graph::ga` adapter — see GARUST_INTEGRATION.md.
+//!
+//! Moved verbatim from `mp-graph` by SPEC-0008 (RFC-0001 Scope A): the structs,
+//! their serde representation, derives, and methods are byte-for-byte the same,
+//! so existing CRDT documents and redb files keep round-tripping (R-0008 AC4).
+//! The only additions are `impl mp_graph::Positioned for PlateauNode` and
+//! `impl mp_graph::Rotored for Bridge`, which let the generic store read their
+//! geometry.
 //!
 //! Invariants enforced at construction:
 //!   * `PlateauNode.position` is a Grade-1 multivector (a pure vector in G(3,0,0)).
@@ -8,16 +16,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::error::GraphError;
-use crate::ga::{self, Mv};
+use mp_graph::ga::{self, Mv};
+use mp_graph::{EdgeId, GraphError, NodeId, Positioned, Rotored};
 
 // ─── Identity ────────────────────────────────────────────────
+//
+// Domain id names. `PlateauId`/`BridgeId` are the store's `NodeId`/`EdgeId`
+// under AMP's vocabulary; the rest scope reputation and resources.
 
-pub type PlateauId = Uuid;
+pub type PlateauId = NodeId;
 pub type DomainId = Uuid;
 pub type WizardId = Uuid;
 pub type ResourceId = Uuid;
-pub type BridgeId = Uuid;
+pub type BridgeId = EdgeId;
 
 // ─── Knowledge Space ─────────────────────────────────────────
 
@@ -34,7 +45,7 @@ pub struct PlateauNode {
     pub name: String,
     pub description: String,
     pub domain_id: DomainId,
-    #[serde(with = "crate::ga::serde_mv")]
+    #[serde(with = "mp_graph::ga::serde_mv")]
     position: Mv,
     /// Runtime fog state — not authoritative graph data.
     pub fog: bool,
@@ -83,6 +94,20 @@ impl PlateauNode {
     }
 }
 
+/// Position a plateau in the generic store. The Grade-1 invariant is enforced
+/// at construction (`new`) and re-checked on load via [`Positioned::validate_position`].
+impl Positioned for PlateauNode {
+    fn node_id(&self) -> NodeId {
+        self.id
+    }
+    fn position(&self) -> &Mv {
+        &self.position
+    }
+    fn validate_position(&self) -> Result<(), GraphError> {
+        self.validate()
+    }
+}
+
 /// Conceptual connection between two plateaus, encoded as a GA rotor.
 ///
 /// The rotor is the even-grade part of the geometric product of the two plateau
@@ -95,7 +120,7 @@ pub struct Bridge {
     pub from: PlateauId,
     pub to: PlateauId,
     pub concept_label: String,
-    #[serde(with = "crate::ga::serde_mv")]
+    #[serde(with = "mp_graph::ga::serde_mv")]
     rotor: Mv,
     pub dominant_grade: u8,
     pub bidirectional: bool,
@@ -152,6 +177,22 @@ impl Bridge {
             )));
         }
         Ok(())
+    }
+}
+
+/// Connect two plateaus in the generic store as an even-grade rotor edge.
+impl Rotored for Bridge {
+    fn edge_id(&self) -> EdgeId {
+        self.id
+    }
+    fn endpoints(&self) -> (NodeId, NodeId) {
+        (self.from, self.to)
+    }
+    fn rotor(&self) -> &Mv {
+        &self.rotor
+    }
+    fn validate_rotor(&self) -> Result<(), GraphError> {
+        self.validate()
     }
 }
 

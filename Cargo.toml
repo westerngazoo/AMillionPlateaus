@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/mp-graph",
+    "crates/mp-domain",
     "crates/mp-reputation",
     "crates/mp-crdt",
     "crates/mp-wasm",
@@ -29,4 +30,9 @@ tokio        = { version = "1", features = ["full"] }
 
 # Internal crates
 mp-graph      = { path = "crates/mp-graph" }
+mp-domain     = { path = "crates/mp-domain" }
 mp-reputation = { path = "crates/mp-reputation" }
+# default-features = false so wasm consumers (mp-wasm) drop the redb-backed
+# `storage` feature, which does not build for wasm32 (SPEC-0005 §2.1). Native
+# `cargo test -p mp-crdt` is unaffected — that uses the package's own defaults.
+mp-crdt       = { path = "crates/mp-crdt", default-features = false }

@@ -428,12 +428,26 @@ name = "mp-crdt"
 version = "0.1.0"
 dependencies = [
  "automerge",
- "mp-graph",
+ "mp-domain",
  "redb",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "mp-domain"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "garust",
+ "mp-graph",
+ "petgraph",
+ "serde",
+ "serde_json",
+ "tempfile",
  "uuid",
 ]
 
@@ -456,7 +470,7 @@ name = "mp-reputation"
 version = "0.1.0"
 dependencies = [
  "garust",
- "mp-graph",
+ "mp-domain",
  "serde",
  "uuid",
 ]
@@ -465,7 +479,8 @@ dependencies = [
 name = "mp-wasm"
 version = "0.1.0"
 dependencies = [
- "mp-graph",
+ "mp-crdt",
+ "mp-domain",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

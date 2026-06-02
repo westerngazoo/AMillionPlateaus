@@ -31,7 +31,7 @@ use std::collections::BTreeMap;
 use automerge::transaction::{CommitOptions, Transactable};
 use automerge::{ActorId, AutoCommit, ObjId, ObjType, ReadDoc, ScalarValue, Value, ROOT};
 
-use mp_graph::{Bridge, KnowledgeGraph, PlateauNode, Resource};
+use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};
 use uuid::Uuid;
 
 use crate::error::CrdtError;
@@ -329,7 +329,7 @@ fn scalar_f64(s: &ScalarValue) -> Result<f64, CrdtError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mp_graph::Bridge;
+    use mp_domain::Bridge;
 
     fn seed() -> KnowledgeGraph {
         let domain = Uuid::new_v4();

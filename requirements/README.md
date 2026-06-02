@@ -37,3 +37,8 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0002](0002-ga-reputation-and-fog.md) | GA reputation, Sybil resistance, and fog reachability | Phase 1 | Met |
 | [R-0003](0003-wasm-graph-bridge.md) | WASM bridge: the knowledge graph, queryable from the browser | Phase 2 | Met |
 | [R-0004](0004-crdt-sync.md) | CRDT sync: two clients converge on graph state without a server | Phase 3 | Met |
+| [R-0005](0005-web-fog-world-poc.md) | Playable web POC: a navigable fog-world that syncs between two browser tabs | POC | Met |
+| [R-0006](0006-persona-creator.md) | Persona creator: choose a starting orientation in the knowledge geometry | POC | Met |
+| [R-0007](0007-companion-graph-grounded.md) | Companion: an always-present, graph-grounded AI guide that embodies your persona | Phase 4 | Met |
+| [R-0008](0008-ga-graph-store-generalization.md) | Generalize `mp-graph` into a domain-agnostic geometric graph store (RFC-0001 Scope A) | Infra | Met |
+| [R-0009](0009-visitor-authored-personas.md) | Visitor-authored personas: craft your own lens, not just pick a card | POC | Met |

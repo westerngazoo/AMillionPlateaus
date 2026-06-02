@@ -12,12 +12,14 @@
 
 mod doc;
 mod error;
+#[cfg(feature = "storage")]
 mod store;
 mod sync;
 mod vote;
 
 pub use doc::CrdtDoc;
 pub use error::CrdtError;
+#[cfg(feature = "storage")]
 pub use store::CrdtStore;
 pub use sync::SyncSession;
 pub use vote::ResourceVote;

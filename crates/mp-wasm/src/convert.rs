@@ -1,7 +1,7 @@
 //! Pure, host-testable marshalling between the JS boundary and `mp-graph`.
 //!
 //! Everything with branching logic — UUID parsing, JSON decoding, DTO building,
-//! the reachability queries — lives here as plain functions over `mp_graph`
+//! the reachability queries — lives here as plain functions over `mp_domain`
 //! types, exercised by `cargo test --workspace` on the host (SPEC-0003 §2). No
 //! `#[wasm_bindgen]` appears in this file; `lib.rs` is the binding skin.
 //!
@@ -12,8 +12,9 @@
 
 use std::collections::HashMap;
 
-use mp_graph::ga::Mv;
-use mp_graph::{KnowledgeGraph, PlateauNode, WizardReputation};
+use mp_crdt::ResourceVote;
+use mp_domain::ga::Mv;
+use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, WizardReputation};
 use uuid::Uuid;
 
 use crate::error::{QueryError, ReputationParseError};
@@ -71,6 +72,38 @@ pub struct PlateauDto {
     pub position: PositionDto,
 }
 
+/// JS-facing view of a bridge — endpoints by id plus the concept label. The
+/// rotor/grade stay in the Rust core; the web app only needs to draw a labelled
+/// line between two plateaus (SPEC-0005 §2.3, R-0005 AC4).
+#[derive(serde::Serialize)]
+pub struct BridgeDto {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub concept: String,
+}
+
+/// Map a `Bridge` to its JS DTO.
+pub fn bridge_dto(b: &Bridge) -> BridgeDto {
+    BridgeDto {
+        id: b.id.to_string(),
+        from: b.from.to_string(),
+        to: b.to.to_string(),
+        concept: b.concept_label.clone(),
+    }
+}
+
+/// Every plateau in the graph as JS DTOs — the render layer needs the full set
+/// (both lit and fogged), which `reachable_plateaus` (lit only) cannot give.
+pub fn all_plateau_dtos(g: &KnowledgeGraph) -> Vec<PlateauDto> {
+    g.plateaus().map(plateau_dto).collect()
+}
+
+/// Every bridge in the graph as JS DTOs (for drawing labelled edges).
+pub fn all_bridge_dtos(g: &KnowledgeGraph) -> Vec<BridgeDto> {
+    g.bridges().map(bridge_dto).collect()
+}
+
 /// Map a `PlateauNode` to its JS DTO (AC2).
 pub fn plateau_dto(p: &PlateauNode) -> PlateauDto {
     let c = p.position().coeffs; // [1, e1, e2, e12, e3, e13, e23, e123]
@@ -86,12 +119,67 @@ pub fn plateau_dto(p: &PlateauNode) -> PlateauDto {
     }
 }
 
+/// JS-facing view of a resource's vote tally (SPEC-0005 §2.2). `weights` maps a
+/// wizard-id string to that wizard's grow-only weight; `voters` and
+/// `weighted_sum` are the derived totals `CrdtDoc` projects into a graph.
+#[derive(serde::Serialize)]
+pub struct ResourceVoteDto {
+    pub voters: usize,
+    pub weighted_sum: f32,
+    pub weights: HashMap<String, f32>,
+}
+
+/// Map a `ResourceVote` tally to its JS DTO.
+pub fn resource_vote_dto(v: &ResourceVote) -> ResourceVoteDto {
+    ResourceVoteDto {
+        voters: v.voters(),
+        weighted_sum: v.weighted_sum(),
+        weights: v
+            .cells()
+            .map(|(wizard, weight)| (wizard.to_string(), *weight))
+            .collect(),
+    }
+}
+
 /// AC4 — the reachable-set query, host-testable against a `KnowledgeGraph`.
 pub fn reachable_ids(g: &KnowledgeGraph, json: &str) -> Result<Vec<String>, ReputationParseError> {
     let rep = parse_reputation(json)?;
     Ok(g.reachable_plateaus(&rep)
         .iter()
         .map(|id| id.to_string())
+        .collect())
+}
+
+/// R-0007 — one row of the graph-grounded retrieval ranking: a plateau and how
+/// strongly the reputation projects onto it (the same projection the fog uses).
+#[derive(serde::Serialize)]
+pub struct NearestDto {
+    pub id: String,
+    pub name: String,
+    pub score: f32,
+}
+
+/// R-0007 — top-`k` plateaus nearest the reputation's orientation, ordered by
+/// descending projection score. Decodes the same reputation JSON as
+/// [`reachable_ids`] and delegates the ranking (GA math) to `mp-graph`; this
+/// function only marshals ids/names/scores into DTOs. A ranked id with no
+/// matching plateau is skipped (cannot happen for a single consistent graph, but
+/// keeps the marshaller total — never emits a row with an empty name).
+pub fn nearest_dtos(
+    g: &KnowledgeGraph,
+    json: &str,
+    k: usize,
+) -> Result<Vec<NearestDto>, ReputationParseError> {
+    let rep = parse_reputation(json)?;
+    Ok(g.nearest_plateaus(&rep, k)
+        .into_iter()
+        .filter_map(|(id, score)| {
+            g.plateau(&id).map(|p| NearestDto {
+                id: id.to_string(),
+                name: p.name.clone(),
+                score,
+            })
+        })
         .collect())
 }
 
@@ -113,7 +201,7 @@ pub fn is_reachable_by_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mp_graph::ga;
+    use mp_domain::ga;
 
     // ── helpers ──────────────────────────────────────────────
 
@@ -248,6 +336,38 @@ mod tests {
         got.sort();
         want.sort();
         assert_eq!(got, want);
+    }
+
+    // ── R-0007 — nearest_dtos retrieval ranking ──────────────
+
+    #[test]
+    fn nearest_dtos_ranks_and_truncates() {
+        let domain = Uuid::new_v4();
+        let (g, a_id, b_id) = two_plateau_graph(domain);
+        // Reputation faces A (e1): A ranks above B (e3).
+        let json = rep_json(domain, 1.0, 0.0, 0.0);
+
+        let rows = nearest_dtos(&g, &json, 10).expect("valid json");
+        assert_eq!(rows.len(), 2, "both plateaus ranked (no threshold)");
+        assert_eq!(rows[0].id, a_id.to_string(), "A (e1) is nearest");
+        assert_eq!(rows[0].name, "A");
+        assert!(rows[0].score >= rows[1].score, "descending by score");
+        assert_eq!(rows[1].id, b_id.to_string());
+
+        // k truncates to the top of the ranking.
+        let top1 = nearest_dtos(&g, &json, 1).expect("valid json");
+        assert_eq!(top1.len(), 1);
+        assert_eq!(top1[0].id, a_id.to_string());
+    }
+
+    #[test]
+    fn nearest_dtos_rejects_bad_json() {
+        let domain = Uuid::new_v4();
+        let (g, _, _) = two_plateau_graph(domain);
+        assert!(matches!(
+            nearest_dtos(&g, "{ broken", 5),
+            Err(ReputationParseError::Json(_))
+        ));
     }
 
     // ── AC3 — is_reachable_by_id ─────────────────────────────

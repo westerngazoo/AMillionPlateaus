@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use mp_graph::WizardId;
+use mp_domain::WizardId;
 
 /// The tally of votes on a single resource: each wizard's monotonic weight.
 #[derive(Debug, Clone, Default, PartialEq)]
