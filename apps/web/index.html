@@ -175,6 +175,32 @@
         border-radius: 6px; padding: 7px 10px; font-size: 13px;
       }
       .setup-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+      /* Draft Plateau form (SPEC-0011 / R-0011): collapsible authoring panel. */
+      .draft-plateau {
+        background: #141c26; border: 1px solid #2a3543; border-radius: 8px;
+        padding: 0; font-size: 13px; max-width: 760px; width: 100%;
+      }
+      .draft-plateau summary {
+        padding: 8px 14px; cursor: pointer; user-select: none;
+        color: #9fd0b4; font-size: 13px; list-style: none;
+      }
+      .draft-plateau summary::marker, .draft-plateau summary::-webkit-details-marker { display: none; }
+      .draft-plateau summary::before { content: "▸ "; font-size: 11px; }
+      .draft-plateau[open] summary::before { content: "▾ "; }
+      .draft-plateau-body {
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 12px 14px 14px; border-top: 1px solid #1e2d3d;
+      }
+      .dp-row { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 10px; }
+      .dp-row label { font-size: 12px; color: #b7c6d6; }
+      .dp-row input[type="text"], .dp-row select {
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 100%;
+      }
+      .dp-row input[type="range"] { width: 100%; }
+      .dp-error { font-size: 12px; color: #ffb4a8; margin: 0; }
+      .dp-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
     </style>
   </head>
   <body>
@@ -182,7 +208,7 @@
     <div class="bar">
       <button id="change-persona">Change persona</button>
       <button id="model-setup">Model setup</button>
-      <button id="add">Add a plateau (syncs)</button>
+      <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <span id="hud">loading…</span>
@@ -196,6 +222,38 @@
       <button id="relay-connect">Connect relay</button>
       <span id="relay-hud" class="idhud">relay ○ offline</span>
     </div>
+    <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
+         domain select is populated from DOMAINS at init. Position sliders use
+         HUMAN labels (Formal/Empirical/Creative) — no raw blade indices. -->
+    <details id="draft-plateau" class="draft-plateau" hidden>
+      <summary>Draft a plateau</summary>
+      <form id="draft-plateau-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="dp-name">Name</label>
+          <input id="dp-name" type="text" placeholder="Plateau name (optional)" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-domain">Domain</label>
+          <select id="dp-domain"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dp-e1">Formal</label>
+          <input id="dp-e1" type="range" min="-1" max="1" step="0.05" value="0.8" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-e2">Empirical</label>
+          <input id="dp-e2" type="range" min="-1" max="1" step="0.05" value="0" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-e3">Creative</label>
+          <input id="dp-e3" type="range" min="-1" max="1" step="0.05" value="0" />
+        </div>
+        <p id="dp-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Draft plateau</button>
+        </div>
+      </form>
+    </details>
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>

@@ -1,5 +1,5 @@
 // main.js — wire wasm + render + input + sync + identity + the persona creator
-// (SPEC-0005/0006/0007/0009, extended by SPEC-0010 for Nostr identity).
+// (SPEC-0005/0006/0007/0009, SPEC-0010 Nostr identity, SPEC-0011 plateau authoring).
 //
 // No GA, graph, CRDT or crypto logic lives here: it parses input, calls the wasm
 // core, and marshals results to the render layer. Phase 8 makes reach EARNED — the
@@ -34,6 +34,7 @@ import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
+import { buildPlateau } from "./plateau.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -710,25 +711,49 @@ async function main() {
     }
   });
 
-  // A synced graph edit: add a user-authored plateau (fresh random id) under the
-  // active persona's domain and a bridge from it, then pump to the other tab.
-  let added = 0;
-  document.getElementById("add").addEventListener("click", () => {
-    if (!activePersona) return;
-    // An authored persona may face nothing (orient: []); without a domain to file
-    // the new plateau under there is nothing to add, so no-op rather than throw
-    // (R-0009 AC6 — keep the world console-clean for an empty persona).
-    const domain = activePersona.orient[0]?.domain;
-    if (!domain) return;
-    added += 1;
-    const e1 = Math.random() * 1.2 - 0.1;
-    const e2 = Math.random() * 0.5;
-    const e3 = Math.random() * 1.2;
-    const id = doc.add_plateau(`Idea ${added}`, domain, e1, e2, e3);
-    DOMAIN_OF.set(id, domain);
-    doc.add_bridge(SEED_PLATEAUS[0].id, id, `link ${added}`);
-    sync.pump(); // broadcast the CRDT change
+  // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────
+  // The toggle button shows/hides the <details> panel; the form submit wires
+  // buildPlateau → WasmCrdtDoc.add_plateau → CRDT sync → draw.
+
+  // Populate the domain <select> from DOMAINS (human labels, no raw UUIDs shown).
+  const dpDomain = document.getElementById("dp-domain");
+  for (const d of DOMAINS) {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.label;
+    dpDomain.appendChild(opt);
+  }
+
+  // Toggle button shows/hides the collapsible panel.
+  const draftPanel = document.getElementById("draft-plateau");
+  document.getElementById("draft-plateau-toggle").addEventListener("click", () => {
+    draftPanel.hidden = !draftPanel.hidden;
+    if (!draftPanel.hidden) draftPanel.open = true;
+  });
+
+  document.getElementById("draft-plateau-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildPlateau({
+      name:   document.getElementById("dp-name").value,
+      domain: dpDomain.value,
+      e1: parseFloat(document.getElementById("dp-e1").value),
+      e2: parseFloat(document.getElementById("dp-e2").value),
+      e3: parseFloat(document.getElementById("dp-e3").value),
+    });
+    const errEl = document.getElementById("dp-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    // Add to the CRDT doc and broadcast (AC2/AC3/AC4).
+    const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3);
+    DOMAIN_OF.set(id, spec.domain); // register for traversal scoring
+    sync.pump(); // broadcast the CRDT change to other tabs
     draw();
+    // Reset name field; sliders stay at their last positions.
+    document.getElementById("dp-name").value = "";
   });
 
   // Forget my history: clear the local event log so reputation falls back to
