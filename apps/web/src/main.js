@@ -1,18 +1,29 @@
-// main.js — wire wasm + render + input + sync + the persona creator
-// (SPEC-0005 §2.3/§2.4, extended by SPEC-0006).
+// main.js — wire wasm + render + input + sync + identity + the persona creator
+// (SPEC-0005/0006/0007/0009, extended by SPEC-0010 for Nostr identity).
 //
-// No GA, graph or CRDT logic lives here: it parses input, calls the wasm core,
-// and marshals results to the render layer. The persona and the local reputation
-// it seeds are the bits of state the page owns, and they are deliberately never
-// synced (R-0006 AC5).
+// No GA, graph, CRDT or crypto logic lives here: it parses input, calls the wasm
+// core, and marshals results to the render layer. Phase 8 makes reach EARNED — the
+// visitor holds a Nostr keypair, traversals/vouches are signed events, and
+// reputation is recomputed from the verified event log by the Rust engine (no seed
+// magnitude). The persona is now only an ORIENTATION hint; the key, the event log,
+// the companion chat and the model config are all LOCAL and never synced.
 
-import init, { WasmCrdtDoc, WasmSyncSession } from "../pkg/mp_wasm.js";
+import init, {
+  WasmCrdtDoc,
+  WasmSyncSession,
+  WasmIdentity,
+  verify_event,
+  recompute_reputation,
+  rank_wizards,
+} from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
-import { accumulate } from "./traverse.js";
 import { createSync } from "./sync.js";
+import { loadOrMintIdentity } from "./identity.js";
+import { makeLog } from "./events.js";
+import { createRelay, RELAY_KEY } from "./relay.js";
+import { createEventBus } from "./eventbus.js";
 import {
   ARCHETYPES,
-  seedReputation,
   authorPersona,
   DOMAINS,
   AXES,
@@ -62,8 +73,31 @@ function saveAuthored(seed) {
   localStorage.setItem(AUTHORED_KEY, JSON.stringify(seed)); // local only — never on the wire
 }
 
+// The relay endpoint is a LOCAL setting (like the model config). Empty ⇒ offline,
+// and the world stays fully playable from the local event log (R-0010 AC7).
+function loadRelayUrl() {
+  try {
+    return localStorage.getItem(RELAY_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+function saveRelayUrl(url) {
+  try {
+    if (url) localStorage.setItem(RELAY_KEY, url);
+    else localStorage.removeItem(RELAY_KEY);
+  } catch {
+    /* storage denied — the URL still applies for this session */
+  }
+}
+
 // How many nearest-by-projection plateaus to ground the companion with.
 const NEAREST_K = 5;
+
+// A reached plateau signs a depth-1 traversal toward its position (R-0010 AC3).
+const TRAVERSAL_DEPTH = 1.0;
+// How many top traversers per domain discovery surfaces (R-0010 AC7).
+const DISCOVERY_K = 5;
 
 // Two domains in different GA regions so domain choice means something
 // (R-0006 AC3): Mathematics lives on the e1 axis, Music on the e3 axis. e2 is a
@@ -107,6 +141,13 @@ const SEED_BRIDGES = [
 // — a best-effort heuristic, harmless to the positional fog math.
 const DOMAIN_OF = new Map(SEED_PLATEAUS.map((p) => [p.id, p.domain]));
 
+// Each faced domain's on-axis origin plateau is always drawn as a navigable
+// trailhead (SPEC-0010 §2.3): with an empty log reputation reaches nothing, but a
+// trailhead lets the visitor sign their FIRST traversal. This is a render/interaction
+// affordance gated on persona ORIENTATION, never on reputation — so "empty log ⇒
+// empty domain_reps ⇒ reaches nothing" stays true at the reputation layer.
+const TRAILHEAD_OF = { [MATH_DOMAIN]: P.Arithmetic, [MUSIC_DOMAIN]: P.Rhythm };
+
 // Math on the upper-right (high e1), Music on the lower-left (high e3).
 const VIEW = { cx: 230, cy: 150, scale: 320 };
 
@@ -125,10 +166,26 @@ async function main() {
   console.log(`[mp] doc root keys: ${keys.join(", ")} ${ok ? "✓" : "✗ UNEXPECTED"}`);
   console.assert(ok, "synced doc must hold exactly {bridges, plateaus, resources, votes}");
 
+  // ── Identity + event log (SPEC-0010 §2.3, R-0010 AC1/AC3) ───────────────
+  // All crypto/GA stays in Rust; this object just injects the wasm entry points
+  // into the pure JS orchestration of identity.js / events.js.
+  const idWasm = { WasmIdentity, verify_event, recompute_reputation };
+  // Mint or restore the wizard key; the SECRET is persisted only locally and never
+  // displayed/synced/logged. The pubkey is the stable public wizard id.
+  const identity = loadOrMintIdentity(idWasm, localStorage);
+  const myPubkey = identity.pubkey();
+  // The verified event log is the SOURCE of reputation — no seed magnitude.
+  const log = makeLog(idWasm, myPubkey, localStorage);
+  // Cached `{domain_reps, synthesis}`; recomputed from the log after every change.
+  let reputation = log.reputation();
+  function recompute() {
+    reputation = log.reputation();
+  }
+
   // The persona is the page's local lens. Null until the visitor chooses one; the
-  // world is not interactive before then (R-0006 AC1).
+  // world is not interactive before then (R-0006 AC1). Phase 8: the persona only
+  // ORIENTS (which domains' trailheads/camera) — it never seeds a reputation vector.
   let activePersona = null;
-  let localRep = { domain_reps: {} };
 
   // The visitor's last authored persona inputs `{ name, orient, tone }`, restored
   // from localStorage and surfaced in the creator (SPEC-0009 §2.5). LOCAL only.
@@ -141,6 +198,9 @@ async function main() {
   const canvas = document.getElementById("world");
   const ctx = canvas.getContext("2d");
   const hud = document.getElementById("hud");
+  const identityHud = document.getElementById("identity-hud");
+  const relayHud = document.getElementById("relay-hud");
+  const discovery = document.getElementById("discovery");
   const creator = document.getElementById("creator");
   const companion = document.getElementById("companion");
   const companionName = document.getElementById("companion-name");
@@ -150,27 +210,176 @@ async function main() {
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
 
+  // Show the PUBLIC half of the key (safe to display). The secret is never shown.
+  identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
+
+  // The domains the active persona faces, and each one's always-navigable trailhead.
+  function facedDomains() {
+    return new Set((activePersona?.orient ?? []).map((o) => o.domain));
+  }
+  function trailheadIds() {
+    const ids = [];
+    for (const d of facedDomains()) {
+      if (TRAILHEAD_OF[d]) ids.push(TRAILHEAD_OF[d]);
+    }
+    return ids;
+  }
+
   function draw() {
     const graph = doc.to_graph();
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
-    const reachable = new Set(graph.reachable_plateaus(JSON.stringify(localRep)));
-    points = render(ctx, { plateaus, bridges, reachable, view: VIEW });
+    // EARNED reach comes purely from the recomputed reputation (empty log ⇒ none).
+    const earned = new Set(graph.reachable_plateaus(JSON.stringify(reputation)));
+    // Trailheads are lit on top as a navigable start (orientation-gated, not reach).
+    const lit = new Set(earned);
+    for (const id of trailheadIds()) lit.add(id);
+    points = render(ctx, { plateaus, bridges, reachable: lit, view: VIEW });
     const who = activePersona ? `${activePersona.name} · ` : "";
-    hud.textContent = `${who}${reachable.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges`;
+    hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges`;
   }
 
   // After any LOCAL graph edit, ship the change to the other tab.
   const sync = createSync(doc, session, draw);
 
+  // ── Signed-event transport (SPEC-0010 §2.3, R-0010 AC2/AC4/AC7) ─────────
+  // Verify-gate an event into the local log, recompute reputation, re-light, and —
+  // for locally-signed events — ship it to the other tab and the relay. Inbound
+  // peer/relay events arrive with broadcast:false so they are not echoed back.
+  function ingest(json, { broadcast = true } = {}) {
+    if (!log.add(json)) return false; // invalid signature or duplicate — inert
+    recompute();
+    if (broadcast) {
+      try {
+        bus.broadcast(json);
+      } catch {
+        /* no BroadcastChannel (e.g. older runtime) — relay/local still work */
+      }
+      relay.publish(json);
+    }
+    draw();
+    return true;
+  }
+
+  // Cross-tab signed-event channel — SEPARATE from the CRDT graph-sync channel.
+  const bus = createEventBus((json) => ingest(json, { broadcast: false }));
+
+  // Optional relay; reconnectable from the HUD. Starts from the saved URL (offline
+  // if none). On socket trouble the HUD shows "offline" and the world keeps working.
+  let relay = { publish() {}, close() {} };
+  function setRelayStatus(state) {
+    relayHud.textContent = state === "online" ? "relay ● online" : "relay ○ offline";
+  }
+  function connectRelay(url) {
+    relay.close();
+    relay = createRelay({
+      url,
+      onEvent: (json) => ingest(json, { broadcast: false }),
+      onStatus: setRelayStatus,
+    });
+  }
+
+  // Reaching a plateau signs a depth-1 traversal toward its position, recomputes,
+  // re-lights, and ships it — no reload (R-0010 AC2/AC3).
+  function signTraversal(domain, plateau) {
+    const { e1, e2, e3 } = plateau.position;
+    try {
+      ingest(identity.sign_traversal(domain, e1, e2, e3, TRAVERSAL_DEPTH, plateau.id));
+    } catch (err) {
+      console.error("[mp] sign_traversal failed:", err);
+    }
+  }
+
+  // ── Discovery + vouch (SPEC-0010 §2.3, R-0010 AC5/AC7) ──────────────────
+  function shortKey(pk) {
+    return pk && pk.length > 12 ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : pk || "?";
+  }
+  function labelForDomain(id) {
+    return DOMAINS.find((d) => d.id === id)?.label ?? "Uncharted";
+  }
+  function canonicalAxis(domain) {
+    const c = DOMAINS.find((d) => d.id === domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
+    return [c.e1, c.e2, c.e3];
+  }
+
+  // Endorse a discovered wizard in `domain`. The two endpoints are the domain's
+  // canonical grade-1 axis, so recompute rebuilds an even-grade rotor (the only
+  // public Bridge path) and `propagate` flows the voucher's EARNED reach to the
+  // vouched at trust_decay. With no earned reach it is a no-op — you cannot vouch
+  // what you have not earned, which is the Sybil grade-collapse (R-0010 AC5).
+  function vouchFor(domain, vouchedPubkey) {
+    const axis = canonicalAxis(domain);
+    try {
+      ingest(identity.sign_vouch(domain, vouchedPubkey, axis, axis));
+    } catch (err) {
+      console.error("[mp] sign_vouch failed:", err);
+      return;
+    }
+    renderDiscovery();
+  }
+
+  // Rank top traversers per faced domain from the VERIFIED log (client-side; the
+  // relay is never trusted for ordering). Each foreign wizard gets a vouch button.
+  function renderDiscovery() {
+    discovery.innerHTML = "";
+    if (!activePersona) return;
+    const domains = [...facedDomains()];
+    if (domains.length === 0) {
+      discovery.textContent = "Face a domain to discover its wizards.";
+      return;
+    }
+    const logJson = JSON.stringify(log.all());
+    for (const domain of domains) {
+      const section = document.createElement("div");
+      section.className = "discovery-domain";
+      const head = document.createElement("div");
+      head.className = "discovery-head";
+      head.textContent = `${labelForDomain(domain)} — top traversers`;
+      section.append(head);
+
+      let rows = [];
+      try {
+        rows = rank_wizards(logJson, domain, DISCOVERY_K);
+      } catch (err) {
+        console.error("[mp] rank_wizards failed:", err);
+      }
+      if (!rows || rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "discovery-empty";
+        empty.textContent = "No signed traversals yet.";
+        section.append(empty);
+      } else {
+        for (const { pubkey, reach } of rows) {
+          const row = document.createElement("div");
+          row.className = "discovery-row";
+          const who = pubkey === myPubkey ? "you" : shortKey(pubkey);
+          const label = document.createElement("span");
+          label.textContent = `${who} · reach ${reach.toFixed(2)}`;
+          row.append(label);
+          if (pubkey !== myPubkey) {
+            const vouchBtn = document.createElement("button");
+            vouchBtn.type = "button";
+            vouchBtn.textContent = "Vouch";
+            vouchBtn.addEventListener("click", () => vouchFor(domain, pubkey));
+            row.append(vouchBtn);
+          }
+          section.append(row);
+        }
+      }
+      discovery.append(section);
+    }
+  }
+
   // ── Persona creator (R-0006 AC1/AC2/AC4) ───────────────────────────────
-  // Choosing an archetype re-seeds the LOCAL reputation and re-lights the world
-  // with no reload. Nothing about the persona is ever written to the doc/channel.
+  // Choosing a persona ORIENTS the world (trailheads, camera, companion) and
+  // re-lights with no reload. Reputation is NOT touched — reach is earned by the
+  // key's signed history, independent of which lens is worn. Nothing about the
+  // persona is ever written to the doc/channel.
   function choosePersona(archetype) {
     activePersona = archetype;
-    localRep = seedReputation(archetype);
     creator.hidden = true;
     initCompanion(archetype); // embody the persona (R-0007 AC2)
+    renderDiscovery();
     draw();
   }
 
@@ -210,7 +419,7 @@ async function main() {
   // (R-0007 AC3). All GA ranking is done in the wasm core; JS only formats.
   function buildContextForTurn() {
     const graph = doc.to_graph();
-    const repJson = JSON.stringify(localRep);
+    const repJson = JSON.stringify(reputation);
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const reachableIds = new Set(graph.reachable_plateaus(repJson));
@@ -319,8 +528,9 @@ async function main() {
   // The "create your own" form (R-0009 AC1). Per domain: an enable toggle and three
   // axis sliders under HUMAN labels (Formal/Empirical/Creative) defaulting to the
   // domain's canonical axis — so the simplest path reproduces a preset, while
-  // re-aiming a slider authors a novel map. Sliders express DIRECTION only;
-  // `seedReputation` normalizes them, so there is no magnitude/rank control (AC1/AC5).
+  // re-aiming a slider authors a novel map. Sliders express DIRECTION only — they
+  // orient which domains' trailheads are offered; there is no magnitude/rank control
+  // (R-0009 AC1/AC5). Phase 8: rank is earned from signed traversals, not authored.
   function buildAuthorForm() {
     const form = document.createElement("div");
     form.className = "author";
@@ -473,13 +683,16 @@ async function main() {
     const my = e.clientY - rect.top;
 
     const graph = doc.to_graph();
-    const reachable = new Set(graph.reachable_plateaus(JSON.stringify(localRep)));
+    // Clickable = EARNED reach plus the always-navigable trailheads, so the very
+    // first traversal (with an empty log) is reachable from a trailhead.
+    const clickable = new Set(graph.reachable_plateaus(JSON.stringify(reputation)));
+    for (const id of trailheadIds()) clickable.add(id);
 
     // Hit-test the nearest LIT plateau within its disc.
     let hit = null;
     let best = RADIUS * RADIUS;
     for (const p of graph.plateaus()) {
-      if (!reachable.has(p.id)) continue;
+      if (!clickable.has(p.id)) continue;
       const pt = points.get(p.id);
       const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
       if (d <= best) {
@@ -488,14 +701,12 @@ async function main() {
       }
     }
     if (hit) {
-      // Local reputation only — NOT a graph edit, so it is never synced (AC5).
-      // Grow the plateau's OWN domain bucket (fallback: the persona's first domain,
-      // if it faces one — an authored persona may face nothing, R-0009 AC6).
+      // Sign a traversal toward the plateau (R-0010 AC2/AC3). Grow the plateau's OWN
+      // domain bucket (fallback: the persona's first faced domain — an authored
+      // persona may face nothing, R-0009 AC6). The signed event — never any graph
+      // edit — feeds reputation, so reach stays off the CRDT (AC6).
       const domain = DOMAIN_OF.get(hit.id) ?? activePersona.orient[0]?.domain;
-      if (domain) {
-        localRep = accumulate(localRep, domain, hit.position);
-        draw();
-      }
+      if (domain) signTraversal(domain, hit);
     }
   });
 
@@ -520,12 +731,28 @@ async function main() {
     draw();
   });
 
-  // Reset the fog back to the active persona's starting orientation.
+  // Forget my history: clear the local event log so reputation falls back to
+  // nothing earned (only trailheads remain lit). Reach is recomputed from the log,
+  // so there is no separate fog to reset (R-0010 AC3).
   document.getElementById("reset-fog").addEventListener("click", () => {
-    if (!activePersona) return;
-    localRep = seedReputation(activePersona);
+    log.clear();
+    recompute();
+    renderDiscovery();
     draw();
   });
+
+  // ── Relay connect (SPEC-0010 §2.3, R-0010 AC7) ──────────────────────────
+  const relayInput = document.getElementById("relay-url");
+  relayInput.value = loadRelayUrl();
+  document.getElementById("relay-connect").addEventListener("click", () => {
+    const url = relayInput.value.trim();
+    saveRelayUrl(url); // local only — never synced
+    connectRelay(url);
+  });
+  document.getElementById("discover").addEventListener("click", renderDiscovery);
+
+  // Connect to the saved relay (offline if none) before the first draw.
+  connectRelay(loadRelayUrl());
 
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.

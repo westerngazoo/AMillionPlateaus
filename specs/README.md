@@ -44,3 +44,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0007](0007-companion-graph-grounded.md) | Companion: provider-agnostic model client + GA-graph-grounded context | R-0007 | Implemented |
 | [SPEC-0008](0008-ga-graph-store-generalization.md) | Generalize `mp-graph` into a domain-agnostic geometric graph store (RFC-0001 Scope A) | R-0008 | Implemented |
 | [SPEC-0009](0009-visitor-authored-personas.md) | Visitor-authored personas: a pure `authorPersona` factory + authoring UI over the existing seed mapping | R-0009 | Implemented |
+| [SPEC-0010](0010-nostr-identity-signed-events.md) | Wizard identity: Nostr-signed events + rank recomputed from the verified log (relay + discovery) | R-0010 | Accepted |

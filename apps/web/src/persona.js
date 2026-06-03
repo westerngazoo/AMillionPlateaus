@@ -120,6 +120,13 @@ export function authorPersona({ name, orient, tone } = {}) {
 /// in its grade-1 components. Deterministic (R-0006 AC6). An empty `orient` (or an
 /// all-zero direction) yields an empty / grade-1-zero reputation, which the engine
 /// sends to fog — the Sybil/fog property.
+///
+/// SPEC-0010 (Phase 8): this seed magnitude is NO LONGER wired into the live
+/// reputation — reach is recomputed from the verified signed-event log (events.js),
+/// and the persona's `orient` survives only as a UI/orientation hint (trailheads).
+/// The function is retained as the canonical, direction-only orientation→seed
+/// mapping that R-0009's authoring guarantees are proven against (persona.test.mjs /
+/// authored.test.mjs); it is not called from the live fog path.
 export function seedReputation(archetype) {
   const domain_reps = {};
   for (const { domain, dir } of archetype.orient ?? []) {

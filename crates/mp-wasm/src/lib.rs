@@ -333,3 +333,132 @@ impl Default for WasmSyncSession {
         Self::new()
     }
 }
+
+// ─── SPEC-0010 — wizard identity, signed events, recomputed rank ─────────────
+//
+// Thin skin over the pure `mp-identity` core: keygen/sign/verify and the
+// event-log → reputation recompute all live in audited Rust. JS only ferries
+// event JSON and renders. The secret key never leaves this process except via
+// `secret()` for LOCAL persistence; it is never synced, relayed, or logged.
+
+/// Current wall-clock seconds for stamping signed events. Browser `Date.now()`
+/// on wasm; `SystemTime` on the host (so `cargo test --workspace` needs no
+/// js-sys and the convert helpers stay pure).
+#[cfg(target_arch = "wasm32")]
+fn now_secs() -> u64 {
+    (js_sys::Date::now() / 1000.0) as u64
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn now_secs() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// A wizard's Nostr keypair, usable from JavaScript. Wraps an
+/// `mp_identity::Keypair`; the secret stays inside the wasm instance.
+#[wasm_bindgen]
+pub struct WasmIdentity {
+    inner: mp_identity::Keypair,
+}
+
+#[wasm_bindgen]
+impl WasmIdentity {
+    /// AC1 — mint a fresh BIP340 keypair from browser entropy.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> WasmIdentity {
+        WasmIdentity {
+            inner: mp_identity::Keypair::generate(),
+        }
+    }
+
+    /// AC1 — rebuild a keypair from a 32-byte secret hex (local persistence).
+    pub fn from_secret(hex: &str) -> Result<WasmIdentity, JsError> {
+        Ok(WasmIdentity {
+            inner: mp_identity::Keypair::from_secret_hex(hex)?,
+        })
+    }
+
+    /// The x-only public key hex — the stable wizard id (safe to display/share).
+    pub fn pubkey(&self) -> String {
+        self.inner.pubkey_hex()
+    }
+
+    /// The secret key hex. **LOCAL persistence only** — never sync, relay, or log.
+    pub fn secret(&self) -> String {
+        self.inner.secret_hex()
+    }
+
+    /// AC2/AC3 — sign a traversal event; returns the NostrEvent JSON.
+    pub fn sign_traversal(
+        &self,
+        domain: &str,
+        e1: f32,
+        e2: f32,
+        e3: f32,
+        depth: f32,
+        plateau: Option<String>,
+    ) -> Result<String, JsError> {
+        Ok(convert::sign_traversal_json(
+            &self.inner,
+            domain,
+            [e1, e2, e3],
+            depth,
+            plateau,
+            now_secs(),
+        )?)
+    }
+
+    /// AC2/AC5 — sign a vouch event for `vouched_pubkey`; returns NostrEvent JSON.
+    pub fn sign_vouch(
+        &self,
+        domain: &str,
+        vouched_pubkey: &str,
+        from: &[f32],
+        to: &[f32],
+    ) -> Result<String, JsError> {
+        Ok(convert::sign_vouch_json(
+            &self.inner,
+            domain,
+            vouched_pubkey,
+            from,
+            to,
+            now_secs(),
+        )?)
+    }
+}
+
+impl Default for WasmIdentity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// AC2 — verify an event's id self-consistency and BIP340 signature. Malformed
+/// JSON or a bad signature returns `false`; an unverified event is inert.
+#[wasm_bindgen]
+pub fn verify_event(event_json: &str) -> bool {
+    match serde_json::from_str::<mp_identity::NostrEvent>(event_json) {
+        Ok(ev) => mp_identity::verify(&ev),
+        Err(_) => false,
+    }
+}
+
+/// AC3/AC4 — recompute `pubkey`'s reputation from a JSON array of events,
+/// returning the `{domain_reps, synthesis}` JSON the fog queries consume. An
+/// absent/empty log reaches nothing (no free seed).
+#[wasm_bindgen]
+pub fn recompute_reputation(events_json: &str, pubkey: &str) -> Result<String, JsError> {
+    Ok(convert::recompute_reputation_json(events_json, pubkey)?)
+}
+
+/// AC7 — discovery: top-`k` traversers in `domain`, ranked by verified reach.
+/// Returns a JS array of `{ pubkey, reach }`.
+#[wasm_bindgen]
+pub fn rank_wizards(events_json: &str, domain: &str, k: usize) -> Result<JsValue, JsError> {
+    Ok(serde_wasm_bindgen::to_value(
+        &convert::rank_wizards_entries(events_json, domain, k)?,
+    )?)
+}
