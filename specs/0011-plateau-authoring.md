@@ -180,7 +180,9 @@ Maps 1-to-1 to R-0011 AC:
       human-labeled sliders (Formal/Empirical/Creative), submit button.
 - [ ] AC2 — On submit the plateau appears in the fog-world same-frame; fog/lit
       state matches the wizard's orientation.
-- [ ] AC3 — Drafted plateau survives page reload (CRDT redb persistence).
+- [ ] AC3 — Drafted plateau lives for the session and converges across open
+      tabs. NOT durable across a full close/reload (redb is compiled out of the
+      wasm build); durable IndexedDB persistence is R-0012.
 - [ ] AC4 — Syncs to a second open tab via BroadcastChannel.
 - [ ] AC5 — All-zero slider position is blocked (error message or snap).
 - [ ] AC6 — `buildPlateau` is pure and unit-tested: deterministic, name trim,
@@ -204,3 +206,6 @@ Maps 1-to-1 to R-0011 AC:
 ## Changelog
 
 - 2026-06-02 created (Draft) — pending architect review, then Accepted.
+- 2026-06-02 AC3 corrected — drafted plateaus are session + cross-tab only, not
+  durable across a full reload (redb is compiled out of the wasm build). Durable
+  IndexedDB persistence carved out to SPEC-0012 / R-0012.

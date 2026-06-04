@@ -14,9 +14,10 @@ The fog-world is currently frozen: all plateau nodes are seeded in Rust at
 build time. A wizard cannot grow the world. This requirement lets a wizard
 **author a new plateau node** through the web UI: give it a name, place it in
 an existing domain, and orient it in GA space. The new plateau enters the
-shared Automerge CRDT doc, persists across reloads, syncs to other open tabs,
-and immediately appears in the fog-world subject to the normal fog/reachability
-rules.
+shared Automerge CRDT doc, syncs to every other open tab, and immediately
+appears in the fog-world subject to the normal fog/reachability rules. (Durable
+persistence across a full close/reload is **not** part of this POC — see AC3 —
+because the browser build cannot link redb; that is R-0012.)
 
 The authoring form replaces the existing crude stub ("Add a plateau (syncs)"
 button, which today generates a random position and a generic name). The stub
@@ -57,9 +58,13 @@ natural first deliverable of the "Draft DB" incremental POC roadmap, because:
   Mathematics is only reachable from a Math-oriented wizard, consistent with
   domain-scoped fog (R-0005 AC3).
 
-- **AC3 — Persists across reloads.** The drafted plateau survives a page reload
-  (stored in the CRDT doc via existing redb persistence in
-  `WasmCrdtDoc`/`WasmSyncSession`).
+- **AC3 — Lives for the session and converges across open tabs.** A drafted
+  plateau is held in the in-memory CRDT doc and propagates to every other open
+  tab via BroadcastChannel (AC4). It is **not** durable across a full
+  close/reload when no other tab is open: the browser build compiles redb out of
+  `mp-wasm` (redb does not target wasm32), and `WasmCrdtDoc` exposes no
+  save/load yet. Durable cross-reload persistence (an IndexedDB snapshot of the
+  CRDT doc) is explicitly **R-0012**; this POC does not claim it.
 
 - **AC4 — Syncs across tabs.** The drafted plateau propagates to all other open
   tabs via the existing `BroadcastChannel` CRDT sync path (R-0005 AC6) with no
@@ -126,3 +131,8 @@ natural first deliverable of the "Draft DB" incremental POC roadmap, because:
 ## Changelog
 
 - 2026-06-02 created (Draft) — pending SPEC-0011 + architect design review, then acceptance.
+- 2026-06-02 **AC3 corrected.** The original AC3 claimed drafted plateaus
+  "persist across reloads via existing redb persistence" — false: redb does not
+  build for wasm32 and is compiled out of `mp-wasm`, and `WasmCrdtDoc` exposes no
+  save/load. AC3 now scopes R-0011 to session + cross-tab convergence; durable
+  cross-reload persistence is carved out to R-0012 (IndexedDB snapshot).
