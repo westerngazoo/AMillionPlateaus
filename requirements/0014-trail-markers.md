@@ -1,6 +1,6 @@
 # R-0014 — Trail Markers: anchor a note or resource to a plateau
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Draft DB (annotation)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -126,3 +126,6 @@ small render affordance.
 - 2026-06-02 created (Draft) — pending SPEC-0014 + architect design review, then acceptance.
 - 2026-06-02 SPEC-0014 drafted + architect-reviewed (APPROVE-WITH-NITS, all folded).
   **Status → Accepted.**
+- 2026-06-02 implemented (commit ecca1ad) and **QA sign-off → PASS** (all AC1–AC8
+  met; every gate green; browser-verified end-to-end incl. durability across a
+  dev-server restart). **Status → Met.**

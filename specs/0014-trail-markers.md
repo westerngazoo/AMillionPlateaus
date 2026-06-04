@@ -1,6 +1,6 @@
 # SPEC-0014 — Trail Markers: anchor a note/resource to a plateau
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0014
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -263,22 +263,22 @@ wiring (JS).
 
 Maps 1-to-1 to R-0014 AC:
 
-- [ ] AC1 — Drop-a-marker form: plateau select (rebuilt on open), title, kind
+- [x] AC1 — Drop-a-marker form: plateau select (rebuilt on open), title, kind
       select (6 kinds), optional link, submit.
-- [ ] AC2 — On submit the marker renders near its anchor plateau same-frame,
+- [x] AC2 — On submit the marker renders near its anchor plateau same-frame,
       distinct from discs, Floating; multiple markers don't fully overlap.
-- [ ] AC3 — Missing plateau → inline error, no write; blank title → fallback;
+- [x] AC3 — Missing plateau → inline error, no write; blank title → fallback;
       empty uri allowed; unknown/blank kind → Note.
-- [ ] AC4 — Syncs to another tab + survives reload (IndexedDB snapshot), still
+- [x] AC4 — Syncs to another tab + survives reload (IndexedDB snapshot), still
       anchored.
-- [ ] AC5 — New marker is Floating, vote_count 0, contributor nil (attribution
+- [x] AC5 — New marker is Floating, vote_count 0, contributor nil (attribution
       deferred).
-- [ ] AC6 — Pure `buildResource` unit-tested: valid→ok, missing plateau→error,
+- [x] AC6 — Pure `buildResource` unit-tested: valid→ok, missing plateau→error,
       blank title→fallback, unknown/blank kind→Note, empty uri allowed,
       deterministic.
-- [ ] AC7 — Additive Rust only (constructor + binding + DTO/accessor); root keys
+- [x] AC7 — Additive Rust only (constructor + binding + DTO/accessor); root keys
       stay `{bridges, plateaus, resources, votes}`; no reputation in the CRDT.
-- [ ] AC8 — All suites green (incl. a wasm add_resource/resources round-trip);
+- [x] AC8 — All suites green (incl. a wasm add_resource/resources round-trip);
       drop a marker + reload, no uncaught console errors.
 
 ## 7. Decision log
@@ -300,3 +300,9 @@ Maps 1-to-1 to R-0014 AC:
   block is wrapped in `save`/`restore` so font/textAlign/alpha don't leak; cached
   `dmUri` ref + explicit toggle/rebuild-on-open wiring; marker-overflow cap noted
   as a future enhancement. **Status → Accepted**; ready to implement.
+- 2026-06-02 implemented (commit ecca1ad) and **QA sign-off → PASS** (all AC1–AC8
+  met; 103 JS + 100 Rust + 7 wasm tests incl. the add_resource/resources
+  round-trip asserting Floating/zero-vote + unknown-anchor error; clippy
+  host+wasm32, fmt green; browser-verified: 0→1 marker, durable across reload and
+  a dev-server restart, zero console errors on fresh context). **Status →
+  Implemented.**
