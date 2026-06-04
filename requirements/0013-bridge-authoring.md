@@ -1,6 +1,6 @@
 # R-0013 — Bridge Authoring: connect two plateaus with a named concept
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Draft DB (connectivity)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -130,3 +130,8 @@ factory plus a small form — the same shape as R-0011's plateau authoring.
 ## Changelog
 
 - 2026-06-02 created (Draft) — pending SPEC-0013 + architect design review, then acceptance.
+- 2026-06-02 SPEC-0013 drafted + architect-reviewed (APPROVE-WITH-NITS, all folded).
+  **Status → Accepted.**
+- 2026-06-02 implemented (commit f9df5e7) and **QA sign-off → PASS** (all AC1–AC8
+  met; every gate green; browser-verified end-to-end incl. durability across a
+  dev-server restart). **Status → Met.**

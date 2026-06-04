@@ -1,6 +1,6 @@
 # SPEC-0013 — Bridge Authoring: connect two plateaus with a named concept
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0013
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -164,21 +164,21 @@ See §2: one ~15-line pure `bridge.js`, its test, ~10 lines of form markup, and
 
 Maps 1-to-1 to R-0013 AC:
 
-- [ ] AC1 — Draft Bridge form: from/to selects (rebuilt on open from the current
+- [x] AC1 — Draft Bridge form: from/to selects (rebuilt on open from the current
       graph), concept input, submit.
-- [ ] AC2 — On submit the bridge draws as a labelled line same-frame.
-- [ ] AC3 — Self-loop / missing endpoint rejected with inline error, no CRDT
+- [x] AC2 — On submit the bridge draws as a labelled line same-frame.
+- [x] AC3 — Self-loop / missing endpoint rejected with inline error, no CRDT
       write; unknown-endpoint throw is caught, never uncaught.
-- [ ] AC4 — Syncs to another tab (BroadcastChannel) and survives reload (IndexedDB
+- [x] AC4 — Syncs to another tab (BroadcastChannel) and survives reload (IndexedDB
       snapshot).
-- [ ] AC5 — Rotor/grade computed by `Bridge::between` in Rust; JS passes only
+- [x] AC5 — Rotor/grade computed by `Bridge::between` in Rust; JS passes only
       `(from, to, concept)`.
-- [ ] AC6 — Pure `buildBridge` unit-tested: distinct→ok, from===to→error, missing
+- [x] AC6 — Pure `buildBridge` unit-tested: distinct→ok, from===to→error, missing
       endpoint→error, blank concept→fallback, **whitespace-only concept→fallback**
       (exercises `.trim()`), **non-string concept→fallback** (exercises the
       `typeof` guard), deterministic.
-- [ ] AC7 — Attribution deferred (created_by nil), documented.
-- [ ] AC8 — All suites green; author a bridge + reload, no uncaught console errors.
+- [x] AC7 — Attribution deferred (created_by nil), documented.
+- [x] AC8 — All suites green; author a bridge + reload, no uncaught console errors.
 
 ## 7. Decision log
 
@@ -199,3 +199,8 @@ Maps 1-to-1 to R-0013 AC:
   (whitespace-only + non-string concept → fallback); the forward seam that a
   future `BridgeProposal` (30002) makes the CRDT bridges map a projection of
   verified events, not a parallel write. **Status → Accepted**; ready to implement.
+- 2026-06-02 implemented (commit f9df5e7) and **QA sign-off → PASS** (all AC1–AC8
+  met; 91 JS tests incl. 11 buildBridge, 100 Rust, clippy host+wasm32, fmt green;
+  browser-verified: self-loop rejected, 9→10 bridges, durable across reload and a
+  dev-server restart, fresh-context load zero console errors — no Rust changed).
+  **Status → Implemented.**
