@@ -1,8 +1,8 @@
 //! Seed graph: 5 plateaus, 4 bridges. Phase 0 deliverable (R-0001 AC6).
 //!
-//!   cargo run -p mp-graph --example seed_graph
+//!   cargo run -p mp-domain --example seed_graph
 
-use mp_graph::{ga, Bridge, KnowledgeGraph, PlateauNode};
+use mp_domain::{ga, Bridge, KnowledgeGraph, PlateauNode};
 use uuid::Uuid;
 
 fn main() {

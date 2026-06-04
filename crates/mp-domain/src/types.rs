@@ -1,4 +1,12 @@
-//! Core graph types. Geometry flows through garust — see GARUST_INTEGRATION.md.
+//! AMP's knowledge-graph vocabulary. Geometry flows through garust via the
+//! `mp_graph::ga` adapter — see GARUST_INTEGRATION.md.
+//!
+//! Moved verbatim from `mp-graph` by SPEC-0008 (RFC-0001 Scope A): the structs,
+//! their serde representation, derives, and methods are byte-for-byte the same,
+//! so existing CRDT documents and redb files keep round-tripping (R-0008 AC4).
+//! The only additions are `impl mp_graph::Positioned for PlateauNode` and
+//! `impl mp_graph::Rotored for Bridge`, which let the generic store read their
+//! geometry.
 //!
 //! Invariants enforced at construction:
 //!   * `PlateauNode.position` is a Grade-1 multivector (a pure vector in G(3,0,0)).
@@ -8,16 +16,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::error::GraphError;
-use crate::ga::{self, Mv};
+use mp_graph::ga::{self, Mv};
+use mp_graph::{EdgeId, GraphError, NodeId, Positioned, Rotored};
 
 // ─── Identity ────────────────────────────────────────────────
+//
+// Domain id names. `PlateauId`/`BridgeId` are the store's `NodeId`/`EdgeId`
+// under AMP's vocabulary; the rest scope reputation and resources.
 
-pub type PlateauId = Uuid;
+pub type PlateauId = NodeId;
 pub type DomainId = Uuid;
 pub type WizardId = Uuid;
 pub type ResourceId = Uuid;
-pub type BridgeId = Uuid;
+pub type BridgeId = EdgeId;
 
 // ─── Knowledge Space ─────────────────────────────────────────
 
@@ -34,7 +45,7 @@ pub struct PlateauNode {
     pub name: String,
     pub description: String,
     pub domain_id: DomainId,
-    #[serde(with = "crate::ga::serde_mv")]
+    #[serde(with = "mp_graph::ga::serde_mv")]
     position: Mv,
     /// Runtime fog state — not authoritative graph data.
     pub fog: bool,
@@ -83,6 +94,20 @@ impl PlateauNode {
     }
 }
 
+/// Position a plateau in the generic store. The Grade-1 invariant is enforced
+/// at construction (`new`) and re-checked on load via [`Positioned::validate_position`].
+impl Positioned for PlateauNode {
+    fn node_id(&self) -> NodeId {
+        self.id
+    }
+    fn position(&self) -> &Mv {
+        &self.position
+    }
+    fn validate_position(&self) -> Result<(), GraphError> {
+        self.validate()
+    }
+}
+
 /// Conceptual connection between two plateaus, encoded as a GA rotor.
 ///
 /// The rotor is the even-grade part of the geometric product of the two plateau
@@ -95,7 +120,7 @@ pub struct Bridge {
     pub from: PlateauId,
     pub to: PlateauId,
     pub concept_label: String,
-    #[serde(with = "crate::ga::serde_mv")]
+    #[serde(with = "mp_graph::ga::serde_mv")]
     rotor: Mv,
     pub dominant_grade: u8,
     pub bidirectional: bool,
@@ -155,6 +180,22 @@ impl Bridge {
     }
 }
 
+/// Connect two plateaus in the generic store as an even-grade rotor edge.
+impl Rotored for Bridge {
+    fn edge_id(&self) -> EdgeId {
+        self.id
+    }
+    fn endpoints(&self) -> (NodeId, NodeId) {
+        (self.from, self.to)
+    }
+    fn rotor(&self) -> &Mv {
+        &self.rotor
+    }
+    fn validate_rotor(&self) -> Result<(), GraphError> {
+        self.validate()
+    }
+}
+
 // ─── Wizard / Reputation / Alebrije / Resource ───────────────
 //
 // Declared here (the schema is one module) so downstream crates can name them.
@@ -185,6 +226,31 @@ pub struct WizardReputation {
     pub wizard_id: WizardId,
     pub domain_reps: HashMap<DomainId, Mv>,
     pub synthesis: Mv,
+}
+
+impl WizardReputation {
+    /// A fresh wizard: no domain reputation, zero synthesis. Reports
+    /// `dominant_grade() == 0` (raw) — every plateau is fogged until they
+    /// traverse something.
+    pub fn new(wizard_id: WizardId) -> Self {
+        Self {
+            wizard_id,
+            domain_reps: HashMap::new(),
+            synthesis: Mv::zero(),
+        }
+    }
+
+    /// The wizard's "rank grade": the maximum dominant grade across all domain
+    /// reputations and the synthesis. 0 = raw, 1 = domain depth, 2 = synthesis,
+    /// 3 = grand wizard. A fresh wizard (zero everywhere) reports 0.
+    pub fn dominant_grade(&self) -> u8 {
+        self.domain_reps
+            .values()
+            .chain(std::iter::once(&self.synthesis))
+            .map(ga::dominant_grade)
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,11 +336,24 @@ pub const REACHABILITY_THRESHOLD: f32 = 0.15;
 pub const CRYSTALLIZE_THRESHOLD: f32 = 50.0;
 pub const DECAY_THRESHOLD: f32 = -10.0;
 
+/// Wall-clock seconds since the Unix epoch, for non-authoritative `created_at`
+/// metadata.
+#[cfg(not(target_arch = "wasm32"))]
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+/// `wasm32-unknown-unknown` has no wall clock — `SystemTime::now()` *panics*
+/// there. `created_at` is non-authoritative metadata (never read by reachability
+/// or any graph invariant), so on wasm we return 0 rather than let a panic cross
+/// the WASM FFI (CLAUDE.md §5). A real browser timestamp can be supplied from JS
+/// in a later phase if the world ever needs it.
+#[cfg(target_arch = "wasm32")]
+fn now_unix() -> u64 {
+    0
 }
 
 #[cfg(test)]
@@ -320,5 +399,24 @@ mod tests {
     fn validate_accepts_constructed_plateau() {
         let p = PlateauNode::new("Topology", domain(), 0.8, 0.2, 0.1);
         p.validate().expect("constructed plateau passes validation");
+    }
+
+    // ─── AC1 — reputation shape ──────────────────────────────
+
+    #[test]
+    fn fresh_reputation_is_empty_and_grade_zero() {
+        let w = WizardReputation::new(Uuid::new_v4());
+        assert!(w.domain_reps.is_empty());
+        assert!(w.synthesis.scalar_part().abs() < ga::EPSILON);
+        assert_eq!(w.dominant_grade(), 0);
+    }
+
+    /// Reputation is a multivector whose *grade* — never a scalar magnitude — is
+    /// the measure of trust. A large scalar-only domain rep is still grade 0.
+    #[test]
+    fn scalar_reputation_is_grade_zero_regardless_of_magnitude() {
+        let mut w = WizardReputation::new(Uuid::new_v4());
+        w.domain_reps.insert(domain(), Mv::scalar(1_000.0));
+        assert_eq!(w.dominant_grade(), 0, "magnitude must not promote grade");
     }
 }

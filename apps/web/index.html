@@ -1,0 +1,226 @@
+<!doctype html>
+<!--
+  A Million Plateaus — fog-world POC (SPEC-0005 / R-0005).
+
+  Build the wasm bundle into ./pkg, then serve this directory over http
+  (ES modules + wasm need http, not file://):
+
+      export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
+      wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
+      python3 -m http.server --directory apps/web 8080
+
+  Open http://localhost:8080 in TWO tabs to see CRDT sync over BroadcastChannel.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A Million Plateaus — fog world</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #11161d;
+        color: #d6e0ea;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+      }
+      h1 { font-size: 18px; font-weight: 600; margin: 0; }
+      #world {
+        background: radial-gradient(circle at 40% 30%, #1b2735, #0d1219);
+        border: 1px solid #2a3543;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      button {
+        background: #2a3a4c; color: #e6eef6; border: 1px solid #3a4d62;
+        border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+      }
+      button:hover { background: #34495f; }
+      .note { font-size: 12px; color: #8aa0b4; max-width: 760px; text-align: center; }
+      #hud { font-size: 12px; color: #b7c6d6; font-variant-numeric: tabular-nums; }
+
+      /* Persona creator overlay (SPEC-0006). Covers the canvas and captures input
+         until a persona is chosen (R-0006 AC1). */
+      .stage { position: relative; width: 800px; max-width: 100%; }
+      #creator {
+        position: absolute; inset: 0; z-index: 10;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; padding: 24px;
+        background: rgba(10, 14, 20, 0.88);
+        backdrop-filter: blur(2px);
+        border-radius: 8px;
+      }
+      #creator[hidden] { display: none; }
+      #creator h2 { margin: 0; font-size: 20px; font-weight: 600; }
+      .creator-sub { margin: 0; font-size: 13px; color: #9fb2c4; max-width: 560px; text-align: center; }
+      .cards { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+      .card {
+        display: flex; flex-direction: column; gap: 6px; text-align: left;
+        width: 210px; padding: 14px 16px;
+        background: #1b2735; color: #d6e0ea;
+        border: 1px solid #34495f; border-radius: 10px; cursor: pointer;
+      }
+      .card:hover { background: #223346; border-color: #4a6280; }
+      .card-name { font-size: 15px; font-weight: 600; }
+      .card-domain { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #ffd166; }
+      .card-blurb { font-size: 12px; color: #9fb2c4; }
+
+      /* Tall authoring form may exceed the canvas height — let the overlay scroll. */
+      #creator { overflow-y: auto; }
+
+      /* Visitor-authored persona form (SPEC-0009 / R-0009). A name, an optional
+         companion tone, and — per domain — an enable toggle plus three axis sliders
+         under HUMAN labels (never raw e1/e2/e3). Sliders express DIRECTION only;
+         there is deliberately no magnitude/strength control (R-0009 AC1/AC5). */
+      .author {
+        display: flex; flex-direction: column; gap: 12px;
+        width: 420px; max-width: 100%; text-align: left;
+        background: #161f2a; border: 1px solid #34495f; border-radius: 10px; padding: 16px;
+      }
+      .author[hidden] { display: none; }
+      .author-field { display: flex; flex-direction: column; gap: 4px; }
+      .author-field label { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: #8aa0b4; }
+      .author-field input[type="text"] {
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 7px 10px; font-size: 13px;
+      }
+      .author-domain { border: 1px solid #2a3543; border-radius: 8px; padding: 10px 12px; }
+      .author-domain-head { display: flex; align-items: center; gap: 8px; }
+      .author-domain-name { font-size: 13px; font-weight: 600; color: #ffd166; }
+      .author-axes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+      .author-axes[hidden] { display: none; }
+      .axis-row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; }
+      .axis-row label { font-size: 12px; color: #b7c6d6; }
+      .axis-row input[type="range"] { width: 100%; }
+      .author-hint { font-size: 11px; color: #8aa0b4; margin: 0; }
+      .author-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+      /* Companion (SPEC-0007 / R-0007): an always-present panel beside the map,
+         embodying the active persona and grounded in the GA graph. */
+      .layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+      .companion {
+        display: flex; flex-direction: column; width: 320px; height: 600px;
+        background: #141c26; border: 1px solid #2a3543; border-radius: 8px; overflow: hidden;
+      }
+      .companion[hidden] { display: none; }
+      .companion-head {
+        padding: 10px 14px; border-bottom: 1px solid #2a3543;
+        display: flex; flex-direction: column; gap: 2px;
+      }
+      .companion-name { font-size: 14px; font-weight: 600; color: #ffd166; }
+      .companion-status { font-size: 11px; color: #8aa0b4; }
+      .companion-log { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+      .msg { font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+      .msg-user { color: #cfe0f0; align-self: flex-end; max-width: 90%; background: #243447; padding: 6px 10px; border-radius: 8px; }
+      .msg-bot { color: #d6e0ea; max-width: 95%; }
+      .msg-err { color: #ffb4a8; font-size: 12px; }
+      .companion-form { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #2a3543; }
+      .companion-form input {
+        flex: 1; background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 7px 10px; font-size: 13px;
+      }
+
+      /* Model-setup overlay (R-0007 AC1): provider-agnostic, bring-your-own. */
+      #setup {
+        position: fixed; inset: 0; z-index: 20;
+        display: flex; align-items: center; justify-content: center; padding: 24px;
+        background: rgba(8, 11, 16, 0.82); backdrop-filter: blur(2px);
+      }
+      #setup[hidden] { display: none; }
+      .setup-card {
+        width: 420px; max-width: 100%; background: #161f2a; border: 1px solid #34495f;
+        border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px;
+      }
+      .setup-card h2 { margin: 0; font-size: 17px; }
+      .setup-card p { margin: 0; font-size: 12px; color: #9fb2c4; }
+      .field { display: flex; flex-direction: column; gap: 4px; }
+      .field label { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: #8aa0b4; }
+      .field input, .field select {
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 7px 10px; font-size: 13px;
+      }
+      .setup-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>A Million Plateaus — fog world</h1>
+    <div class="bar">
+      <button id="change-persona">Change persona</button>
+      <button id="model-setup">Model setup</button>
+      <button id="add">Add a plateau (syncs)</button>
+      <button id="reset-fog">Reset my fog</button>
+      <span id="hud">loading…</span>
+    </div>
+    <div class="layout">
+      <div class="stage">
+        <canvas id="world" width="800" height="600"></canvas>
+        <!-- Persona creator overlay; populated by main.js, hidden once chosen. -->
+        <div id="creator"></div>
+      </div>
+      <!-- Always-present companion (R-0007 AC2); shown once a persona is chosen. -->
+      <aside id="companion" class="companion" hidden>
+        <div class="companion-head">
+          <span class="companion-name" id="companion-name">Companion</span>
+          <span class="companion-status" id="companion-status"></span>
+        </div>
+        <div class="companion-log" id="companion-log"></div>
+        <form class="companion-form" id="companion-form">
+          <input id="companion-input" type="text" autocomplete="off"
+                 placeholder="Ask your companion…" />
+          <button type="submit">Send</button>
+        </form>
+      </aside>
+    </div>
+
+    <!-- Model-setup overlay (R-0007 AC1): bring-your-own model, hosted or local. -->
+    <div id="setup" hidden>
+      <div class="setup-card">
+        <h2>Connect a model</h2>
+        <p>
+          Bring your own model — a <strong>local</strong> runtime (Ollama / LM Studio)
+          or any <strong>OpenAI-compatible</strong> endpoint. Your key stays in this
+          browser and is never synced. Leave it on <em>Offline</em> to explore without one.
+        </p>
+        <div class="field">
+          <label for="setup-preset">Preset</label>
+          <select id="setup-preset"></select>
+        </div>
+        <div class="field">
+          <label for="setup-endpoint">Endpoint URL</label>
+          <input id="setup-endpoint" type="text" placeholder="http://localhost:11434/v1" />
+        </div>
+        <div class="field">
+          <label for="setup-model">Model name</label>
+          <input id="setup-model" type="text" placeholder="llama3.1" />
+        </div>
+        <div class="field">
+          <label for="setup-key">API key (hosted only — optional for local)</label>
+          <input id="setup-key" type="password" placeholder="sk-…" autocomplete="off" />
+        </div>
+        <div class="setup-actions">
+          <button id="setup-offline" type="button">Use offline</button>
+          <button id="setup-save" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      Your <strong>persona</strong> is a local lens: it orients you in the
+      knowledge geometry, so a different starting map is lit. Your
+      <strong>companion</strong> embodies that persona and is grounded in the graph
+      — its context is the plateaus nearest your orientation, queried from the GA
+      core. Click a <strong>lit</strong> plateau to grow your local reputation
+      toward it and lift the fog on neighbours that align. The persona, this
+      reputation, the companion chat and your model config are a
+      <strong>local lens — never synced</strong> (real wizard rank is
+      Phase&nbsp;8). Only graph state (plateaus, bridges, votes) crosses the
+      BroadcastChannel between tabs.
+    </p>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

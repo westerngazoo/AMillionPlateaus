@@ -1,12 +1,9 @@
-use crate::types::PlateauId;
+use crate::geo::NodeId;
 
 #[derive(thiserror::Error, Debug)]
 pub enum GraphError {
-    #[error("Plateau {0} not found")]
-    PlateauNotFound(PlateauId),
-
-    #[error("Bridge references unknown plateau: {0}")]
-    InvalidBridgeEndpoint(PlateauId),
+    #[error("Edge references unknown node: {0}")]
+    UnknownEndpoint(NodeId),
 
     #[error("Invariant violated: {0}")]
     Invariant(String),

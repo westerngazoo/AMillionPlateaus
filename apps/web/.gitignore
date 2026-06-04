@@ -1,0 +1,3 @@
+# wasm-pack output — regenerate with:
+#   wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
+pkg/
