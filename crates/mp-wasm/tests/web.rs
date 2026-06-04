@@ -152,3 +152,45 @@ fn two_independent_replicas_sync_a_plateau_to_quiescence() {
         vec!["bridges", "plateaus", "resources", "votes"]
     );
 }
+
+// R-0012 AC1: save() → load() round-trips the whole doc — the durable-storage
+// contract the web app persists to IndexedDB.
+#[wasm_bindgen_test]
+fn save_load_round_trips_the_doc() {
+    let domain = "00000000-0000-0000-0000-000000000001";
+
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let a = doc
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .expect("add a");
+    let b = doc
+        .add_plateau("Topology", domain, 0.7, 0.3, 0.2)
+        .expect("add b");
+    doc.add_bridge(&a, &b, "continuity").expect("bridge");
+
+    let bytes = doc.save();
+    assert!(!bytes.is_empty(), "a saved doc is non-empty");
+
+    // A fresh replica loaded from the bytes sees the same plateaus and the same
+    // four data maps — nothing lost, no reputation key introduced.
+    let restored = WasmCrdtDoc::load(&bytes).expect("load round-trips");
+    let g = restored.to_graph().expect("project restored");
+    assert!(
+        !g.plateau(&a).expect("query a").is_null(),
+        "restored doc retains plateau A"
+    );
+    assert!(
+        !g.plateau(&b).expect("query b").is_null(),
+        "restored doc retains plateau B"
+    );
+    assert_eq!(
+        restored.root_keys(),
+        vec!["bridges", "plateaus", "resources", "votes"]
+    );
+
+    // A corrupt blob is a thrown Error, not a panic (AC7 fallback path).
+    assert!(
+        WasmCrdtDoc::load(&[0xde, 0xad, 0xbe, 0xef]).is_err(),
+        "a corrupt blob must error, never panic"
+    );
+}

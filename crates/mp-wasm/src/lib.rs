@@ -308,6 +308,24 @@ impl WasmCrdtDoc {
         session.inner.receive_message(&mut self.inner, bytes)?;
         Ok(())
     }
+
+    /// Serialize the whole CRDT doc to bytes for durable storage (R-0012 AC1).
+    /// Delegates to the audited core; `&mut` because Automerge commits pending
+    /// ops before serializing. The web app persists these bytes to IndexedDB
+    /// (the browser analogue of the native redb `CrdtStore` — same save-blob,
+    /// different backing, since redb does not target wasm32).
+    pub fn save(&mut self) -> Vec<u8> {
+        self.inner.save()
+    }
+
+    /// Reconstruct a replica from bytes produced by [`WasmCrdtDoc::save`]
+    /// (R-0012 AC1). A corrupt or stale blob is a thrown JS `Error`, so the
+    /// caller can fall back to a fresh seed (R-0012 AC7, discard-and-reseed).
+    pub fn load(bytes: &[u8]) -> Result<WasmCrdtDoc, JsError> {
+        Ok(WasmCrdtDoc {
+            inner: CrdtDoc::load(bytes)?,
+        })
+    }
 }
 
 /// One peer's view of an ongoing sync with a single remote — a thin skin over

@@ -64,12 +64,16 @@ pub struct PositionDto {
     pub e3: f32,
 }
 
-/// JS-facing view of a plateau (AC2).
+/// JS-facing view of a plateau (AC2). `domain_id` (R-0012 AC5) lets the web app
+/// rebuild its id→domain map from a restored doc, so an authored plateau scores
+/// reputation under its own domain after a reload — additive value marshalling,
+/// no GA.
 #[derive(serde::Serialize)]
 pub struct PlateauDto {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub domain_id: String,
     pub position: PositionDto,
 }
 
@@ -112,6 +116,7 @@ pub fn plateau_dto(p: &PlateauNode) -> PlateauDto {
         id: p.id.to_string(),
         name: p.name.clone(),
         description: p.description.clone(),
+        domain_id: p.domain_id.to_string(),
         position: PositionDto {
             e1: c[1],
             e2: c[2],

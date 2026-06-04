@@ -136,3 +136,7 @@ out of the snapshot (CLAUDE.md §7); only the four CRDT data maps are stored.
   SPEC-0012 + architect design review, then acceptance.
 - 2026-06-02 SPEC-0012 drafted and architect-reviewed (APPROVE-WITH-NITS; all
   findings folded in). **Status → Accepted**; ready for implementation.
+- 2026-06-02 implemented + browser-verified end-to-end (author → reload restores
+  the drafted plateau with no other tab open; negative control: clearing the
+  IndexedDB snapshot drops back to the seed; no console errors). All automated
+  gates green. Pending formal QA sign-off.

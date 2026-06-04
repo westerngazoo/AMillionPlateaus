@@ -245,3 +245,12 @@ Maps 1-to-1 to R-0012 AC:
   pure; hand-rolled `idb` fake, no npm dep; idempotent-upsert citation;
   flush-on-hide; concurrent-tab safety statement; `save(&mut)` note; DTO surfaces
   via the existing generic serializer). **Status → Accepted**; ready to implement.
+- 2026-06-02 implemented: `WasmCrdtDoc::save/load` + `domain_id` on `PlateauDto`
+  (`mp-wasm`), `persistence.js` + `persistence.test.mjs` (7 tests, hand-rolled
+  `idb` fake), `main.js` wiring (restore-on-start, persist-on-edit/inbound-sync,
+  flush-on-hide, `DOMAIN_OF` rebuild). All gates green: `cargo test --workspace`,
+  `wasm-pack test --node` (6, incl. save/load round-trip), `node --test` (80 JS),
+  clippy host+wasm32, fmt. **Browser-verified** on the live page: author → 9
+  plateaus + 1023-byte IndexedDB snapshot; reload (no other tab) → 9 restored;
+  clear snapshot + reload → 8 (negative control); zero console errors. Pending
+  formal QA sign-off (R-0011 + R-0012).

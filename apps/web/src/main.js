@@ -18,6 +18,7 @@ import init, {
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
+import { createSnapshotStore } from "./persistence.js";
 import { loadOrMintIdentity } from "./identity.js";
 import { makeLog } from "./events.js";
 import { createRelay, RELAY_KEY } from "./relay.js";
@@ -155,11 +156,36 @@ const VIEW = { cx: 230, cy: 150, scale: 320 };
 async function main() {
   await init();
 
-  const doc = WasmCrdtDoc.new(); // fallible ctor — throws on Err
+  // ── Durable graph (SPEC-0012 / R-0012) ──────────────────────────────────
+  // Restore the CRDT doc from its IndexedDB snapshot, else start fresh. A
+  // corrupt/old blob throwing in load() must NOT abort main() (the top-level
+  // catch does not reseed), so catch it here and discard-and-reseed (AC7). In
+  // node/private-mode the store is inert and load() resolves null.
+  const snapshots = createSnapshotStore();
+  const saved = await snapshots.load();
+  let doc;
+  try {
+    doc = saved ? WasmCrdtDoc.load(saved) : WasmCrdtDoc.new();
+  } catch {
+    doc = WasmCrdtDoc.new(); // corrupt blob → fresh doc, reseed below, overwrite on next persist
+  }
   const session = new WasmSyncSession();
 
+  // Apply the deterministic seed on every load — an idempotent upsert on fixed
+  // ids (convergent, R-0004 AC4); authored nodes have random ids and are never
+  // touched (AC4).
   for (const p of SEED_PLATEAUS) doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3);
   for (const b of SEED_BRIDGES) doc.seed_bridge(b.id, b.from, b.to, b.concept);
+
+  // Rebuild id→domain from the (possibly restored) doc so a restored authored
+  // plateau scores reputation under its OWN domain, not a fallback (AC5).
+  for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+
+  // Persist the whole converged doc to IndexedDB; debounced inside the store
+  // (AC3). Called after every local edit and inbound sync.
+  function persist() {
+    snapshots.save(doc.save());
+  }
 
   // AC5 — the synced doc carries exactly the four data maps, no reputation key.
   const keys = doc.root_keys();
@@ -240,8 +266,13 @@ async function main() {
     hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges`;
   }
 
-  // After any LOCAL graph edit, ship the change to the other tab.
-  const sync = createSync(doc, session, draw);
+  // After any LOCAL graph edit, ship the change to the other tab. The inbound
+  // callback redraws AND persists the converged doc (AC3) — wrapping keeps
+  // sync.js a pure transport (it never learns about persistence).
+  const sync = createSync(doc, session, () => {
+    draw();
+    persist();
+  });
 
   // ── Signed-event transport (SPEC-0010 §2.3, R-0010 AC2/AC4/AC7) ─────────
   // Verify-gate an event into the local log, recompute reputation, re-light, and —
@@ -751,6 +782,7 @@ async function main() {
     const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3);
     DOMAIN_OF.set(id, spec.domain); // register for traversal scoring
     sync.pump(); // broadcast the CRDT change to other tabs
+    persist(); // R-0012: snapshot to IndexedDB so the drafted plateau survives a reload
     draw();
     // Reset name field; sliders stay at their last positions.
     document.getElementById("dp-name").value = "";
@@ -778,6 +810,12 @@ async function main() {
 
   // Connect to the saved relay (offline if none) before the first draw.
   connectRelay(loadRelayUrl());
+
+  // Best-effort flush on tab hide so an edit made inside the debounce window is
+  // not lost on close (closes the AC2/AC3 loss window; bfcache-safe event).
+  addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") snapshots.flush();
+  });
 
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.
