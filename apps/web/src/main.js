@@ -36,6 +36,7 @@ import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
+import { buildBridge } from "./bridge.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -786,6 +787,66 @@ async function main() {
     draw();
     // Reset name field; sliders stay at their last positions.
     document.getElementById("dp-name").value = "";
+  });
+
+  // ── Draft Bridge form (SPEC-0013 / R-0013) ──────────────────────────────────
+  // Connect two existing plateaus with a concept label. The rotor is computed in
+  // Rust by Bridge::between; JS passes only (from, to, concept).
+
+  const dbFrom = document.getElementById("db-from");
+  const dbTo = document.getElementById("db-to");
+
+  // Rebuild both endpoint selects from the CURRENT graph, so plateaus authored
+  // this session (or synced in) are selectable (AC1).
+  function refreshBridgeOptions() {
+    const ps = doc.to_graph().plateaus(); // [{ id, name, domain_id, position }]
+    for (const sel of [dbFrom, dbTo]) {
+      sel.replaceChildren(
+        ...ps.map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
+      );
+    }
+  }
+
+  const bridgePanel = document.getElementById("draft-bridge");
+  document.getElementById("draft-bridge-toggle").addEventListener("click", () => {
+    bridgePanel.hidden = !bridgePanel.hidden;
+    if (!bridgePanel.hidden) {
+      bridgePanel.open = true;
+      refreshBridgeOptions();
+    }
+  });
+
+  document.getElementById("draft-bridge-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildBridge({
+      from: dbFrom.value,
+      to: dbTo.value,
+      concept: document.getElementById("db-concept").value,
+    });
+    const errEl = document.getElementById("db-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // Rotor computed in Rust (AC5). Throws JsError on unknown endpoint/bad UUID.
+      doc.add_bridge(spec.from, spec.to, spec.concept);
+    } catch {
+      errEl.textContent = "Could not add bridge.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast to other tabs (AC4)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // the labelled line appears same frame (AC2)
+    document.getElementById("db-concept").value = "";
   });
 
   // Forget my history: clear the local event log so reputation falls back to

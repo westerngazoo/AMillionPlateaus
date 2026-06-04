@@ -209,6 +209,7 @@
       <button id="change-persona">Change persona</button>
       <button id="model-setup">Model setup</button>
       <button id="draft-plateau-toggle">Draft a plateau</button>
+      <button id="draft-bridge-toggle">Draft a bridge</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <span id="hud">loading…</span>
@@ -251,6 +252,31 @@
         <p id="dp-error" class="dp-error" hidden></p>
         <div class="dp-actions">
           <button type="submit">Draft plateau</button>
+        </div>
+      </form>
+    </details>
+    <!-- Draft Bridge form (SPEC-0013 / R-0013). from/to selects are rebuilt from
+         the current graph when the form opens, so plateaus authored this session
+         are selectable. The rotor is computed in Rust (Bridge::between); JS passes
+         only (from, to, concept). -->
+    <details id="draft-bridge" class="draft-plateau" hidden>
+      <summary>Draft a bridge</summary>
+      <form id="draft-bridge-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="db-from">From</label>
+          <select id="db-from"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="db-to">To</label>
+          <select id="db-to"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="db-concept">Concept</label>
+          <input id="db-concept" type="text" placeholder="e.g. frequency ratios" autocomplete="off" />
+        </div>
+        <p id="db-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Draft bridge</button>
         </div>
       </form>
     </details>

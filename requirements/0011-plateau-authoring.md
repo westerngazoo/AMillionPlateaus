@@ -86,12 +86,14 @@ natural first deliverable of the "Draft DB" incremental POC roadmap, because:
   - all-zero direction → `null`,
   - unknown domain id → `null`.
 
-- **AC7 — Wizard attribution (deferred to R-0012).** `WasmCrdtDoc::add_plateau`
+- **AC7 — Wizard attribution (deferred).** `WasmCrdtDoc::add_plateau`
   does not accept a `created_by` argument in its current Rust signature. Threading
-  the pubkey through the CRDT field requires a Rust change and is therefore
-  scoped to R-0012 (bridge authoring events, which will also add a signed
-  `create-plateau` Nostr event). This POC records the plateau without attribution;
-  the wizard's pubkey is available from `identity.js` for R-0012 to use.
+  the pubkey through the CRDT field requires a Rust change. This POC records the
+  plateau without attribution; the wizard's pubkey is available from `identity.js`.
+  > **Superseded note (2026-06-02):** this AC originally scoped attribution to
+  > "R-0012", but R-0012 became browser durability. Attribution + signed
+  > graph-element events are now tracked as a **future requirement** (see
+  > R-0013 AC7), not R-0012.
 
 - **AC8 — Green across all suites.** `cargo test --workspace`, `wasm-pack test
   --node`, `node --test apps/web/src/*.test.mjs`, clippy `-D warnings` (host +

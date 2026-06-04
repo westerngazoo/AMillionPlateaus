@@ -47,3 +47,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0010](0010-nostr-identity-signed-events.md) | Wizard identity: Nostr-signed events + rank recomputed from the verified log (relay + discovery) | R-0010 | Accepted |
 | [SPEC-0011](0011-plateau-authoring.md) | Plateau Authoring: Draft DB POC — pure factory + form replacing the add-plateau stub | R-0011 | Implemented |
 | [SPEC-0012](0012-browser-durable-graph.md) | Browser-durable graph: IndexedDB snapshot of the CRDT doc (save/load bindings + persistence module) | R-0012 | Implemented |
+| [SPEC-0013](0013-bridge-authoring.md) | Bridge Authoring: pure buildBridge factory + Draft Bridge form over the existing add_bridge binding | R-0013 | Accepted |
