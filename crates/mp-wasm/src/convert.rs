@@ -14,7 +14,9 @@ use std::collections::HashMap;
 
 use mp_crdt::ResourceVote;
 use mp_domain::ga::Mv;
-use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, WizardReputation};
+use mp_domain::{
+    Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceKind, ResourceState, WizardReputation,
+};
 use mp_identity::{Keypair, NostrEvent, Traversal, Vouch, KIND_TRAVERSAL, KIND_VOUCH};
 use uuid::Uuid;
 
@@ -98,10 +100,58 @@ pub fn bridge_dto(b: &Bridge) -> BridgeDto {
     }
 }
 
+/// JS-facing view of a resource / trail marker (R-0014). `kind` and `state` are
+/// unit enums, so serde emits each as its variant-name string ("Note",
+/// "Floating") — the web app reads them directly. The rotor/GA and vote tally
+/// stay in Rust; this is value marshalling only.
+#[derive(serde::Serialize)]
+pub struct ResourceDto {
+    pub id: String,
+    pub plateau_id: String,
+    pub title: String,
+    pub kind: ResourceKind,
+    pub uri: String,
+    pub state: ResourceState,
+    pub vote_count: f32,
+}
+
+/// Map a `Resource` to its JS DTO.
+pub fn resource_dto(r: &Resource) -> ResourceDto {
+    ResourceDto {
+        id: r.id.to_string(),
+        plateau_id: r.plateau_id.to_string(),
+        title: r.title.clone(),
+        kind: r.kind.clone(),
+        uri: r.uri.clone(),
+        state: r.state.clone(),
+        vote_count: r.vote_count,
+    }
+}
+
+/// Parse a `ResourceKind` from the human label the web app sends. An unknown or
+/// blank label falls back to `Note` (R-0014 AC3) — the enum stays authoritative
+/// in Rust; JS never couples to it.
+pub fn parse_resource_kind(s: &str) -> ResourceKind {
+    match s {
+        "Article" => ResourceKind::Article,
+        "Video" => ResourceKind::Video,
+        "Interactive" => ResourceKind::Interactive,
+        "Paper" => ResourceKind::Paper,
+        "Tool" => ResourceKind::Tool,
+        _ => ResourceKind::Note,
+    }
+}
+
 /// Every plateau in the graph as JS DTOs — the render layer needs the full set
 /// (both lit and fogged), which `reachable_plateaus` (lit only) cannot give.
 pub fn all_plateau_dtos(g: &KnowledgeGraph) -> Vec<PlateauDto> {
     g.plateaus().map(plateau_dto).collect()
+}
+
+/// Every resource (trail marker) in the graph as JS DTOs — anchored to its
+/// plateau, rendered as a marker near it (R-0014).
+pub fn all_resource_dtos(g: &KnowledgeGraph) -> Vec<ResourceDto> {
+    g.resources.values().map(resource_dto).collect()
 }
 
 /// Every bridge in the graph as JS DTOs (for drawing labelled edges).

@@ -9,12 +9,13 @@ const LIT_RING = "#fff3c4";
 const FOG = "#3a4a5a";
 const BRIDGE = "rgba(180, 200, 220, 0.5)";
 const LABEL = "rgba(220, 230, 240, 0.85)";
+const MARKER = "#7fd0a0"; // trail-marker glyph (R-0014)
 const RADIUS = 16;
 
-/// Draw bridges then plateaus. `plateaus` and `bridges` are the DTO arrays from
-/// `WasmGraph.plateaus()/bridges()`; `reachable` is a Set of lit plateau ids.
-/// Returns the per-plateau screen points so the caller can hit-test clicks.
-export function render(ctx, { plateaus, bridges, reachable, view }) {
+/// Draw bridges, plateaus, then markers. `plateaus`/`bridges`/`resources` are the
+/// DTO arrays from `WasmGraph.plateaus()/bridges()/resources()`; `reachable` is a
+/// Set of lit plateau ids. Returns the per-plateau screen points for hit-testing.
+export function render(ctx, { plateaus, bridges, reachable, view, resources = [] }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -63,6 +64,30 @@ export function render(ctx, { plateaus, bridges, reachable, view }) {
     ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
     ctx.globalAlpha = 1;
   }
+
+  // Markers (trail markers / resources), anchored to their plateau (R-0014).
+  // Drawn last so they sit on top; a Floating marker is faint, a Crystallized
+  // one solid (R-0015). save/restore keeps font/textAlign/alpha self-contained.
+  ctx.save();
+  ctx.textAlign = "left";
+  ctx.font = "10px system-ui, sans-serif";
+  const placed = new Map(); // plateauId → markers already drawn (for stacking)
+  for (const r of resources) {
+    const pt = points.get(r.plateau_id);
+    if (!pt) continue; // orphan anchor (plateau not present) → skip
+    const i = placed.get(r.plateau_id) ?? 0;
+    placed.set(r.plateau_id, i + 1);
+    const mx = pt.x + RADIUS + 10;
+    const my = pt.y - RADIUS + i * 14;
+    ctx.globalAlpha = r.state === "Crystallized" ? 1 : 0.6;
+    ctx.fillStyle = MARKER;
+    ctx.beginPath();
+    ctx.arc(mx, my, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = LABEL;
+    ctx.fillText(r.title, mx + 8, my + 3);
+  }
+  ctx.restore();
 
   return points;
 }

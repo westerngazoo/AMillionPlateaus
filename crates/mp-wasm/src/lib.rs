@@ -13,7 +13,7 @@ mod convert;
 mod error;
 
 use mp_crdt::{CrdtDoc, SyncSession};
-use mp_domain::{Bridge, KnowledgeGraph, PlateauNode};
+use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
@@ -116,6 +116,14 @@ impl WasmGraph {
     /// labelled edges between plateaus.
     pub fn bridges(&self) -> Result<JsValue, JsError> {
         Ok(serde_wasm_bindgen::to_value(&convert::all_bridge_dtos(
+            &self.inner,
+        ))?)
+    }
+
+    /// All resources (trail markers) as a JS array of `ResourceDto` (R-0014) —
+    /// for drawing markers anchored to their plateaus.
+    pub fn resources(&self) -> Result<JsValue, JsError> {
+        Ok(serde_wasm_bindgen::to_value(&convert::all_resource_dtos(
             &self.inner,
         ))?)
     }
@@ -265,6 +273,35 @@ impl WasmCrdtDoc {
         let wizard = Uuid::parse_str(wizard)?;
         self.inner.vote(resource, wizard, weight)?;
         Ok(())
+    }
+
+    /// Anchor a resource (a trail marker) to an existing plateau, returning the
+    /// engine-assigned id. `kind` is a human label ("Note", "Article", …) parsed
+    /// to `ResourceKind` (unknown → Note). The marker starts `Floating` with zero
+    /// votes; `contributor` is nil (attribution deferred, R-0014 AC5). A missing
+    /// plateau anchor is a thrown `JsError` (mirrors `add_bridge`), so a marker
+    /// can never reference a non-existent plateau.
+    pub fn add_resource(
+        &mut self,
+        plateau_id: &str,
+        title: &str,
+        kind: &str,
+        uri: &str,
+    ) -> Result<String, JsError> {
+        let pid = Uuid::parse_str(plateau_id)?;
+        self.inner
+            .plateau(&pid)?
+            .ok_or_else(|| JsError::new("unknown plateau"))?;
+        let r = Resource::new(
+            pid,
+            title,
+            convert::parse_resource_kind(kind),
+            uri,
+            Uuid::nil(),
+        );
+        let id = r.id.to_string();
+        self.inner.add_resource(&r)?;
+        Ok(id)
     }
 
     /// Project this replica into a queryable [`WasmGraph`] (re-validating every

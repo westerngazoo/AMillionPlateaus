@@ -37,6 +37,7 @@ import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { buildBridge } from "./bridge.js";
+import { buildResource, RESOURCE_KINDS } from "./resource.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -257,14 +258,15 @@ async function main() {
     const graph = doc.to_graph();
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
+    const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
     // EARNED reach comes purely from the recomputed reputation (empty log ⇒ none).
     const earned = new Set(graph.reachable_plateaus(JSON.stringify(reputation)));
     // Trailheads are lit on top as a navigable start (orientation-gated, not reach).
     const lit = new Set(earned);
     for (const id of trailheadIds()) lit.add(id);
-    points = render(ctx, { plateaus, bridges, reachable: lit, view: VIEW });
+    points = render(ctx, { plateaus, bridges, reachable: lit, view: VIEW, resources });
     const who = activePersona ? `${activePersona.name} · ` : "";
-    hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges`;
+    hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges · ${resources.length} markers`;
   }
 
   // After any LOCAL graph edit, ship the change to the other tab. The inbound
@@ -847,6 +849,75 @@ async function main() {
     persist(); // durable snapshot (AC4, R-0012)
     draw(); // the labelled line appears same frame (AC2)
     document.getElementById("db-concept").value = "";
+  });
+
+  // ── Drop a Marker form (SPEC-0014 / R-0014) ─────────────────────────────────
+  // Anchor a note/resource to an existing plateau. State + vote_count are fixed
+  // in Rust (Resource::new); JS passes only (plateau, title, kind, uri).
+
+  const dmPlateau = document.getElementById("dm-plateau");
+  const dmTitle = document.getElementById("dm-title");
+  const dmKind = document.getElementById("dm-kind");
+  const dmUri = document.getElementById("dm-uri");
+
+  // The kind set never changes — populate #dm-kind once from RESOURCE_KINDS.
+  for (const k of RESOURCE_KINDS) {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = k;
+    dmKind.appendChild(o);
+  }
+
+  // Rebuild #dm-plateau from the CURRENT graph on open, so session-authored or
+  // synced-in plateaus are anchorable (AC1).
+  function refreshMarkerPlateaus() {
+    dmPlateau.replaceChildren(
+      ...doc.to_graph().plateaus().map((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.name;
+        return o;
+      }),
+    );
+  }
+
+  const markerPanel = document.getElementById("drop-marker");
+  document.getElementById("drop-marker-toggle").addEventListener("click", () => {
+    markerPanel.hidden = !markerPanel.hidden;
+    if (!markerPanel.hidden) {
+      markerPanel.open = true;
+      refreshMarkerPlateaus();
+    }
+  });
+
+  document.getElementById("drop-marker-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildResource({
+      plateau: dmPlateau.value,
+      title: dmTitle.value,
+      kind: dmKind.value,
+      uri: dmUri.value,
+    });
+    const errEl = document.getElementById("dm-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // State/vote fixed in Rust (AC5). Throws on unknown plateau/bad UUID.
+      doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri);
+    } catch {
+      errEl.textContent = "Could not add marker.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast (AC4)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // the marker appears near its plateau same frame (AC2)
+    dmTitle.value = "";
+    dmUri.value = "";
   });
 
   // Forget my history: clear the local event log so reputation falls back to

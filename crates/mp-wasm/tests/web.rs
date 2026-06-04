@@ -194,3 +194,47 @@ fn save_load_round_trips_the_doc() {
         "a corrupt blob must error, never panic"
     );
 }
+
+// R-0014 AC8: add_resource anchors a marker to a plateau and it round-trips
+// through resources() as a Floating, zero-vote DTO; an unknown anchor errors.
+#[wasm_bindgen_test]
+fn add_resource_round_trips_and_validates_anchor() {
+    #[derive(serde::Deserialize)]
+    struct ResourceRow {
+        plateau_id: String,
+        title: String,
+        kind: String,
+        uri: String,
+        state: String,
+        vote_count: f32,
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let p = doc
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .expect("add plateau");
+
+    // A blank/unknown kind falls back to Note; the marker anchors to the plateau.
+    doc.add_resource(&p, "Spectral theorem", "Paper", "https://ex.com")
+        .expect("add resource");
+
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<ResourceRow> =
+        serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode rows");
+    assert_eq!(rows.len(), 1, "one marker present");
+    let r = &rows[0];
+    assert_eq!(r.plateau_id, p, "anchored to its plateau");
+    assert_eq!(r.title, "Spectral theorem");
+    assert_eq!(r.kind, "Paper", "kind label round-trips");
+    assert_eq!(r.uri, "https://ex.com");
+    assert_eq!(r.state, "Floating", "new markers start Floating (AC5)");
+    assert_eq!(r.vote_count, 0.0, "new markers have zero votes (AC5)");
+
+    // An unknown plateau anchor is a thrown Error, never a silent orphan (AC3).
+    assert!(
+        doc.add_resource("99999999-0000-0000-0000-000000000000", "orphan", "Note", "")
+            .is_err(),
+        "a missing plateau anchor must error"
+    );
+}

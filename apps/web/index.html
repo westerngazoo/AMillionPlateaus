@@ -210,6 +210,7 @@
       <button id="model-setup">Model setup</button>
       <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="draft-bridge-toggle">Draft a bridge</button>
+      <button id="drop-marker-toggle">Drop a marker</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <span id="hud">loading…</span>
@@ -277,6 +278,35 @@
         <p id="db-error" class="dp-error" hidden></p>
         <div class="dp-actions">
           <button type="submit">Draft bridge</button>
+        </div>
+      </form>
+    </details>
+    <!-- Drop a Marker form (SPEC-0014 / R-0014). Anchors a note/resource to a
+         plateau. The plateau select is rebuilt from the current graph on open;
+         the kind select is populated once from RESOURCE_KINDS. A new marker
+         starts Floating; voting it to Crystallized is R-0015. -->
+    <details id="drop-marker" class="draft-plateau" hidden>
+      <summary>Drop a marker</summary>
+      <form id="drop-marker-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="dm-plateau">Plateau</label>
+          <select id="dm-plateau"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dm-title">Title</label>
+          <input id="dm-title" type="text" placeholder="Marker title" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="dm-kind">Kind</label>
+          <select id="dm-kind"><!-- populated by main.js from RESOURCE_KINDS --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dm-uri">Link</label>
+          <input id="dm-uri" type="text" placeholder="https://… (optional)" autocomplete="off" />
+        </div>
+        <p id="dm-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Drop marker</button>
         </div>
       </form>
     </details>
