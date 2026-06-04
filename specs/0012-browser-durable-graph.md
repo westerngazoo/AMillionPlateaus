@@ -1,6 +1,6 @@
 # SPEC-0012 — Browser-durable graph: IndexedDB snapshot of the CRDT doc
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0012
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -205,21 +205,21 @@ converter line, one ~60-line JS module with an injected `idb`/`schedule`, and
 
 Maps 1-to-1 to R-0012 AC:
 
-- [ ] AC1 — `WasmCrdtDoc.save()/load()` exposed; round-trip preserves
+- [x] AC1 — `WasmCrdtDoc.save()/load()` exposed; round-trip preserves
       plateaus/bridges/resources/votes (wasm-pack test).
-- [ ] AC2 — Snapshot present on start ⇒ authored plateau restored after full
+- [x] AC2 — Snapshot present on start ⇒ authored plateau restored after full
       close/reload, no other tab, no relay.
-- [ ] AC3 — Any local edit / changing inbound sync ⇒ debounced IndexedDB write;
+- [x] AC3 — Any local edit / changing inbound sync ⇒ debounced IndexedDB write;
       last write reflects final state.
-- [ ] AC4 — Deterministic seed idempotent over a restore (no dup seeds, no lost
+- [x] AC4 — Deterministic seed idempotent over a restore (no dup seeds, no lost
       authored nodes); restore-then-seed converges.
-- [ ] AC5 — `DOMAIN_OF` rebuilt from the restored doc; restored authored plateau
+- [x] AC5 — `DOMAIN_OF` rebuilt from the restored doc; restored authored plateau
       scores under its own domain.
-- [ ] AC6 — Snapshot root keys stay `{bridges, plateaus, resources, votes}`; no
+- [x] AC6 — Snapshot root keys stay `{bridges, plateaus, resources, votes}`; no
       reputation/persona/identity/model written into it.
-- [ ] AC7 — No IndexedDB (or put/get error) ⇒ graceful in-memory fallback, no
+- [x] AC7 — No IndexedDB (or put/get error) ⇒ graceful in-memory fallback, no
       uncaught console errors.
-- [ ] AC8 — `persistence.test.mjs` green with a **hand-rolled in-memory `idb`
+- [x] AC8 — `persistence.test.mjs` green with a **hand-rolled in-memory `idb`
       fake (no npm dependency)** + injected `schedule`: put/get round-trip,
       debounce coalesce, flush, no-idb fallback; full workspace + wasm + node +
       clippy + fmt green.
@@ -254,3 +254,5 @@ Maps 1-to-1 to R-0012 AC:
   plateaus + 1023-byte IndexedDB snapshot; reload (no other tab) → 9 restored;
   clear snapshot + reload → 8 (negative control); zero console errors. Pending
   formal QA sign-off (R-0011 + R-0012).
+- 2026-06-02 QA sign-off → PASS (all AC1–AC8 met; every gate green). **Status →
+  Implemented.**

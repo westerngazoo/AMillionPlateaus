@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createSnapshotStore, SNAPSHOT_KEY, STORE } from "./persistence.js";
+import { createSnapshotStore, SNAPSHOT_KEY } from "./persistence.js";
 
 // ── a minimal in-memory IndexedDB fake ──────────────────────────────────────
 // Mirrors just the request/transaction event model the store uses. Writes are

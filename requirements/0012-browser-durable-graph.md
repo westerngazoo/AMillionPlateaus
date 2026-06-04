@@ -1,6 +1,6 @@
 # R-0012 — Browser-durable graph: the Draft DB survives a reload
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Draft DB (durability)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -139,4 +139,9 @@ out of the snapshot (CLAUDE.md §7); only the four CRDT data maps are stored.
 - 2026-06-02 implemented + browser-verified end-to-end (author → reload restores
   the drafted plateau with no other tab open; negative control: clearing the
   IndexedDB snapshot drops back to the seed; no console errors). All automated
-  gates green. Pending formal QA sign-off.
+  gates green.
+- 2026-06-02 implemented (commit b7592c3) and **QA sign-off → PASS** (all AC1–AC8
+  met; 80 JS + 100 Rust + 6 wasm tests incl. the save/load round-trip, clippy
+  host+wasm32, fmt all green; browser-level ACs covered by the fake-idb tests,
+  the wasm round-trip, and the recorded live-page evidence + negative control).
+  **Status → Met.**

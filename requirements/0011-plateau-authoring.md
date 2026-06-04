@@ -1,6 +1,6 @@
 # R-0011 — Plateau Authoring: draft new knowledge nodes into the fog-world
 
-- **Status:** Draft
+- **Status:** Met
 - **Milestone:** POC — Draft DB
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -136,3 +136,6 @@ natural first deliverable of the "Draft DB" incremental POC roadmap, because:
   build for wasm32 and is compiled out of `mp-wasm`, and `WasmCrdtDoc` exposes no
   save/load. AC3 now scopes R-0011 to session + cross-tab convergence; durable
   cross-reload persistence is carved out to R-0012 (IndexedDB snapshot).
+- 2026-06-02 implemented (commit d96900e) and **QA sign-off → PASS** (all AC1–AC8
+  met; 80 JS + 100 Rust tests, clippy host+wasm32, fmt all green; browser-level
+  ACs verified by inspection + the pure-factory tests). **Status → Met.**

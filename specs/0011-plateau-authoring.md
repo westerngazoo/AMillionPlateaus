@@ -1,6 +1,6 @@
 # SPEC-0011 — Plateau Authoring: Draft DB POC
 
-- **Status:** Draft
+- **Status:** Implemented
 - **Realizes:** R-0011
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -176,21 +176,21 @@ test file, and surgical edits to `index.html` + `main.js`.
 
 Maps 1-to-1 to R-0011 AC:
 
-- [ ] AC1 — Draft Plateau form: name input, domain select (Math/Music), three
+- [x] AC1 — Draft Plateau form: name input, domain select (Math/Music), three
       human-labeled sliders (Formal/Empirical/Creative), submit button.
-- [ ] AC2 — On submit the plateau appears in the fog-world same-frame; fog/lit
+- [x] AC2 — On submit the plateau appears in the fog-world same-frame; fog/lit
       state matches the wizard's orientation.
-- [ ] AC3 — Drafted plateau lives for the session and converges across open
+- [x] AC3 — Drafted plateau lives for the session and converges across open
       tabs. NOT durable across a full close/reload (redb is compiled out of the
       wasm build); durable IndexedDB persistence is R-0012.
-- [ ] AC4 — Syncs to a second open tab via BroadcastChannel.
-- [ ] AC5 — All-zero slider position is blocked (error message or snap).
-- [ ] AC6 — `buildPlateau` is pure and unit-tested: deterministic, name trim,
+- [x] AC4 — Syncs to a second open tab via BroadcastChannel.
+- [x] AC5 — All-zero slider position is blocked (error message or snap).
+- [x] AC6 — `buildPlateau` is pure and unit-tested: deterministic, name trim,
       blank-name fallback, all-zero → `{ error }`, NaN coordinate → `{ error }`,
       unknown domain → `{ error }`, valid input → `{ ..., error: null }`.
-- [ ] AC7 — Attribution deferred to R-0012 (no CRDT `created_by` field this POC;
+- [x] AC7 — Attribution deferred to R-0012 (no CRDT `created_by` field this POC;
       R-0011 AC7 amended).
-- [ ] AC8 — All test suites green; no uncaught console errors.
+- [x] AC8 — All test suites green; no uncaught console errors.
 
 ## 7. Decision log
 
@@ -209,3 +209,5 @@ Maps 1-to-1 to R-0011 AC:
 - 2026-06-02 AC3 corrected — drafted plateaus are session + cross-tab only, not
   durable across a full reload (redb is compiled out of the wasm build). Durable
   IndexedDB persistence carved out to SPEC-0012 / R-0012.
+- 2026-06-02 implemented + QA sign-off PASS (all ACs met, every gate green).
+  **Status → Implemented.**
