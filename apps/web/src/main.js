@@ -15,6 +15,8 @@ import init, {
   verify_event,
   recompute_reputation,
   rank_wizards,
+  crystallize_threshold,
+  wizard_id_of,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
@@ -38,6 +40,7 @@ import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
+import { buildVote } from "./vote.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -918,6 +921,63 @@ async function main() {
     draw(); // the marker appears near its plateau same frame (AC2)
     dmTitle.value = "";
     dmUri.value = "";
+  });
+
+  // ── Place a Stone form (SPEC-0015 / R-0015) ─────────────────────────────────
+  // Vote on a marker; crossing CRYSTALLIZE_THRESHOLD flips it to Crystallized.
+  // The voter id is the CANONICAL wizard_id_of(pubkey) — the same id reputation
+  // and discovery use (never a parallel mapping). State is computed in to_graph,
+  // never set here.
+
+  const myVoterId = wizard_id_of(myPubkey);
+  const vsMarker = document.getElementById("vs-marker");
+  const vsWeight = document.getElementById("vs-weight");
+
+  // Rebuild the marker select from the current graph on open, showing each
+  // marker's running total toward the threshold.
+  function refreshVoteMarkers() {
+    const threshold = crystallize_threshold();
+    vsMarker.replaceChildren(
+      ...doc.to_graph().resources().map((r) => {
+        const o = document.createElement("option");
+        o.value = r.id;
+        o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
+        return o;
+      }),
+    );
+  }
+
+  const stonePanel = document.getElementById("place-stone");
+  document.getElementById("place-stone-toggle").addEventListener("click", () => {
+    stonePanel.hidden = !stonePanel.hidden;
+    if (!stonePanel.hidden) {
+      stonePanel.open = true;
+      refreshVoteMarkers();
+    }
+  });
+
+  document.getElementById("place-stone-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildVote({ resource: vsMarker.value, weight: vsWeight.value });
+    const errEl = document.getElementById("vs-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // Cast this wizard's grow-only weight; crystallization is derived in Rust.
+      doc.vote(spec.resource, myVoterId, spec.weight);
+    } catch {
+      errEl.textContent = "Could not place stone.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast the vote (AC4)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // vote_count + crystallization re-derive in to_graph() (AC2/AC3)
+    refreshVoteMarkers(); // reflect the new total in the open select
   });
 
   // Forget my history: clear the local event log so reputation falls back to

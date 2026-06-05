@@ -517,3 +517,19 @@ pub fn rank_wizards(events_json: &str, domain: &str, k: usize) -> Result<JsValue
         &convert::rank_wizards_entries(events_json, domain, k)?,
     )?)
 }
+
+/// R-0015 — the weighted-vote sum at which a resource crystallizes. Exposed so
+/// the web app shows "n / threshold" without hardcoding the constant.
+#[wasm_bindgen]
+pub fn crystallize_threshold() -> f32 {
+    mp_domain::CRYSTALLIZE_THRESHOLD
+}
+
+/// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
+/// mapping reputation and discovery use (`mp_identity::wizard_id_of`). Exposed so
+/// a vote is keyed by the wizard's real identity, not a parallel/truncated id —
+/// the only sanctioned pubkey→WizardId path for the web app (R-0015 AC6).
+#[wasm_bindgen]
+pub fn wizard_id_of(pubkey: &str) -> String {
+    mp_identity::wizard_id_of(pubkey).to_string()
+}

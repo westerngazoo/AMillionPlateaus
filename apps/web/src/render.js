@@ -9,7 +9,8 @@ const LIT_RING = "#fff3c4";
 const FOG = "#3a4a5a";
 const BRIDGE = "rgba(180, 200, 220, 0.5)";
 const LABEL = "rgba(220, 230, 240, 0.85)";
-const MARKER = "#7fd0a0"; // trail-marker glyph (R-0014)
+const MARKER = "#7fd0a0"; // Floating trail-marker glyph (R-0014)
+const MARKER_SOLID = "#ffd166"; // Crystallized marker — bedrock gold (R-0015)
 const RADIUS = 16;
 
 /// Draw bridges, plateaus, then markers. `plateaus`/`bridges`/`resources` are the
@@ -79,13 +80,17 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
     placed.set(r.plateau_id, i + 1);
     const mx = pt.x + RADIUS + 10;
     const my = pt.y - RADIUS + i * 14;
-    ctx.globalAlpha = r.state === "Crystallized" ? 1 : 0.6;
-    ctx.fillStyle = MARKER;
+    // Crystallized markers are solid bedrock gold; Floating ones faint green
+    // (R-0015). State is computed from votes in to_graph — never client-set.
+    const crystallized = r.state === "Crystallized";
+    ctx.globalAlpha = crystallized ? 1 : 0.6;
+    ctx.fillStyle = crystallized ? MARKER_SOLID : MARKER;
     ctx.beginPath();
-    ctx.arc(mx, my, 4, 0, Math.PI * 2);
+    ctx.arc(mx, my, crystallized ? 5 : 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = LABEL;
-    ctx.fillText(r.title, mx + 8, my + 3);
+    const n = Math.round(r.vote_count ?? 0);
+    ctx.fillText(n > 0 ? `${r.title} · ${n}` : r.title, mx + 8, my + 3);
   }
   ctx.restore();
 

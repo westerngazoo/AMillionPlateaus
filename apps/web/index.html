@@ -211,6 +211,7 @@
       <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="draft-bridge-toggle">Draft a bridge</button>
       <button id="drop-marker-toggle">Drop a marker</button>
+      <button id="place-stone-toggle">Place a stone</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <span id="hud">loading…</span>
@@ -307,6 +308,28 @@
         <p id="dm-error" class="dp-error" hidden></p>
         <div class="dp-actions">
           <button type="submit">Drop marker</button>
+        </div>
+      </form>
+    </details>
+    <!-- Place a Stone form (SPEC-0015 / R-0015). Vote on a marker; crossing the
+         crystallize threshold flips it Floating → Crystallized. State is computed
+         from votes in Rust (to_graph), never set by the client. The marker select
+         is rebuilt from the current graph on open. -->
+    <details id="place-stone" class="draft-plateau" hidden>
+      <summary>Place a stone</summary>
+      <form id="place-stone-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="vs-marker">Marker</label>
+          <select id="vs-marker"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="vs-weight">Weight</label>
+          <input id="vs-weight" type="range" min="1" max="100" step="1" value="10" />
+        </div>
+        <p id="dm-hint" class="author-hint">Your stone's weight; a marker crystallizes when the community's weighted votes cross the threshold.</p>
+        <p id="vs-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Place stone</button>
         </div>
       </form>
     </details>

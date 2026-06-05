@@ -238,3 +238,64 @@ fn add_resource_round_trips_and_validates_anchor() {
         "a missing plateau anchor must error"
     );
 }
+
+// R-0015 AC2/AC3/AC8: voting accrues and crossing the threshold flips the
+// projected state Floating → Crystallized — derived, never client-set.
+#[wasm_bindgen_test]
+fn vote_crystallizes_a_marker() {
+    #[derive(serde::Deserialize)]
+    struct ResourceRow {
+        id: String,
+        state: String,
+        vote_count: f32,
+    }
+    fn marker(doc: &WasmCrdtDoc, id: &str) -> ResourceRow {
+        let g = doc.to_graph().expect("project");
+        let rows: Vec<ResourceRow> =
+            serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode");
+        rows.into_iter()
+            .find(|r| r.id == id)
+            .expect("marker present")
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let threshold = mp_wasm::crystallize_threshold();
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let p = doc
+        .add_plateau("LA", domain, 0.9, 0.2, 0.5)
+        .expect("plateau");
+    let rid = doc.add_resource(&p, "notes", "Note", "").expect("marker");
+
+    // Two distinct wizards each clear half the threshold → crystallizes.
+    let per = threshold / 2.0 + 1.0;
+    let w1 = mp_wasm::wizard_id_of("aa".repeat(32).as_str());
+    let w2 = mp_wasm::wizard_id_of("bb".repeat(32).as_str());
+
+    // One wizard alone, below threshold → still Floating.
+    doc.vote(&rid, &w1, per).expect("vote 1");
+    let m = marker(&doc, &rid);
+    assert!(m.vote_count < threshold, "one voter is below threshold");
+    assert_eq!(m.state, "Floating", "below threshold stays Floating");
+
+    // A second distinct wizard crosses it → Crystallized (derived in to_graph).
+    doc.vote(&rid, &w2, per).expect("vote 2");
+    let m = marker(&doc, &rid);
+    assert!(m.vote_count >= threshold, "two voters cross the threshold");
+    assert_eq!(
+        m.state, "Crystallized",
+        "crossing the threshold crystallizes"
+    );
+
+    // Sybil: the SAME wizard voting again is monotonic (grow-only) — re-voting
+    // the same weight does not stack, so one identity can't inflate the sum.
+    let before = marker(&doc, &rid).vote_count;
+    doc.vote(&rid, &w1, per).expect("re-vote same wizard");
+    assert_eq!(
+        marker(&doc, &rid).vote_count,
+        before,
+        "re-vote is monotonic"
+    );
+
+    // Two different pubkeys yield two different voter ids (no collision).
+    assert_ne!(w1, w2, "distinct pubkeys → distinct wizard ids");
+}
