@@ -13,10 +13,13 @@ const MARKER = "#7fd0a0"; // Floating trail-marker glyph (R-0014)
 const MARKER_SOLID = "#ffd166"; // Crystallized marker — bedrock gold (R-0015)
 const RADIUS = 16;
 
-/// Draw bridges, plateaus, then markers. `plateaus`/`bridges`/`resources` are the
-/// DTO arrays from `WasmGraph.plateaus()/bridges()/resources()`; `reachable` is a
-/// Set of lit plateau ids. Returns the per-plateau screen points for hit-testing.
-export function render(ctx, { plateaus, bridges, reachable, view, resources = [] }) {
+/// Draw bridges, plateaus, markers, then remote-wizard silhouettes.
+/// `plateaus`/`bridges`/`resources` are the DTO arrays from
+/// `WasmGraph.plateaus()/bridges()/resources()`; `peers` is the ephemeral
+/// presence list (`{ pubkey, plateau }`, R-0016); `reachable` is a Set of lit
+/// plateau ids. Returns the per-plateau screen points for hit-testing — peers are
+/// NOT added to it, so silhouettes are unclickable and never affect hit-testing.
+export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [] }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -94,7 +97,46 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
   }
   ctx.restore();
 
+  // Remote-wizard silhouettes (ephemeral presence, R-0016), drawn last and to the
+  // LEFT of the disc so they never collide with markers (on the right). Colour is
+  // a deterministic hash of the pubkey; label is a short pubkey. Self is already
+  // excluded by the presence layer; peers are NOT added to `points`.
+  ctx.save();
+  ctx.textAlign = "right";
+  ctx.font = "10px system-ui, sans-serif";
+  const here = new Map(); // plateauId → silhouettes already placed (for fanning)
+  for (const w of peers) {
+    const pt = points.get(w.plateau);
+    if (!pt) continue; // their plateau isn't in our local graph → skip
+    const i = here.get(w.plateau) ?? 0;
+    here.set(w.plateau, i + 1);
+    const sx = pt.x - RADIUS - 10 - i * 12;
+    const sy = pt.y - RADIUS + i * 6;
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = hueFor(w.pubkey);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = LABEL;
+    ctx.fillText(short(w.pubkey), sx - 8, sy + 3);
+  }
+  ctx.restore();
+
   return points;
+}
+
+// Deterministic hue from a pubkey — distinct, stable colours for distinct wizards.
+// Pure presentation (no identity meaning beyond "tell them apart").
+function hueFor(pubkey) {
+  let h = 0;
+  for (let i = 0; i < (pubkey?.length ?? 0); i++) h = (h * 31 + pubkey.charCodeAt(i)) % 360;
+  return `hsl(${h}, 70%, 62%)`;
+}
+
+// A short, human-glanceable form of a pubkey for the silhouette label.
+function short(pubkey) {
+  return typeof pubkey === "string" && pubkey.length > 6 ? pubkey.slice(0, 6) : pubkey || "?";
 }
 
 export { RADIUS };

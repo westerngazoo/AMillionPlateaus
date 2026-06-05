@@ -41,6 +41,7 @@ import { buildPlateau } from "./plateau.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
+import { createPresence, HEARTBEAT_MS } from "./presence.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -267,10 +268,33 @@ async function main() {
     // Trailheads are lit on top as a navigable start (orientation-gated, not reach).
     const lit = new Set(earned);
     for (const id of trailheadIds()) lit.add(id);
-    points = render(ctx, { plateaus, bridges, reachable: lit, view: VIEW, resources });
+    points = render(ctx, {
+      plateaus,
+      bridges,
+      reachable: lit,
+      view: VIEW,
+      resources,
+      peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+    });
     const who = activePersona ? `${activePersona.name} · ` : "";
     hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges · ${resources.length} markers`;
   }
+
+  // ── Ephemeral presence (SPEC-0016 / R-0016) ─────────────────────────────────
+  // A per-TAB session id (NOT persisted) — two tabs of the same wizard are two
+  // presences. Beacons ride a SEPARATE channel; nothing here touches the CRDT,
+  // the event log, or any store. A beacon arriving redraws immediately; the
+  // heartbeat re-announces AND redraws so a gone wizard's silhouette expires.
+  const sessionId = crypto.randomUUID();
+  let myPlateau = null; // current position (a plateau id), set on focus
+  const presence = createPresence({ session: sessionId, onChange: draw });
+  function announcePresence() {
+    if (myPlateau) presence.announce({ pubkey: myPubkey, plateau: myPlateau });
+  }
+  setInterval(() => {
+    announcePresence();
+    draw();
+  }, HEARTBEAT_MS);
 
   // After any LOCAL graph edit, ship the change to the other tab. The inbound
   // callback redraws AND persists the converged doc (AC3) — wrapping keeps
@@ -417,6 +441,11 @@ async function main() {
     activePersona = archetype;
     creator.hidden = true;
     initCompanion(archetype); // embody the persona (R-0007 AC2)
+    // Stand at the first faced trailhead so peers see us immediately (R-0016 AC4).
+    // A persona facing no domain has no trailhead → myPlateau stays null and the
+    // wizard appears only after their first focus.
+    myPlateau = trailheadIds()[0] ?? null;
+    announcePresence();
     renderDiscovery();
     draw();
   }
@@ -739,6 +768,10 @@ async function main() {
       }
     }
     if (hit) {
+      // Focusing a plateau is the wizard's position — announce it to peers
+      // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
+      myPlateau = hit.id;
+      announcePresence();
       // Sign a traversal toward the plateau (R-0010 AC2/AC3). Grow the plateau's OWN
       // domain bucket (fallback: the persona's first faced domain — an authored
       // persona may face nothing, R-0009 AC6). The signed event — never any graph
