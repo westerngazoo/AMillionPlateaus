@@ -1,6 +1,6 @@
 # SPEC-0016 — Presence: ephemeral silhouettes over a separate BroadcastChannel
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0016
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -187,23 +187,23 @@ render, ~12 lines of `main.js` wiring. No Rust, no HTML change.
 
 Maps 1-to-1 to R-0016 AC:
 
-- [ ] AC1 — beacon `{session,pubkey,plateau,ts}` on the separate `mp-presence`
+- [x] AC1 — beacon `{session,pubkey,plateau,ts}` on the separate `mp-presence`
       channel, on focus + heartbeat.
-- [ ] AC2 — remote wizards render as pubkey-coloured silhouettes near their
+- [x] AC2 — remote wizards render as pubkey-coloured silhouettes near their
       plateau, short-pubkey labelled, self excluded, fanned when co-located.
-- [ ] AC3 — never persisted, never CRDT (root keys unchanged), never a signed
+- [x] AC3 — never persisted, never CRDT (root keys unchanged), never a signed
       event; TTL drops a gone wizard within ≤ TTL + one heartbeat (~9–12 s) — the
       silhouette clears on the first heartbeat redraw after the TTL lapses.
-- [ ] AC4 — position = current plateau (trailhead-initialised); focus change
+- [x] AC4 — position = current plateau (trailhead-initialised); focus change
       moves the silhouette within one beacon.
-- [ ] AC5 — keyed by per-tab session; two same-origin tabs (same key) show each
+- [x] AC5 — keyed by per-tab session; two same-origin tabs (same key) show each
       other.
-- [ ] AC6 — `buildBeacon`/`parseBeacon` + peer map + TTL GC unit-tested (injected
+- [x] AC6 — `buildBeacon`/`parseBeacon` + peer map + TTL GC unit-tested (injected
       channel + clock): valid updates, malformed (incl. empty-session) ignored,
       stale GC'd (assert the peer map actually shrinks, not just absence from the
       returned list), self excluded, deterministic.
-- [ ] AC7 — no Rust change; beacon carries only the public pubkey + plateau id.
-- [ ] AC8 — all suites green; two tabs show each other moving + fading, no
+- [x] AC7 — no Rust change; beacon carries only the public pubkey + plateau id.
+- [x] AC8 — all suites green; two tabs show each other moving + fading, no
       uncaught console errors.
 
 ## 7. Decision log
@@ -227,3 +227,9 @@ Maps 1-to-1 to R-0016 AC:
   invisible until first focus. (Also noted: DECENTRALIZATION.md's stale
   `trail_markers` 5th-map mention — a separate doc fix; the code's four root keys
   are authoritative.) **Status → Accepted**; ready to implement.
+- 2026-06-04 implemented (commit 740aace) and **QA sign-off → PASS** (all AC1–AC8
+  met; 120 JS tests incl. 10 presence, 102 Rust + 8 wasm unaffected, clippy
+  host+wasm32, fmt green; browser-verified: page broadcasts a public-pubkey-only
+  beacon on persona-choose, a ghost beacon renders a coloured silhouette by its
+  plateau, the graph HUD is unchanged by beacons, zero console errors). **Status
+  → Implemented.**

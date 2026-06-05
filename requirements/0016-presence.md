@@ -1,6 +1,6 @@
 # R-0016 — Presence: see other wizards as silhouettes in the fog
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Multiplayer presence
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -117,3 +117,6 @@ carries who-is-where.
 - 2026-06-04 created (Draft) — pending SPEC-0016 + architect design review, then acceptance.
 - 2026-06-04 SPEC-0016 drafted + architect-reviewed (APPROVE-WITH-NITS; crux AC3
   confirmed off-CRDT/off-events; nits folded). **Status → Accepted.**
+- 2026-06-04 implemented (commit 740aace) and **QA sign-off → PASS** (all AC1–AC8
+  met; every gate green; browser-verified silhouette render + ephemerality).
+  **Status → Met.**

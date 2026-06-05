@@ -50,4 +50,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0013](0013-bridge-authoring.md) | Bridge Authoring: pure buildBridge factory + Draft Bridge form over the existing add_bridge binding | R-0013 | Implemented |
 | [SPEC-0014](0014-trail-markers.md) | Trail Markers: Resource::new + add_resource binding + ResourceDto/render + buildResource factory/form | R-0014 | Implemented |
 | [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Implemented |
-| [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Accepted |
+| [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Implemented |
