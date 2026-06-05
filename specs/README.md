@@ -49,4 +49,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0012](0012-browser-durable-graph.md) | Browser-durable graph: IndexedDB snapshot of the CRDT doc (save/load bindings + persistence module) | R-0012 | Implemented |
 | [SPEC-0013](0013-bridge-authoring.md) | Bridge Authoring: pure buildBridge factory + Draft Bridge form over the existing add_bridge binding | R-0013 | Implemented |
 | [SPEC-0014](0014-trail-markers.md) | Trail Markers: Resource::new + add_resource binding + ResourceDto/render + buildResource factory/form | R-0014 | Implemented |
-| [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Accepted |
+| [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Implemented |

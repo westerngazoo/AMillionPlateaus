@@ -116,3 +116,23 @@ pub fn rank_by_domain(events: &[NostrEvent], domain: Uuid, k: usize) -> Vec<(Str
     ranked.truncate(k);
     ranked
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The canonical pubkey→WizardId mapping (used by reputation, discovery, and
+    /// R-0015 votes) is deterministic and distinct per pubkey — the property the
+    /// vote/render layers rely on to key a wizard's stone to their real identity.
+    #[test]
+    fn wizard_id_of_is_deterministic_and_distinct() {
+        let a = "aa".repeat(32); // 64-hex pubkey
+        let b = "bb".repeat(32);
+        assert_eq!(wizard_id_of(&a), wizard_id_of(&a), "same pubkey → same id");
+        assert_ne!(
+            wizard_id_of(&a),
+            wizard_id_of(&b),
+            "distinct pubkeys → distinct ids"
+        );
+    }
+}

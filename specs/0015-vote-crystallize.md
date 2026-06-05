@@ -1,6 +1,6 @@
 # SPEC-0015 — Vote → Crystallize: derive resource state from the votes tally
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0015
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -197,22 +197,22 @@ polish, ~10 lines of markup, ~30 lines of wiring.
 
 Maps 1-to-1 to R-0015 AC:
 
-- [ ] AC1 — Place-a-stone form: marker select (rebuilt on open), weight slider, submit.
-- [ ] AC2 — Voting casts the wizard's weight (monotonic per wizard); the marker's
+- [x] AC1 — Place-a-stone form: marker select (rebuilt on open), weight slider, submit.
+- [x] AC2 — Voting casts the wizard's weight (monotonic per wizard); the marker's
       total updates same-frame.
-- [ ] AC3 — `to_graph` derives state from `vote_count` vs `CRYSTALLIZE_THRESHOLD`;
+- [x] AC3 — `to_graph` derives state from `vote_count` vs `CRYSTALLIZE_THRESHOLD`;
       crossing it renders the marker solid; client never sets state.
-- [ ] AC4 — votes sync + persist; state re-derives identically on every peer/reload
+- [x] AC4 — votes sync + persist; state re-derives identically on every peer/reload
       (nothing but votes on the wire).
-- [ ] AC5 — grow-only `cast` ⇒ one wizard can't crystallize by count; sum is across
+- [x] AC5 — grow-only `cast` ⇒ one wizard can't crystallize by count; sum is across
       distinct wizards (unit-proven in mp-crdt; surfaced here).
-- [ ] AC6 — voter id is the canonical `wizard_id_of(pubkey)` (UUIDv5 over the
+- [x] AC6 — voter id is the canonical `wizard_id_of(pubkey)` (UUIDv5 over the
       full pubkey, host-tested in mp-identity; exposed to JS), identical to the
       reputation/discovery id — no parallel/truncated mapping. `buildVote`
       validates marker + positive weight (pure JS unit).
-- [ ] AC7 — only `to_graph` state derivation + threshold export; root keys stay
+- [x] AC7 — only `to_graph` state derivation + threshold export; root keys stay
       `{bridges, plateaus, resources, votes}`; no reputation in CRDT.
-- [ ] AC8 — all suites green (incl. the `to_graph` state-derivation test and a
+- [x] AC8 — all suites green (incl. the `to_graph` state-derivation test and a
       wasm vote→crystallize round-trip); vote to crystallization + reload stays
       crystallized, no uncaught console errors.
 
@@ -239,3 +239,9 @@ Maps 1-to-1 to R-0015 AC:
   `Floating`); `MARKER_SOLID` with the other color consts. AC5 single-wizard
   disclosure, the threshold export, and the deferred-events seam confirmed sound.
   **Status → Accepted**; ready to implement.
+- 2026-06-04 implemented (commit 5ea2b28) and **QA sign-off → PASS** (all AC1–AC8
+  met; 110 JS + 100 Rust + 8 wasm tests incl. the `to_graph` state-derivation
+  test and the `vote_crystallizes_a_marker` round-trip; clippy host+wasm32, fmt
+  green; browser-verified: voted a marker to 100/50, reload stays crystallized,
+  zero console errors). QA's one nit folded: a literal `wizard_id_of`
+  determinism/distinctness unit test in mp-identity. **Status → Implemented.**

@@ -1,6 +1,6 @@
 # R-0015 — Vote → Crystallize: community votes solidify a marker into terrain
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Draft DB (curation)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -134,3 +134,5 @@ UI to cast a vote and (b) deriving `state` from that recomputed `vote_count`.
 - 2026-06-04 SPEC-0015 drafted + architect-reviewed (REQUEST CHANGES → resolved:
   voter id now uses the canonical `wizard_id_of`, not a parallel JS mapping; +
   to_graph doc/test, palette nit). **Status → Accepted.**
+- 2026-06-04 implemented (commit 5ea2b28) and **QA sign-off → PASS** (all AC1–AC8
+  met; every gate green; browser-verified vote→crystallize→reload). **Status → Met.**
