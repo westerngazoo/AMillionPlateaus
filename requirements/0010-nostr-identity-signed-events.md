@@ -1,6 +1,6 @@
 # R-0010 — Wizard identity: Nostr-signed events and verifiable, recomputed rank
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** Phase 8 — Nostr Identity
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-02
@@ -174,3 +174,12 @@ multiplayer presence.
   fixed two-phase recompute order for AC4 determinism, AC5 re-scoped to mutual-vouch grade-0
   with single-actor grade-3 fabrication named as an accepted POC risk, orientation-only
   persona encoding, crate-graph hygiene). **Status → Accepted**; ready for implementation.
+- 2026-06-02 implemented (commit 8d9d622): mp-identity crate + identity/events/relay/eventbus.js
+  + mp-wasm bindings; seed magnitude removed from the live reach path.
+- 2026-06-04 **QA sign-off → PASS** (all AC1–AC8 met). Host mp-identity tests prove
+  determinism, empty-log-reaches-nothing, tamper-rejection (id/sig/content/pubkey), vouch-chain
+  convergence under shuffle, and mutual-vouch-ring-stays-grade-0 (Sybil); 120 JS + 102 Rust +
+  8 wasm tests, clippy host+wasm32, fmt all green. Confirmed: the secret key never crosses the
+  CRDT/event channel/relay/any log (only the public pubkey + signed events do), and recomputed
+  reputation never enters the CRDT (root keys stay the four data maps). Live-relay tested via a
+  faked socket (NIP-01 framing/queue/routing/offline) — an accepted POC proxy. **Status → Met.**

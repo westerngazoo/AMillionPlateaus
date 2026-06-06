@@ -1,6 +1,6 @@
 # SPEC-0010 — Wizard identity: Nostr-signed events and recomputed, verifiable rank
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0010
 - **Author:** Claude
 - **Created:** 2026-06-02
@@ -426,3 +426,6 @@ export function makeLog(wasm, myPubkey) {
   orientation-only persona encoding (orient is a UI hint, never a reputation vector, so
   empty log ⇒ empty `domain_reps` ⇒ reaches nothing), and crate-graph hygiene (`mp-identity`
   in workspace members; `mp-crdt` depends on neither `mp-reputation` nor `mp-identity`).
+- 2026-06-04 implemented (commit 8d9d622) and **QA sign-off → PASS** (all AC1–AC8 met; every
+  gate green; secret never on any wire/log, reputation never in the CRDT; live-relay via a
+  faked-socket proxy per the non-goals). **Status → Implemented.**
