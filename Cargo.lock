@@ -614,6 +614,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-host"
+version = "0.1.0"
+dependencies = [
+ "mp-crdt",
+ "mp-domain",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "mp-identity"
 version = "0.1.0"
 dependencies = [

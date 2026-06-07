@@ -6,6 +6,7 @@ members = [
     "crates/mp-identity",
     "crates/mp-crdt",
     "crates/mp-wasm",
+    "crates/mp-host",
 ]
 resolver = "2"
 
