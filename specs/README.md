@@ -52,3 +52,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Implemented |
 | [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Implemented |
 | [SPEC-0017](0017-native-graph-host.md) | Native graph host: mp-host CLI (seed/stats/merge) over the redb CrdtStore | R-0017 | Implemented |
+| [SPEC-0018](0018-webrtc-p2p-sync.md) | WebRTC P2P sync: a data-channel transport for the CRDT pump (webrtc.js + manual signaling) | R-0018 | Accepted |

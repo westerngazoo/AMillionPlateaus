@@ -21,6 +21,7 @@ import init, {
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
+import { createPeer } from "./webrtc.js";
 import { loadOrMintIdentity } from "./identity.js";
 import { makeLog } from "./events.js";
 import { createRelay, RELAY_KEY } from "./relay.js";
@@ -303,6 +304,32 @@ async function main() {
     draw();
     persist();
   });
+
+  // ── WebRTC peer-to-peer sync (SPEC-0018 / R-0018) ───────────────────────
+  // An OPTIONAL, additive second pipe for the SAME CRDT sync bytes — directly
+  // between devices, no server. `peer` is null until the wizard opts in; with no
+  // peer the app is unchanged (BroadcastChannel sync above still runs). Each peer
+  // drives its OWN WasmSyncSession; the pump mirrors sync.js, over peer.send.
+  let peer = null;
+  let peerSession = null;
+  function pumpPeer() {
+    if (!peer || !peer.isOpen()) return;
+    let msg;
+    while ((msg = doc.generate_message(peerSession)) !== undefined) peer.send(msg);
+  }
+  function startPeer() {
+    peerSession = new WasmSyncSession();
+    peer = createPeer({
+      onOpen: () => pumpPeer(), // catch the remote up with our state on connect
+      onMessage: (bytes) => {
+        doc.receive_message(peerSession, bytes);
+        pumpPeer(); // a received change may unblock more to send
+        draw();
+        persist(); // durable (R-0012); the doc carries plateaus/bridges/markers/votes
+      },
+    });
+    return peer;
+  }
 
   // ── Signed-event transport (SPEC-0010 §2.3, R-0010 AC2/AC4/AC7) ─────────
   // Verify-gate an event into the local log, recompute reputation, re-light, and —
@@ -821,6 +848,7 @@ async function main() {
     const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3);
     DOMAIN_OF.set(id, spec.domain); // register for traversal scoring
     sync.pump(); // broadcast the CRDT change to other tabs
+    pumpPeer(); // …and to a connected P2P peer (R-0018), if any
     persist(); // R-0012: snapshot to IndexedDB so the drafted plateau survives a reload
     draw();
     // Reset name field; sliders stay at their last positions.
@@ -882,6 +910,7 @@ async function main() {
     }
     errEl.hidden = true;
     sync.pump(); // broadcast to other tabs (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
     persist(); // durable snapshot (AC4, R-0012)
     draw(); // the labelled line appears same frame (AC2)
     document.getElementById("db-concept").value = "";
@@ -950,6 +979,7 @@ async function main() {
     }
     errEl.hidden = true;
     sync.pump(); // broadcast (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
     persist(); // durable snapshot (AC4, R-0012)
     draw(); // the marker appears near its plateau same frame (AC2)
     dmTitle.value = "";
@@ -1008,9 +1038,75 @@ async function main() {
     }
     errEl.hidden = true;
     sync.pump(); // broadcast the vote (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
     persist(); // durable snapshot (AC4, R-0012)
     draw(); // vote_count + crystallization re-derive in to_graph() (AC2/AC3)
     refreshVoteMarkers(); // reflect the new total in the open select
+  });
+
+  // ── Connect a peer (SPEC-0018 / R-0018) ─────────────────────────────────────
+  // Manual copy-paste WebRTC signaling. Every handler try/catches so a bad blob
+  // or a failed connection is an inline error, never an uncaught throw (AC4).
+  const p2pOffer = document.getElementById("p2p-offer");
+  const p2pAnswer = document.getElementById("p2p-answer");
+  const p2pStatus = document.getElementById("p2p-status");
+  const p2pError = document.getElementById("p2p-error");
+  const peerPanel = document.getElementById("connect-peer");
+
+  document.getElementById("connect-peer-toggle").addEventListener("click", () => {
+    peerPanel.hidden = !peerPanel.hidden;
+    if (!peerPanel.hidden) peerPanel.open = true;
+  });
+
+  function p2pFail(msg) {
+    p2pError.textContent = msg;
+    p2pError.hidden = false;
+  }
+  function p2pOk() {
+    p2pError.hidden = true;
+  }
+  // On connect, reflect status; the pump (onOpen) catches the peer up automatically.
+  function watchPeerOpen() {
+    const tick = setInterval(() => {
+      if (peer && peer.isOpen()) {
+        p2pStatus.textContent = "connected — graphs are syncing peer-to-peer";
+        clearInterval(tick);
+      }
+    }, 500);
+  }
+
+  document.getElementById("p2p-create").addEventListener("click", async () => {
+    try {
+      p2pOk();
+      startPeer();
+      p2pOffer.value = await peer.createOffer();
+      p2pStatus.textContent = "invite created — send it to your peer, then paste their answer";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not create invite: ${e}`);
+    }
+  });
+  document.getElementById("p2p-accept").addEventListener("click", async () => {
+    try {
+      p2pOk();
+      startPeer();
+      p2pAnswer.value = await peer.acceptOffer(p2pOffer.value.trim());
+      p2pStatus.textContent = "answer ready — send it back to the inviter";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not accept invite: ${e}`);
+    }
+  });
+  document.getElementById("p2p-complete").addEventListener("click", async () => {
+    try {
+      if (!peer) throw new Error("create an invite first");
+      p2pOk();
+      await peer.acceptAnswer(p2pAnswer.value.trim());
+      p2pStatus.textContent = "completing handshake…";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not complete: ${e}`);
+    }
   });
 
   // Forget my history: clear the local event log so reputation falls back to

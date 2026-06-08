@@ -194,10 +194,11 @@
       }
       .dp-row { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 10px; }
       .dp-row label { font-size: 12px; color: #b7c6d6; }
-      .dp-row input[type="text"], .dp-row select {
+      .dp-row input[type="text"], .dp-row select, .dp-row textarea {
         background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
         border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 100%;
       }
+      .dp-row textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; resize: vertical; }
       .dp-row input[type="range"] { width: 100%; }
       .dp-error { font-size: 12px; color: #ffb4a8; margin: 0; }
       .dp-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
@@ -212,6 +213,7 @@
       <button id="draft-bridge-toggle">Draft a bridge</button>
       <button id="drop-marker-toggle">Drop a marker</button>
       <button id="place-stone-toggle">Place a stone</button>
+      <button id="connect-peer-toggle">Connect a peer (P2P)</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <span id="hud">loading…</span>
@@ -332,6 +334,35 @@
           <button type="submit">Place stone</button>
         </div>
       </form>
+    </details>
+    <!-- Connect a peer (SPEC-0018 / R-0018). Direct device-to-device CRDT sync over
+         a WebRTC data channel, with MANUAL copy-paste signaling — no server. One
+         wizard creates an invite; the other accepts it and returns an answer; the
+         first completes. Only WebRTC SDP/ICE crosses out-of-band; graph bytes flow
+         peer-to-peer. Additive — same-origin tabs still sync without this. -->
+    <details id="connect-peer" class="draft-plateau" hidden>
+      <summary>Connect a peer (P2P)</summary>
+      <div class="draft-plateau-body">
+        <p class="author-hint">
+          <strong>Invite a peer:</strong> Create invite → send the blob → paste their answer → Complete.
+          <br /><strong>Join a peer:</strong> paste their invite → Accept → send the answer back.
+        </p>
+        <div class="dp-row">
+          <label for="p2p-offer">Invite</label>
+          <textarea id="p2p-offer" rows="2" placeholder="offer blob (create, or paste a received invite)"></textarea>
+        </div>
+        <div class="dp-row">
+          <label for="p2p-answer">Answer</label>
+          <textarea id="p2p-answer" rows="2" placeholder="answer blob (paste the peer's answer, or copy yours)"></textarea>
+        </div>
+        <p id="p2p-status" class="author-hint">not connected</p>
+        <p id="p2p-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="button" id="p2p-create">Create invite</button>
+          <button type="button" id="p2p-accept">Accept invite</button>
+          <button type="button" id="p2p-complete">Complete</button>
+        </div>
+      </div>
     </details>
     <div class="layout">
       <div class="stage">
