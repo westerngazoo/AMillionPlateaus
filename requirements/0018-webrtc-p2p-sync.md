@@ -136,3 +136,7 @@ replica converges, so cross-device convergence is low-risk on the data side.
   construction but were un-runnable due to an unrelated, owner-side garust working-tree
   break (half-applied Scalar refactor) — tracked separately, not an R-0018 regression.
   **Status → Met.**
+- 2026-06-04 garust working tree cleared (clean at HEAD `a5b4150`, compiles again); the
+  full Rust suite re-ran **GREEN** — `cargo test --workspace` (21 suites), `wasm-pack test
+  --node` (8), clippy host + wasm32, `cargo fmt`. R-0018 AC8 now fully demonstrable; the
+  prior caveat is resolved.
