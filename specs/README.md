@@ -51,4 +51,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0014](0014-trail-markers.md) | Trail Markers: Resource::new + add_resource binding + ResourceDto/render + buildResource factory/form | R-0014 | Implemented |
 | [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Implemented |
 | [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Implemented |
-| [SPEC-0017](0017-native-graph-host.md) | Native graph host: mp-host CLI (seed/stats/merge) over the redb CrdtStore | R-0017 | Accepted |
+| [SPEC-0017](0017-native-graph-host.md) | Native graph host: mp-host CLI (seed/stats/merge) over the redb CrdtStore | R-0017 | Implemented |

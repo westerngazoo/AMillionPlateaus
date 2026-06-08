@@ -1,6 +1,6 @@
 # SPEC-0017 — Native graph host: a CLI over the redb CrdtStore
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0017
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -240,20 +240,20 @@ workspace-member line. No existing crate changes.
 
 Maps 1-to-1 to R-0017 AC:
 
-- [ ] AC1 — `mp-host` binary with `seed`/`stats`/`merge`; bad args → usage + exit
+- [x] AC1 — `mp-host` binary with `seed`/`stats`/`merge`; bad args → usage + exit
       2; errors → message + exit 1, no panic.
-- [ ] AC2 — `seed <db>` persists the canonical world; re-seed converges (fixed
+- [x] AC2 — `seed <db>` persists the canonical world; re-seed converges (fixed
       ids, no duplication).
-- [ ] AC3 — `stats <db>` reports plateaus/bridges/resources/voted/crystallized,
+- [x] AC3 — `stats <db>` reports plateaus/bridges/resources/voted/crystallized,
       all derived via `to_graph`.
-- [ ] AC4 — `merge <db> <snapshot>` ingests a `WasmCrdtDoc.save()` blob; store =
+- [x] AC4 — `merge <db> <snapshot>` ingests a `WasmCrdtDoc.save()` blob; store =
       union; re-merge is a no-op (idempotent).
-- [ ] AC5 — durable round-trip: a fresh process `stats` reads back what was
+- [x] AC5 — durable round-trip: a fresh process `stats` reads back what was
       persisted; corrupt store → error, not panic.
-- [ ] AC6 — persists only the CRDT doc (four maps); no reputation; counts derived.
-- [ ] AC7 — pure sync Rust, lean deps; `cargo` integration tests (seed→stats,
+- [x] AC6 — persists only the CRDT doc (four maps); no reputation; counts derived.
+- [x] AC7 — pure sync Rust, lean deps; `cargo` integration tests (seed→stats,
       merge adds, durable reload across processes, idempotent re-seed/re-merge).
-- [ ] AC8 — `cargo test --workspace` + clippy `-D warnings` + fmt green; binary
+- [x] AC8 — `cargo test --workspace` + clippy `-D warnings` + fmt green; binary
       runs all three commands with correct output + exit codes.
 
 ## 7. Decision log
@@ -279,3 +279,11 @@ Maps 1-to-1 to R-0017 AC:
   `Box<dyn Error>` (dropped `to_crdt_err`), non-`mut` seed closures, `0x0d00`,
   `.expect` justified as a construction invariant. Seed is a *reduced variant* of
   the example (not byte-identical) — "mirrors" corrected. **Status → Accepted.**
+- 2026-06-04 implemented (commit 84133d7) and **QA sign-off → PASS** (all AC1–AC8
+  met; 6 mp-host integration tests + 21 workspace suites, clippy host+wasm32, fmt
+  green; binary verified end-to-end incl. seed/stats/re-seed/merge/re-merge/reload
+  /bad-args/corrupt-blob). Byte-compatibility, idempotency, and Grade-1-invariant
+  preservation verified against real code; `cargo tree` confirms no
+  reputation/identity dep. QA re-flagged the stale `CrdtStore::create` doc comment
+  (pre-existing mp-crdt nit) — fixed as a separate docs commit. **Status →
+  Implemented.**

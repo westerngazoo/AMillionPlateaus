@@ -1,6 +1,6 @@
 # R-0017 — Native graph host: the durable redb backing, wired
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** Infra — durable native host
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -130,3 +130,5 @@ and a native replica is proven offline, on the save-blob, before any wire exists
 - 2026-06-04 created (Draft) — pending SPEC-0017 + architect design review, then acceptance.
 - 2026-06-04 SPEC-0017 drafted + architect-reviewed (APPROVE-WITH-NITS; redb create-if-missing
   + storage-feature wiring + tidy-ups folded). **Status → Accepted.**
+- 2026-06-04 implemented (commit 84133d7) and **QA sign-off → PASS** (all AC1–AC8 met; every
+  gate green; binary verified end-to-end). **Status → Met.**
