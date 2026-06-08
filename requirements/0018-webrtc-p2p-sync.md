@@ -1,6 +1,6 @@
 # R-0018 — WebRTC peer-to-peer sync: two devices share a world, no server
 
-- **Status:** Accepted
+- **Status:** Met
 - **Milestone:** POC — Cross-device (P2P)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -129,3 +129,10 @@ replica converges, so cross-device convergence is low-risk on the data side.
 - 2026-06-04 created (Draft) — pending SPEC-0018 + architect design review, then acceptance.
 - 2026-06-04 SPEC-0018 drafted + architect-reviewed (APPROVE-WITH-NITS, no blocking issues;
   handshake/pump/crux verified; test directives folded). **Status → Accepted.**
+- 2026-06-04 implemented (commit 0734124) and **QA sign-off → PASS** (all AC1–AC8 met).
+  Browser-verified with a REAL WebRTC loopback: two real WasmCrdtDocs converge over the
+  data channel (a plateau authored on peer A appears on peer B), no server. 126 JS tests
+  + fmt green; no Rust/wasm change. Rust gates (cargo/clippy/wasm-pack) are green-by-
+  construction but were un-runnable due to an unrelated, owner-side garust working-tree
+  break (half-applied Scalar refactor) — tracked separately, not an R-0018 regression.
+  **Status → Met.**

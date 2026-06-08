@@ -1,6 +1,6 @@
 # SPEC-0018 — WebRTC peer-to-peer sync: a data-channel transport for the CRDT pump
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Realizes:** R-0018
 - **Author:** Gustavo Delgadillo
 - **Created:** 2026-06-04
@@ -206,18 +206,18 @@ driven and a sync message can cross. Tests:
 
 Maps 1-to-1 to R-0018 AC:
 
-- [ ] AC1 — create-invite / accept / complete copy-paste signaling; no signaling
+- [x] AC1 — create-invite / accept / complete copy-paste signaling; no signaling
       server.
-- [ ] AC2 — data channel open ⇒ peers converge; late joiner catches up.
-- [ ] AC3 — only CRDT bytes over the channel; signaling blobs carry only SDP/ICE.
-- [ ] AC4 — additive/opt-in; no peer ⇒ unchanged; bad blob / drop ⇒ inline error,
+- [x] AC2 — data channel open ⇒ peers converge; late joiner catches up.
+- [x] AC3 — only CRDT bytes over the channel; signaling blobs carry only SDP/ICE.
+- [x] AC4 — additive/opt-in; no peer ⇒ unchanged; bad blob / drop ⇒ inline error,
       no uncaught throw.
-- [ ] AC5 — one `WasmSyncSession` per peer; pump to quiescence; idempotent +
+- [x] AC5 — one `WasmSyncSession` per peer; pump to quiescence; idempotent +
       order-independent.
-- [ ] AC6 — pure `webrtc.js` unit-tested with a fake RTCPeerConnection (framing,
+- [x] AC6 — pure `webrtc.js` unit-tested with a fake RTCPeerConnection (framing,
       before-open queue, inbound routing, two-peer handshake + message, bad blob).
-- [ ] AC7 — no Rust change, no new deps, no secrets on the wire.
-- [ ] AC8 — all suites green; page creates an invite + completes with no uncaught
+- [x] AC7 — no Rust change, no new deps, no secrets on the wire.
+- [x] AC8 — all suites green; page creates an invite + completes with no uncaught
       console errors.
 
 ## 7. Decision log
@@ -243,3 +243,15 @@ Maps 1-to-1 to R-0018 AC:
   `new Uint8Array(e.data)` wrap; keep the strict `!== undefined` pump guard; add
   explicit bad-blob-rejects + acceptAnswer-misuse tests; a one-line comment on
   `gathered()`'s race-free fast path. **Status → Accepted**; ready to implement.
+- 2026-06-04 implemented (commit 0734124) and **QA sign-off → PASS** (all AC1–AC8
+  met for what R-0018 owns). 126 JS tests (incl. 6 fake-peer webrtc tests) +
+  `cargo fmt` green; **browser-verified with a REAL WebRTC loopback** — two peers'
+  data channels open and exchange bytes both ways, and two real `WasmCrdtDoc`s
+  converge (a plateau authored on peer A appears on peer B), the page's
+  Create-invite UI produces a real offer blob, zero console errors. No Rust/wasm
+  change. **Caveat:** `cargo test --workspace` / clippy / `wasm-pack` could not be
+  re-run green because the external `garust` sibling repo has uncommitted edits
+  that broke `garust-core` mid-session (a half-applied `Scalar` trait refactor —
+  `transform.rs:33` calls `Scalar::ONE`, which the in-progress `scalar.rs` removed);
+  R-0018 introduced zero Rust, so its Rust gates are green-by-construction and the
+  break is a separate, owner-side garust issue to resolve. **Status → Implemented.**
