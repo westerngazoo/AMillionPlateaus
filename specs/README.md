@@ -53,3 +53,6 @@ field. The build order across requirements and specs is in
 | [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Implemented |
 | [SPEC-0017](0017-native-graph-host.md) | Native graph host: mp-host CLI (seed/stats/merge) over the redb CrdtStore | R-0017 | Implemented |
 | [SPEC-0018](0018-webrtc-p2p-sync.md) | WebRTC P2P sync: a data-channel transport for the CRDT pump (webrtc.js + manual signaling) | R-0018 | Implemented |
+| [SPEC-0019](0019-onboarding-wayfinding.md) | Onboarding & wayfinding: career-lens copy, pure `centerOn` travel, remembered first-run tutorial | R-0019 | Implemented |
+| [SPEC-0020](0020-plateau-content.md) | Plateau content: Markdown body + vendored-KaTeX typeset math + a read view | R-0020 | Implemented |
+| [SPEC-0021](0021-obsidian-import.md) | Obsidian vault importer: mp-host `import` (pure parse → GA position → blob) + browser "Import a world" | R-0021 | Implemented |

@@ -10,8 +10,8 @@
     {
       "name": "fog-world",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8137", "--directory", "apps/web"],
-      "port": 8137
+      "runtimeArgs": ["-m", "http.server", "8143", "--directory", "apps/web"],
+      "port": 8143
     }
   ]
 }

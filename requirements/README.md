@@ -51,3 +51,6 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0016](0016-presence.md) | Presence: see other wizards as silhouettes in the fog | POC — Multiplayer presence | Met |
 | [R-0017](0017-native-graph-host.md) | Native graph host: the durable redb backing, wired (mp-host CLI) | Infra | Met |
 | [R-0018](0018-webrtc-p2p-sync.md) | WebRTC peer-to-peer sync: two devices share a world, no server | POC — Cross-device (P2P) | Met |
+| [R-0019](0019-onboarding-wayfinding.md) | Onboarding & wayfinding: career lens, travel-to-topic, first-run tutorial | POC — UX clarity | Met |
+| [R-0020](0020-plateau-content.md) | Plateau content: a Markdown body with typeset math, and a read view | POC — Knowledge content | Met |
+| [R-0021](0021-obsidian-import.md) | Obsidian vault importer: turn real notes into a world | POC — Knowledge content | Met |
