@@ -19,6 +19,9 @@ use mp_crdt::{CrdtDoc, CrdtError, CrdtStore};
 use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, ResourceState};
 use uuid::Uuid;
 
+pub mod import;
+use import::RawNote;
+
 // `CrdtStore::create` is redb's create-if-missing: it opens an existing valid
 // store without error and initialises a new one only when absent/empty — so it
 // IS an open-or-create, and the write paths call it directly (no `.exists()`
@@ -140,5 +143,104 @@ pub fn merge(path: &Path, snapshot: &[u8]) -> Result<(), CrdtError> {
     let mut incoming = CrdtDoc::load(snapshot)?;
     doc.merge(&mut incoming)?;
     store.persist(&mut doc)?;
+    Ok(())
+}
+
+/// Counts from an `import` run (SPEC-0021).
+pub struct ImportStats {
+    pub notes: usize,
+    pub bridges: usize,
+    pub resources: usize,
+}
+
+/// Errors from `import`: filesystem I/O or CRDT assembly. Library error style
+/// (CLAUDE.md) — never panics across the call.
+#[derive(thiserror::Error, Debug)]
+pub enum ImportError {
+    #[error("vault read error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("crdt error: {0}")]
+    Crdt(#[from] CrdtError),
+}
+
+/// `import <vault-dir> <out.bin>` — walk `*.md` under `vault-dir`, map the vault
+/// to a knowledge graph (notes→plateaus with bodies, `[[links]]`→bridges,
+/// pdf/external links→resources; deterministic GA positions + UUIDv5 ids), and
+/// write a `CrdtDoc::save()` blob to `out`. The blob is browser-loadable ("Import
+/// a world") and composes with `merge` for the durable redb store. Pure mapping
+/// lives in `import.rs`; the only I/O is the directory walk + the blob write.
+pub fn import(vault_dir: &Path, out: &Path) -> Result<ImportStats, ImportError> {
+    let mut notes = Vec::new();
+    read_notes(vault_dir, vault_dir, &mut notes)?;
+
+    let g = import::build_graph(&notes);
+
+    let mut doc = CrdtDoc::new()?;
+    // Sort each set by id before adding, so the emitted blob is byte-reproducible
+    // across runs (the graph's `resources` is a HashMap with random iteration
+    // order). Convergence is already id-keyed; sorting just makes the bytes stable.
+    let mut plateaus: Vec<&PlateauNode> = g.plateaus().collect();
+    plateaus.sort_by_key(|p| p.id);
+    for p in &plateaus {
+        doc.add_plateau(p)?;
+    }
+    let mut bridges: Vec<&Bridge> = g.bridges().collect();
+    bridges.sort_by_key(|b| b.id);
+    for b in &bridges {
+        doc.add_bridge(b)?;
+    }
+    let mut resources: Vec<_> = g.resources.values().collect();
+    resources.sort_by_key(|r| r.id);
+    for r in &resources {
+        doc.add_resource(r)?;
+    }
+    std::fs::write(out, doc.save())?;
+
+    Ok(ImportStats {
+        notes: plateaus.len(),
+        bridges: bridges.len(),
+        resources: resources.len(),
+    })
+}
+
+/// Recursively collect `*.md` notes under `root`, skipping dot-directories
+/// (`.obsidian`, `.trash`, `.git`). `rel` keeps each note's path RELATIVE to the
+/// vault root — the stable key for its plateau id (SPEC-0021 §2.4). The only
+/// filesystem reads in the importer; a read error surfaces, never silently drops.
+fn read_notes(root: &Path, dir: &Path, out: &mut Vec<RawNote>) -> Result<(), std::io::Error> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|e| e.path()); // deterministic walk order
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            if name.starts_with('.') {
+                continue; // skip .obsidian / .trash / .git
+            }
+            read_notes(root, &path, out)?;
+        } else if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            == Some("md".to_string())
+        {
+            let rel_path = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let body = std::fs::read_to_string(&path)?;
+            out.push(RawNote {
+                rel_path,
+                stem,
+                body,
+            });
+        }
+    }
     Ok(())
 }

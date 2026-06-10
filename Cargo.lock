@@ -620,6 +620,7 @@ dependencies = [
  "mp-crdt",
  "mp-domain",
  "tempfile",
+ "thiserror",
  "uuid",
 ]
 
