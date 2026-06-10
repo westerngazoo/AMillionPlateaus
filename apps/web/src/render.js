@@ -19,7 +19,7 @@ const RADIUS = 16;
 /// presence list (`{ pubkey, plateau }`, R-0016); `reachable` is a Set of lit
 /// plateau ids. Returns the per-plateau screen points for hit-testing — peers are
 /// NOT added to it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [] }) {
+export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [], focusedId = null }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -67,6 +67,23 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
     ctx.textAlign = "center";
     ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
     ctx.globalAlpha = 1;
+  }
+
+  // Travel focus ring (R-0019): a transient dashed halo around the topic the
+  // visitor just travelled to, so the eye finds it. Camera highlight only — it
+  // reads `focusedId` and nothing else; it does not affect reach/fog/hit-testing.
+  if (focusedId) {
+    const pt = points.get(focusedId);
+    if (pt) {
+      ctx.save();
+      ctx.strokeStyle = "#9fd0ff";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, RADIUS + 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // Markers (trail markers / resources), anchored to their plateau (R-0014).
