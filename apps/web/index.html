@@ -176,6 +176,68 @@
       }
       .setup-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
+      /* First-run tutorial overlay (SPEC-0019 / R-0019). A fixed full-screen modal
+         like #setup, but at a HIGHER z-index (30) so it sits above the lens picker
+         (#creator z10) and the model-setup modal (#setup z20) and intercepts input;
+         dismissing it reveals the picker beneath. */
+      #tutorial {
+        position: fixed; inset: 0; z-index: 30;
+        display: flex; align-items: center; justify-content: center; padding: 24px;
+        background: rgba(8, 11, 16, 0.86); backdrop-filter: blur(2px);
+      }
+      #tutorial[hidden] { display: none; }
+      .tutorial-card {
+        width: 460px; max-width: 100%; background: #161f2a; border: 1px solid #34495f;
+        border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 14px;
+      }
+      .tutorial-card h2 { margin: 0; font-size: 19px; }
+      .tutorial-body { margin: 0; font-size: 14px; line-height: 1.5; color: #c4d3e2; min-height: 60px; }
+      .tutorial-dots { display: flex; gap: 7px; justify-content: center; }
+      .tutorial-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #34495f; }
+      .tutorial-dots .dot.on { background: #ffd166; }
+      .tutorial-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+      .tutorial-actions button[hidden] { display: none; }
+      #tutorial-gotit { background: #2c4a6e; }
+
+      /* Plateau read view (SPEC-0020 / R-0020). A right-anchored, scrollable panel
+         showing a topic's Markdown body + anchored resources. z-index 25: above
+         #creator(10)/#setup(20), below #tutorial(30). */
+      #plateau-detail {
+        position: fixed; top: 0; right: 0; bottom: 0; z-index: 25;
+        width: 460px; max-width: 92vw; overflow-y: auto;
+        background: #131b25; border-left: 1px solid #2a3543;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+        padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
+      }
+      #plateau-detail[hidden] { display: none; }
+      .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      .detail-head h2 { margin: 0; font-size: 19px; color: #ffd166; }
+      #detail-close {
+        background: transparent; border: none; color: #9fb2c4;
+        font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px;
+      }
+      #detail-close:hover { color: #e6eef6; }
+      .detail-body { font-size: 14px; line-height: 1.55; color: #cdd9e6; }
+      .detail-body h1, .detail-body h2, .detail-body h3,
+      .detail-body h4, .detail-body h5, .detail-body h6 { color: #e6eef6; margin: 14px 0 6px; line-height: 1.25; }
+      .detail-body h1 { font-size: 19px; } .detail-body h2 { font-size: 17px; } .detail-body h3 { font-size: 15px; }
+      .detail-body p { margin: 8px 0; }
+      .detail-body ul, .detail-body ol { margin: 8px 0; padding-left: 22px; }
+      .detail-body code { background: #0f151d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+      .detail-body pre { background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px; overflow-x: auto; }
+      .detail-body pre code { background: none; padding: 0; }
+      .detail-body a { color: #9fd0ff; }
+      .detail-body .mp-math[data-display="1"] { display: block; margin: 10px 0; text-align: center; }
+      .detail-res-title { margin: 6px 0 0; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #8aa0b4; }
+      .detail-resources ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .detail-resources li { font-size: 13px; }
+      .detail-resources .res-kind {
+        display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: #1b2330; background: #7fd0a0; border-radius: 4px; padding: 1px 6px; margin-right: 4px;
+      }
+      .detail-resources a { color: #9fd0ff; }
+      .detail-empty { font-size: 12px; color: #8aa0b4; margin: 0; }
+
       /* Draft Plateau form (SPEC-0011 / R-0011): collapsible authoring panel. */
       .draft-plateau {
         background: #141c26; border: 1px solid #2a3543; border-radius: 8px;
@@ -207,16 +269,23 @@
   <body>
     <h1>A Million Plateaus — fog world</h1>
     <div class="bar">
-      <button id="change-persona">Change persona</button>
+      <button id="change-persona">Change lens</button>
+      <button id="travel-toggle">Travel</button>
       <button id="model-setup">Model setup</button>
       <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="draft-bridge-toggle">Draft a bridge</button>
       <button id="drop-marker-toggle">Drop a marker</button>
       <button id="place-stone-toggle">Place a stone</button>
       <button id="connect-peer-toggle">Connect a peer (P2P)</button>
+      <button id="import-world">Import a world</button>
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
+      <button id="tour">Tour</button>
       <span id="hud">loading…</span>
+      <span id="import-status" class="idhud" hidden></span>
+      <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
+           (or any WasmCrdtDoc.save() blob) and MERGE it into the current world. -->
+      <input id="import-file" type="file" accept=".bin,application/octet-stream" hidden />
     </div>
     <!-- Wizard identity + optional relay (SPEC-0010 / R-0010). The key's PUBLIC
          half is shown; the secret stays in localStorage and is never displayed,
@@ -252,6 +321,10 @@
         <div class="dp-row">
           <label for="dp-e3">Creative</label>
           <input id="dp-e3" type="range" min="-1" max="1" step="0.05" value="0" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-body">Body</label>
+          <textarea id="dp-body" rows="3" placeholder="Notes & math — Markdown, e.g. $E=mc^2$ (optional)"></textarea>
         </div>
         <p id="dp-error" class="dp-error" hidden></p>
         <div class="dp-actions">
@@ -364,6 +437,24 @@
         </div>
       </div>
     </details>
+    <!-- Travel (SPEC-0019 / R-0019). Focus the camera on a topic: pick a topic
+         and the map re-centres on it with a brief highlight ring. The select is
+         rebuilt from the current graph on open. Camera-only wayfinding — it
+         changes NOTHING about reach/fog, the graph, or anything synced/persisted,
+         so it works for lit OR fogged topics alike. -->
+    <details id="travel" class="draft-plateau" hidden>
+      <summary>Travel to a topic</summary>
+      <form id="travel-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="travel-topic">Topic</label>
+          <select id="travel-topic"><!-- populated by main.js --></select>
+        </div>
+        <p class="author-hint">Centres the map on the topic and highlights it. Camera focus only — it doesn't change what's in reach.</p>
+        <div class="dp-actions">
+          <button type="submit">Travel</button>
+        </div>
+      </form>
+    </details>
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>
@@ -421,10 +512,41 @@
         </div>
       </div>
     </div>
+    <!-- First-run tutorial overlay (SPEC-0019 / R-0019). A stepped welcome that
+         appears on first entry, remembered LOCALLY (localStorage, never synced /
+         never in the CRDT). Mirrors #setup as a fixed full-screen modal at a
+         HIGHER z-index (30) so it covers the lens picker (#creator z10) and the
+         setup modal (#setup z20); "Got it" dismisses + remembers, revealing the
+         picker beneath. The "Tour" toolbar button replays it. -->
+    <div id="tutorial" hidden>
+      <div class="tutorial-card">
+        <h2 id="tutorial-title">Welcome</h2>
+        <p id="tutorial-body" class="tutorial-body"></p>
+        <div id="tutorial-dots" class="tutorial-dots"><!-- step dots, built by main.js --></div>
+        <div class="tutorial-actions">
+          <button id="tutorial-back" type="button">Back</button>
+          <button id="tutorial-next" type="button">Next</button>
+          <button id="tutorial-gotit" type="button">Got it</button>
+        </div>
+      </div>
+    </div>
+    <!-- Plateau read view (SPEC-0020 / R-0020). Opened by clicking a lit plateau.
+         Shows the plateau's Markdown body (typeset math via lazy vendored KaTeX)
+         and the resources anchored to it. Purely presentational; the body is
+         rendered through markdown.js's injection-safe renderer before innerHTML. -->
+    <aside id="plateau-detail" hidden>
+      <div class="detail-head">
+        <h2 id="detail-name">Topic</h2>
+        <button id="detail-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div id="detail-body" class="detail-body"><!-- rendered Markdown --></div>
+      <h3 class="detail-res-title">Resources</h3>
+      <div id="detail-resources" class="detail-resources"><!-- anchored resources --></div>
+    </aside>
     <p class="note">
       You hold a <strong>wizard key</strong> (Nostr/BIP340) minted in this browser:
       its public half is your stable id; the secret stays local and is never
-      displayed, synced or logged. Your <strong>persona</strong> only orients you —
+      displayed, synced or logged. Your <strong>career lens</strong> only orients you —
       it lights each faced domain's <strong>trailhead</strong>, no free rank. Click a
       <strong>lit</strong> plateau to <strong>sign a traversal</strong>; reach is then
       <strong>recomputed from your verified signed history</strong> by the GA core —

@@ -39,10 +39,14 @@ import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
+import { renderMarkdown, safeHref } from "./markdown.js";
+import { typesetMath } from "./katex.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
+import { centerOn } from "./wayfinding.js";
+import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -158,7 +162,9 @@ const DOMAIN_OF = new Map(SEED_PLATEAUS.map((p) => [p.id, p.domain]));
 const TRAILHEAD_OF = { [MATH_DOMAIN]: P.Arithmetic, [MUSIC_DOMAIN]: P.Rhythm };
 
 // Math on the upper-right (high e1), Music on the lower-left (high e3).
-const VIEW = { cx: 230, cy: 150, scale: 320 };
+// `let`, not `const`: Travel (R-0019) re-origins the camera by overwriting
+// VIEW.cx/cy via wayfinding.centerOn — the only state travel ever touches.
+let VIEW = { cx: 230, cy: 150, scale: 320 };
 
 async function main() {
   await init();
@@ -243,6 +249,7 @@ async function main() {
   const companionForm = document.getElementById("companion-form");
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
+  let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
 
   // Show the PUBLIC half of the key (safe to display). The secret is never shown.
   identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
@@ -276,6 +283,7 @@ async function main() {
       view: VIEW,
       resources,
       peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+      focusedId, // transient travel highlight (R-0019); null most of the time
     });
     const who = activePersona ? `${activePersona.name} · ` : "";
     hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges · ${resources.length} markers`;
@@ -635,7 +643,7 @@ async function main() {
     const nameIn = document.createElement("input");
     nameIn.type = "text";
     nameIn.id = "author-name";
-    nameIn.placeholder = "Your persona";
+    nameIn.placeholder = "Your career lens"; // user-facing copy (R-0019 AC1); the authorPersona DEFAULT name stays "Your persona"
     nameIn.value = authoredSeed?.name ?? "";
     nameField.append(nameIn);
 
@@ -734,11 +742,11 @@ async function main() {
   function buildCreator() {
     creator.innerHTML = "";
     const title = document.createElement("h2");
-    title.textContent = "Choose your persona";
+    title.textContent = "Choose your career lens";
     const sub = document.createElement("p");
     sub.className = "creator-sub";
     sub.textContent =
-      "Your persona is a lens: it orients you in the knowledge geometry and lights a different starting map.";
+      "Your career lens orients you in the knowledge world and lights where you start. Change it anytime.";
     creator.append(title, sub);
 
     const cards = document.createElement("div");
@@ -751,11 +759,11 @@ async function main() {
 
     const create = document.createElement("button");
     create.type = "button";
-    create.textContent = "Create your own";
+    create.textContent = "Build your own";
     create.addEventListener("click", () => {
       creator.innerHTML = "";
       const t = document.createElement("h2");
-      t.textContent = "Author your persona";
+      t.textContent = "Author your career lens";
       const s = document.createElement("p");
       s.className = "creator-sub";
       s.textContent = "Name your lens and aim it: enable a domain and set its direction.";
@@ -805,7 +813,64 @@ async function main() {
       // edit — feeds reputation, so reach stays off the CRDT (AC6).
       const domain = DOMAIN_OF.get(hit.id) ?? activePersona.orient[0]?.domain;
       if (domain) signTraversal(domain, hit);
+      // Visiting a topic is reading it: open the read view (R-0020). Purely
+      // presentational — it does not edit the graph or change reachability.
+      openPlateau(hit);
     }
+  });
+
+  // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
+  // Render a plateau's Markdown body (typeset math via lazy vendored KaTeX) plus
+  // the resources anchored to it. Pure view over the DTO — no mutation. The body
+  // is rendered through markdown.js's injection-safe renderer before innerHTML.
+  const detail = document.getElementById("plateau-detail");
+  const detailName = document.getElementById("detail-name");
+  const detailBody = document.getElementById("detail-body");
+  const detailResources = document.getElementById("detail-resources");
+  function openPlateau(p) {
+    detailName.textContent = p.name; // textContent — never trust the name as HTML
+    detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
+    typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
+    const rs = doc
+      .to_graph()
+      .resources()
+      .filter((r) => r.plateau_id === p.id);
+    renderResourceList(detailResources, rs);
+    detail.hidden = false;
+  }
+  function renderResourceList(container, resources) {
+    container.replaceChildren();
+    if (resources.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "detail-empty";
+      empty.textContent = "No resources anchored here yet.";
+      container.append(empty);
+      return;
+    }
+    const ul = document.createElement("ul");
+    for (const r of resources) {
+      const li = document.createElement("li");
+      const kind = document.createElement("span");
+      kind.className = "res-kind";
+      kind.textContent = r.kind; // DTO enum string; textContent keeps it inert
+      li.append(kind, document.createTextNode(" "));
+      const href = safeHref(r.uri); // same chokepoint as body links — http(s)/mailto only
+      if (href) {
+        const a = document.createElement("a");
+        a.href = href;
+        a.rel = "noopener noreferrer";
+        a.target = "_blank";
+        a.textContent = r.title;
+        li.append(a);
+      } else {
+        li.append(document.createTextNode(r.title)); // unsafe/again-inert uri → plain title
+      }
+      ul.append(li);
+    }
+    container.append(ul);
+  }
+  document.getElementById("detail-close").addEventListener("click", () => {
+    detail.hidden = true;
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────
@@ -836,6 +901,7 @@ async function main() {
       e1: parseFloat(document.getElementById("dp-e1").value),
       e2: parseFloat(document.getElementById("dp-e2").value),
       e3: parseFloat(document.getElementById("dp-e3").value),
+      description: document.getElementById("dp-body").value, // Markdown body (R-0020), optional
     });
     const errEl = document.getElementById("dp-error");
     if (spec.error) {
@@ -844,15 +910,17 @@ async function main() {
       return;
     }
     errEl.hidden = true;
-    // Add to the CRDT doc and broadcast (AC2/AC3/AC4).
-    const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3);
+    // Add to the CRDT doc and broadcast (AC2/AC3/AC4). The body rides the
+    // plateau's `description` field already serialized into the CRDT (R-0020).
+    const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3, spec.description);
     DOMAIN_OF.set(id, spec.domain); // register for traversal scoring
     sync.pump(); // broadcast the CRDT change to other tabs
     pumpPeer(); // …and to a connected P2P peer (R-0018), if any
     persist(); // R-0012: snapshot to IndexedDB so the drafted plateau survives a reload
     draw();
-    // Reset name field; sliders stay at their last positions.
+    // Reset name + body fields; sliders stay at their last positions.
     document.getElementById("dp-name").value = "";
+    document.getElementById("dp-body").value = "";
   });
 
   // ── Draft Bridge form (SPEC-0013 / R-0013) ──────────────────────────────────
@@ -1119,6 +1187,39 @@ async function main() {
     draw();
   });
 
+  // ── Import a world (SPEC-0021 / R-0021) ─────────────────────────────────────
+  // Load an `mp-host import` save-blob (or any WasmCrdtDoc.save() blob) and MERGE
+  // it into the current world (CRDT union — adds, never replaces). On success,
+  // rebuild DOMAIN_OF so imported plateaus score on traversal, then broadcast +
+  // persist + redraw. A malformed blob is an inline error, never an uncaught throw.
+  const importStatus = document.getElementById("import-status");
+  const importFile = document.getElementById("import-file");
+  function importNote(msg, ok) {
+    importStatus.textContent = msg;
+    importStatus.style.color = ok ? "#9fd0b4" : "#ffb4a8";
+    importStatus.hidden = false;
+  }
+  document.getElementById("import-world").addEventListener("click", () => importFile.click());
+  importFile.addEventListener("change", async () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      doc.merge_bytes(bytes); // CRDT union; throws on a corrupt/non-Automerge blob
+      // Imported plateaus carry their own domain — register it for traversal scoring.
+      for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+      sync.pump(); // share the imported world with other tabs…
+      pumpPeer(); // …and a connected P2P peer (R-0018)
+      persist(); // durable snapshot (R-0012)
+      draw();
+      importNote(`imported "${file.name}" — explore the new islands`, true);
+    } catch (e) {
+      importNote(`could not import: ${e}`, false);
+    } finally {
+      importFile.value = ""; // allow re-importing the same file
+    }
+  });
+
   // ── Relay connect (SPEC-0010 §2.3, R-0010 AC7) ──────────────────────────
   const relayInput = document.getElementById("relay-url");
   relayInput.value = loadRelayUrl();
@@ -1138,10 +1239,115 @@ async function main() {
     if (document.visibilityState === "hidden") snapshots.flush();
   });
 
+  // ── Travel: focus the camera on a topic (SPEC-0019 / R-0019) ────────────────
+  // Pure wayfinding. Re-origins VIEW via centerOn and flashes a transient focus
+  // ring. Touches NOTHING reachable/synced/persisted — no reach, no CRDT, no
+  // event log — so it works for LIT or FOGGED topics alike (travel is camera
+  // focus, not reachability). The only state it mutates is the camera origin.
+  const travelSel = document.getElementById("travel-topic");
+  const travelPanel = document.getElementById("travel");
+  function refreshTravelTopics() {
+    // Rebuilt on open from the CURRENT graph, so topics authored/synced this
+    // session are travel-able (by name, like the bridge form).
+    travelSel.replaceChildren(
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
+    );
+  }
+  document.getElementById("travel-toggle").addEventListener("click", () => {
+    travelPanel.hidden = !travelPanel.hidden;
+    if (!travelPanel.hidden) {
+      travelPanel.open = true;
+      refreshTravelTopics();
+    }
+  });
+  let focusTimer = null;
+  document.getElementById("travel-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const p = doc
+      .to_graph()
+      .plateaus()
+      .find((x) => x.id === travelSel.value);
+    if (!p) return;
+    // Re-centre the camera so the chosen topic sits at the canvas centre.
+    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    VIEW.cx = cx;
+    VIEW.cy = cy;
+    focusedId = p.id; // transient highlight ring (render.js); cleared below
+    draw();
+    if (focusTimer) clearTimeout(focusTimer);
+    focusTimer = setTimeout(() => {
+      focusedId = null;
+      draw();
+    }, 1800);
+  });
+
+  // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
+  // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
+  // synced, never in the CRDT). First entry shows it; "Got it" marks it seen so
+  // returning visitors skip straight in; the toolbar "Tour" button replays it
+  // unconditionally. Content + the seen-gate are the pure tutorial.js module.
+  const tutorialEl = document.getElementById("tutorial");
+  const tutTitle = document.getElementById("tutorial-title");
+  const tutBody = document.getElementById("tutorial-body");
+  const tutDots = document.getElementById("tutorial-dots");
+  const tutBack = document.getElementById("tutorial-back");
+  const tutNext = document.getElementById("tutorial-next");
+  let tutStep = 0;
+  function renderTutorial() {
+    const step = TUTORIAL_STEPS[tutStep];
+    tutTitle.textContent = step.title;
+    tutBody.textContent = step.body;
+    tutBack.disabled = tutStep === 0;
+    tutNext.hidden = tutStep === TUTORIAL_STEPS.length - 1; // last step → only "Got it"
+    tutDots.replaceChildren(
+      ...TUTORIAL_STEPS.map((_, i) => {
+        const dot = document.createElement("span");
+        dot.className = i === tutStep ? "dot on" : "dot";
+        return dot;
+      }),
+    );
+  }
+  function showTutorial(i = 0) {
+    tutStep = i;
+    renderTutorial();
+    tutorialEl.hidden = false;
+  }
+  function dismissTutorial() {
+    tutorialEl.hidden = true;
+    markTutorialSeen(localStorage); // remember — returning visitors skip it (AC4)
+  }
+  tutBack.addEventListener("click", () => {
+    if (tutStep > 0) {
+      tutStep -= 1;
+      renderTutorial();
+    }
+  });
+  tutNext.addEventListener("click", () => {
+    if (tutStep < TUTORIAL_STEPS.length - 1) {
+      tutStep += 1;
+      renderTutorial();
+    }
+  });
+  document.getElementById("tutorial-gotit").addEventListener("click", dismissTutorial);
+  document.getElementById("tour").addEventListener("click", () => showTutorial(0)); // replay (AC4)
+
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.
   sync.pump();
   draw();
+
+  // First entry only (no "seen" flag): welcome the visitor BEFORE the lens
+  // picker — the overlay covers it and dismiss reveals it. Returning visitors
+  // skip straight in (AC4).
+  if (shouldShowTutorial(localStorage)) showTutorial(0);
 }
 
 main().catch((err) => {
