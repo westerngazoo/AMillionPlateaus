@@ -9,16 +9,20 @@ import { DOMAINS } from "./persona.js";
 
 export const PLATEAU_NAME_FALLBACK = "Untitled Plateau";
 
-// buildPlateau({ name, domain, e1, e2, e3 })
+// buildPlateau({ name, domain, e1, e2, e3, description })
 //
 // Returns the normalised arg shape that wasm.add_plateau() accepts, tagged
 // with error: null, or an error object { error: string } if input is invalid.
+//
+// `description` is the optional Markdown body (R-0020): a string, kept verbatim
+// (NOT trimmed — bodies keep their formatting); defaults to "" (the common,
+// body-less case, behaviour unchanged from R-0011).
 //
 // Invalid cases (R-0011 AC5/AC6):
 //   - unknown / missing domain id
 //   - any non-finite coordinate (NaN, ±Infinity)
 //   - all-zero direction (degenerate grade-1 vector, permanently unreachable)
-export function buildPlateau({ name, domain, e1 = 0, e2 = 0, e3 = 0 } = {}) {
+export function buildPlateau({ name, domain, e1 = 0, e2 = 0, e3 = 0, description = "" } = {}) {
   if (!DOMAINS.find((d) => d.id === domain)) {
     return { error: "Unknown domain." };
   }
@@ -41,6 +45,7 @@ export function buildPlateau({ name, domain, e1 = 0, e2 = 0, e3 = 0 } = {}) {
     e1: fE1,
     e2: fE2,
     e3: fE3,
+    description: typeof description === "string" ? description : "",
     error: null,
   };
 }

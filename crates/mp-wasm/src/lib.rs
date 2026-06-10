@@ -179,6 +179,10 @@ impl WasmCrdtDoc {
 
     /// Add a plateau, returning the engine-assigned UUID string. Mirrors
     /// [`WasmGraph::add_plateau`] so the web app seeds either side identically.
+    /// `description` is the plateau's authored Markdown body (R-0020); it rides
+    /// the `description` field already serialized into the CRDT `plateaus` map,
+    /// so it syncs and persists like the rest of the node. An empty string is the
+    /// common case (no body) and is stored verbatim.
     pub fn add_plateau(
         &mut self,
         name: &str,
@@ -186,9 +190,10 @@ impl WasmCrdtDoc {
         e1: f32,
         e2: f32,
         e3: f32,
+        description: &str,
     ) -> Result<String, JsError> {
         let domain = Uuid::parse_str(domain_id)?;
-        let p = PlateauNode::new(name, domain, e1, e2, e3);
+        let p = PlateauNode::new(name, domain, e1, e2, e3).with_description(description);
         let id = p.id.to_string();
         self.inner.add_plateau(&p)?;
         Ok(id)
@@ -362,6 +367,18 @@ impl WasmCrdtDoc {
         Ok(WasmCrdtDoc {
             inner: CrdtDoc::load(bytes)?,
         })
+    }
+
+    /// Merge a save-blob (e.g. `mp-host import`'s output, or any
+    /// [`WasmCrdtDoc::save`] bytes) INTO this replica — a CRDT **union**, not a
+    /// replace (R-0021 AC6, "Import a world"). Convergent + idempotent: re-merging
+    /// the same blob is a no-op (R-0004). A corrupt/non-Automerge blob is a thrown
+    /// JS `Error` via `CrdtDoc::load`, never a panic — so the caller shows an
+    /// inline error and the world keeps working.
+    pub fn merge_bytes(&mut self, bytes: &[u8]) -> Result<(), JsError> {
+        let mut incoming = CrdtDoc::load(bytes)?;
+        self.inner.merge(&mut incoming)?;
+        Ok(())
     }
 }
 

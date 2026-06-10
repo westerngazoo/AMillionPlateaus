@@ -120,7 +120,7 @@ fn two_independent_replicas_sync_a_plateau_to_quiescence() {
     let mut sb = WasmSyncSession::new();
 
     let id = a
-        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
         .expect("A adds a plateau");
 
     // Pump A↔B until neither side has anything left to send (convergence).
@@ -161,10 +161,10 @@ fn save_load_round_trips_the_doc() {
 
     let mut doc = WasmCrdtDoc::new().expect("doc");
     let a = doc
-        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
         .expect("add a");
     let b = doc
-        .add_plateau("Topology", domain, 0.7, 0.3, 0.2)
+        .add_plateau("Topology", domain, 0.7, 0.3, 0.2, "")
         .expect("add b");
     doc.add_bridge(&a, &b, "continuity").expect("bridge");
 
@@ -195,6 +195,42 @@ fn save_load_round_trips_the_doc() {
     );
 }
 
+// R-0020 AC1/AC2: the authored Markdown body rides the plateau's `description`
+// field through add_plateau → CRDT → to_graph DTO; an empty body stays "".
+#[wasm_bindgen_test]
+fn plateau_body_round_trips_through_the_doc() {
+    #[derive(serde::Deserialize)]
+    struct PlateauRow {
+        id: String,
+        description: String,
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let body = "# Limits\n\nThe slope is $\\frac{dy}{dx}$.";
+    let with = doc
+        .add_plateau("Calculus", domain, 0.9, 0.1, 0.0, body)
+        .expect("add with body");
+    let without = doc
+        .add_plateau("Aside", domain, 0.5, 0.0, 0.0, "")
+        .expect("add without body");
+
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<PlateauRow> =
+        serde_wasm_bindgen::from_value(g.plateaus().expect("plateaus")).expect("decode rows");
+    let row = |id: &str| rows.iter().find(|r| r.id == id).expect("row present");
+    assert_eq!(
+        row(&with).description,
+        body,
+        "authored body round-trips verbatim"
+    );
+    assert_eq!(
+        row(&without).description,
+        "",
+        "empty body stays empty, never a placeholder"
+    );
+}
+
 // R-0014 AC8: add_resource anchors a marker to a plateau and it round-trips
 // through resources() as a Floating, zero-vote DTO; an unknown anchor errors.
 #[wasm_bindgen_test]
@@ -212,7 +248,7 @@ fn add_resource_round_trips_and_validates_anchor() {
     let domain = "00000000-0000-0000-0000-000000000001";
     let mut doc = WasmCrdtDoc::new().expect("doc");
     let p = doc
-        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
         .expect("add plateau");
 
     // A blank/unknown kind falls back to Note; the marker anchors to the plateau.
@@ -262,7 +298,7 @@ fn vote_crystallizes_a_marker() {
     let threshold = mp_wasm::crystallize_threshold();
     let mut doc = WasmCrdtDoc::new().expect("doc");
     let p = doc
-        .add_plateau("LA", domain, 0.9, 0.2, 0.5)
+        .add_plateau("LA", domain, 0.9, 0.2, 0.5, "")
         .expect("plateau");
     let rid = doc.add_resource(&p, "notes", "Note", "").expect("marker");
 
