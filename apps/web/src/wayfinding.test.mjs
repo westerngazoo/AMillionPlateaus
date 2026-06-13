@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { centerOn } from "./wayfinding.js";
+import { centerOn, zoomAt, clampScale, SCALE_MIN, SCALE_MAX } from "./wayfinding.js";
 import { project } from "./project.js";
 
 const CANVAS = { width: 800, height: 600 };
@@ -56,4 +56,41 @@ test("travel is camera-only — the projected centre is independent of scale", (
     assert.ok(Math.abs(pt.x - CANVAS.width / 2) < 1e-9);
     assert.ok(Math.abs(pt.y - CANVAS.height / 2) < 1e-9);
   }
+});
+
+// ── Zoom (R-0024 AC5) ────────────────────────────────────────────────────────
+
+test("zoomAt keeps the cursor's graph point fixed under the real projection", () => {
+  const view = { cx: 230, cy: 150, scale: 320 };
+  const pos = { e1: 0.7, e2: 0.2, e3: -0.3 };
+  const p0 = project(pos, view); // where the node sits now
+  for (const factor of [1.15, 1 / 1.15, 2, 0.5]) {
+    const v2 = zoomAt(view, factor, p0.x, p0.y); // zoom anchored AT the node
+    const p1 = project(pos, v2);
+    assert.ok(Math.abs(p1.x - p0.x) < 1e-6, `x anchored for factor ${factor}`);
+    assert.ok(Math.abs(p1.y - p0.y) < 1e-6, `y anchored for factor ${factor}`);
+  }
+});
+
+test("zoomAt scales by the factor, within clamp", () => {
+  const view = { cx: 230, cy: 150, scale: 320 };
+  assert.ok(Math.abs(zoomAt(view, 2, 400, 300).scale - 640) < 1e-9);
+  assert.ok(Math.abs(zoomAt(view, 0.5, 400, 300).scale - 160) < 1e-9);
+});
+
+test("clampScale bounds both ends; a zoom past the edge leaves the origin unchanged", () => {
+  assert.equal(clampScale(10), SCALE_MIN);
+  assert.equal(clampScale(99999), SCALE_MAX);
+  assert.equal(clampScale(320), 320);
+  // Already at SCALE_MAX → zooming in further is a no-op (k == 1, origin fixed).
+  const maxed = { cx: 230, cy: 150, scale: SCALE_MAX };
+  const z = zoomAt(maxed, 2, 400, 300);
+  assert.equal(z.scale, SCALE_MAX);
+  assert.equal(z.cx, 230);
+  assert.equal(z.cy, 150);
+});
+
+test("zoomAt is deterministic", () => {
+  const v = { cx: 230, cy: 150, scale: 320 };
+  assert.deepEqual(zoomAt(v, 1.15, 400, 300), zoomAt(v, 1.15, 400, 300));
 });

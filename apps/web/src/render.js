@@ -3,6 +3,7 @@
 // plateaus are drawn solid; fogged ones dimmed and low-alpha (R-0005 AC4).
 
 import { project } from "./project.js";
+import { planLabels } from "./labels.js";
 
 const LIT = "#ffd166";
 const LIT_RING = "#fff3c4";
@@ -27,6 +28,10 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
   for (const p of plateaus) {
     points.set(p.id, project(p.position, view));
   }
+
+  // Label level-of-detail (R-0024): decide which plateau names to draw so none
+  // overlap (focused → lit → rest, greedy box-pack). Discs all draw regardless.
+  const labelled = planLabels({ plateaus, points, reachable, focusedId });
 
   // Bridges first, so plateau discs sit on top.
   ctx.lineWidth = 2;
@@ -62,10 +67,12 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
       ctx.stroke();
     }
 
-    ctx.fillStyle = lit ? "#1b2330" : LABEL;
-    ctx.font = lit ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
+    if (labelled.has(p.id)) {
+      ctx.fillStyle = lit ? "#1b2330" : LABEL;
+      ctx.font = lit ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
+    }
     ctx.globalAlpha = 1;
   }
 

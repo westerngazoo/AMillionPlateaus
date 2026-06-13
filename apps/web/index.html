@@ -35,7 +35,16 @@
         border: 1px solid #2a3543;
         border-radius: 8px;
         cursor: pointer;
+        touch-action: none; /* R-0024: let drag-pan work on touch (no browser scroll/zoom steal) */
       }
+      /* Zoom controls (R-0024): a small overlay on the map's top-right. */
+      #zoom-controls { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
+      #zoom-controls button {
+        width: 28px; height: 28px; font-size: 15px; line-height: 1; cursor: pointer;
+        background: rgba(20, 28, 38, 0.85); color: #cdd9e6;
+        border: 1px solid #34495f; border-radius: 6px;
+      }
+      #zoom-controls button:hover { background: rgba(34, 51, 70, 0.95); }
       .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
       button {
         background: #2a3a4c; color: #e6eef6; border: 1px solid #3a4d62;
@@ -485,6 +494,12 @@
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>
+        <!-- Zoom controls (R-0024): wheel/drag also pan+zoom the map. -->
+        <div id="zoom-controls">
+          <button id="zoom-in" type="button" title="Zoom in (or scroll)">＋</button>
+          <button id="zoom-out" type="button" title="Zoom out">−</button>
+          <button id="zoom-reset" type="button" title="Reset view">⟳</button>
+        </div>
         <!-- Persona creator overlay; populated by main.js, hidden once chosen. -->
         <div id="creator"></div>
       </div>

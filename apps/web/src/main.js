@@ -48,7 +48,7 @@ import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
-import { centerOn } from "./wayfinding.js";
+import { centerOn, zoomAt } from "./wayfinding.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
@@ -752,7 +752,75 @@ async function main() {
     creator.hidden = false;
   });
 
+  // ── Map navigation: pan + zoom (R-0024) ────────────────────────────────────
+  // Mutate the single VIEW camera; draw() recomputes points so hit-testing,
+  // presence, Travel, and the focus ring all follow for free. The canvas is
+  // 800×600 with no CSS resize, so canvas px == client px 1:1 (a responsive
+  // canvas would need to scale the anchor by canvas.width / rect.width).
+  const DRAG_THRESHOLD = 4; // px of travel before a press counts as a pan, not a click
+  let panning = false;
+  let moved = false; // a real drag happened → suppress the click-to-open (read at "click")
+  let panStart = { x: 0, y: 0, cx: 0, cy: 0 };
+  canvas.addEventListener("pointerdown", (e) => {
+    panning = true;
+    moved = false; // reset per press — the click guard reads this, NOT `panning`
+    panStart = { x: e.clientX, y: e.clientY, cx: VIEW.cx, cy: VIEW.cy };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture can throw for an inactive pointer id; panning still works */
+    }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!panning) return;
+    const dx = e.clientX - panStart.x;
+    const dy = e.clientY - panStart.y;
+    if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
+    if (moved) {
+      VIEW.cx = panStart.cx + dx;
+      VIEW.cy = panStart.cy + dy;
+      draw();
+    }
+  });
+  const endPan = (e) => {
+    panning = false; // NB: `moved` persists until the next pointerdown (the click guard needs it)
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* nothing captured — fine */
+    }
+  };
+  canvas.addEventListener("pointerup", endPan);
+  canvas.addEventListener("pointercancel", endPan);
+
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault(); // don't scroll the page
+      const rect = canvas.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      VIEW = zoomAt(VIEW, factor, e.clientX - rect.left, e.clientY - rect.top);
+      draw();
+    },
+    { passive: false },
+  );
+
+  const DEFAULT_VIEW = { ...VIEW };
+  document.getElementById("zoom-in").addEventListener("click", () => {
+    VIEW = zoomAt(VIEW, 1.3, canvas.width / 2, canvas.height / 2);
+    draw();
+  });
+  document.getElementById("zoom-out").addEventListener("click", () => {
+    VIEW = zoomAt(VIEW, 1 / 1.3, canvas.width / 2, canvas.height / 2);
+    draw();
+  });
+  document.getElementById("zoom-reset").addEventListener("click", () => {
+    VIEW = { ...DEFAULT_VIEW };
+    draw();
+  });
+
   canvas.addEventListener("click", (e) => {
+    if (moved) return; // a pan just happened — not a click (R-0024 AC2)
     if (!activePersona) return; // not interactive until a persona is chosen (AC1)
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
