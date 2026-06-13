@@ -237,6 +237,33 @@
       }
       .detail-resources a { color: #9fd0ff; }
       .detail-empty { font-size: 12px; color: #8aa0b4; margin: 0; }
+      /* Study view (R-0023): ranked rows with a stone count + ＋stone, the
+         companion action buttons, and the inline add-a-resource form. */
+      .res-list li { display: flex; align-items: center; gap: 8px; }
+      .res-stones { margin-left: auto; font-size: 11px; color: #8aa0b4; white-space: nowrap; }
+      .res-stones.bedrock { color: #ffd166; } /* crystallized — community-vouched */
+      .res-stone-btn {
+        font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        background: #1b2735; color: #9fd0b4; border: 1px solid #34495f; cursor: pointer;
+      }
+      .res-stone-btn:hover { background: #223346; }
+      .detail-study { display: flex; flex-wrap: wrap; gap: 6px; }
+      .detail-study button {
+        font-size: 12px; padding: 5px 10px; border-radius: 8px;
+        background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
+      }
+      .detail-study button:hover { background: #345780; }
+      .detail-add { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+      .detail-add .detail-add-row { display: flex; gap: 6px; }
+      .detail-add input[type="text"], .detail-add select {
+        flex: 1; min-width: 0; background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 6px 8px; font-size: 12px;
+      }
+      .detail-add select { flex: 0 0 auto; }
+      .detail-add button {
+        background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f;
+        border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+      }
 
       /* Draft Plateau form (SPEC-0011 / R-0011): collapsible authoring panel. */
       .draft-plateau {
@@ -540,8 +567,25 @@
         <button id="detail-close" type="button" aria-label="Close">×</button>
       </div>
       <div id="detail-body" class="detail-body"><!-- rendered Markdown --></div>
-      <h3 class="detail-res-title">Resources</h3>
-      <div id="detail-resources" class="detail-resources"><!-- anchored resources --></div>
+
+      <!-- Study with your companion (R-0023): grounded in THIS plateau's body +
+           resources, via the bring-your-own model (R-0007). Buttons filled by main.js. -->
+      <h3 class="detail-res-title">Study with your companion</h3>
+      <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
+
+      <h3 class="detail-res-title">Resources — ranked by stones</h3>
+      <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
+
+      <!-- Add a book / link / video, pinned to this plateau (R-0023 / R-0014). -->
+      <form id="detail-add-form" class="detail-add">
+        <input id="detail-add-title" type="text" placeholder="Title" autocomplete="off" />
+        <div class="detail-add-row">
+          <select id="detail-add-kind"><!-- RESOURCE_KINDS, by main.js --></select>
+          <input id="detail-add-uri" type="text" placeholder="https://… (book, link, video)" autocomplete="off" />
+          <button type="submit">Pin</button>
+        </div>
+        <p id="detail-add-error" class="dp-error" hidden></p>
+      </form>
     </aside>
     <p class="note">
       You hold a <strong>wizard key</strong> (Nostr/BIP340) minted in this browser:

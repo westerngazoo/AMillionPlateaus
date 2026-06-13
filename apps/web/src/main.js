@@ -43,6 +43,7 @@ import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
+import { rankResources, buildPlateauStudyContext, STUDY_ACTIONS } from "./study.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -800,34 +801,49 @@ async function main() {
   const detailName = document.getElementById("detail-name");
   const detailBody = document.getElementById("detail-body");
   const detailResources = document.getElementById("detail-resources");
+  const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
+  let studyPlateau = null; // the plateau currently open in the Study view
+
   function openPlateau(p) {
+    studyPlateau = p;
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
+    renderStudyResources();
+    detail.hidden = false;
+  }
+
+  // Resources anchored to the open plateau, ranked best-first (R-0023): each row
+  // shows the weighted-vote count (rounded for display only — it is the R-0015
+  // weighted SUM, not an integer tally), a bedrock badge when Crystallized, and a
+  // ＋ stone button on the audited grow-only vote path. Reuses the safeHref
+  // chokepoint for the link, exactly as the old flat list did.
+  function renderStudyResources() {
+    if (!studyPlateau) return;
     const rs = doc
       .to_graph()
       .resources()
-      .filter((r) => r.plateau_id === p.id);
-    renderResourceList(detailResources, rs);
-    detail.hidden = false;
-  }
-  function renderResourceList(container, resources) {
-    container.replaceChildren();
-    if (resources.length === 0) {
+      .filter((r) => r.plateau_id === studyPlateau.id);
+    detailResources.replaceChildren();
+    if (rs.length === 0) {
       const empty = document.createElement("p");
       empty.className = "detail-empty";
-      empty.textContent = "No resources anchored here yet.";
-      container.append(empty);
+      empty.textContent = "No resources pinned here yet — add a book, link, or video below.";
+      detailResources.append(empty);
       return;
     }
     const ul = document.createElement("ul");
-    for (const r of resources) {
+    ul.className = "res-list";
+    for (const r of rankResources(rs)) {
       const li = document.createElement("li");
+      const crystallized = r.state === "Crystallized";
+
       const kind = document.createElement("span");
       kind.className = "res-kind";
       kind.textContent = r.kind; // DTO enum string; textContent keeps it inert
       li.append(kind, document.createTextNode(" "));
-      const href = safeHref(r.uri); // same chokepoint as body links — http(s)/mailto only
+
+      const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
       if (href) {
         const a = document.createElement("a");
         a.href = href;
@@ -836,12 +852,106 @@ async function main() {
         a.textContent = r.title;
         li.append(a);
       } else {
-        li.append(document.createTextNode(r.title)); // unsafe/again-inert uri → plain title
+        li.append(document.createTextNode(r.title));
       }
+
+      const stones = document.createElement("span");
+      stones.className = crystallized ? "res-stones bedrock" : "res-stones";
+      stones.textContent = crystallized ? `◆ ${Math.round(r.vote_count)}` : `● ${Math.round(r.vote_count)}`;
+      stones.title = crystallized ? "crystallized — community-vouched" : "weighted stones";
+      li.append(stones);
+
+      const vote = document.createElement("button");
+      vote.type = "button";
+      vote.className = "res-stone-btn";
+      vote.textContent = "＋ stone";
+      vote.addEventListener("click", () => {
+        try {
+          doc.vote(r.id, myVoterId, STONE_WEIGHT); // audited grow-only path (R-0015)
+        } catch {
+          return; // a bad id never crashes the panel
+        }
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        renderStudyResources();
+      });
+      li.append(vote);
       ul.append(li);
     }
-    container.append(ul);
+    detailResources.append(ul);
   }
+
+  // Add a resource (book / link / video) to the open plateau, inline (R-0023 AC3).
+  const addTitle = document.getElementById("detail-add-title");
+  const addKind = document.getElementById("detail-add-kind");
+  const addUri = document.getElementById("detail-add-uri");
+  const addError = document.getElementById("detail-add-error");
+  for (const k of RESOURCE_KINDS) {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = k;
+    addKind.appendChild(o);
+  }
+  document.getElementById("detail-add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!studyPlateau) return;
+    const spec = buildResource({
+      plateau: studyPlateau.id,
+      title: addTitle.value,
+      kind: addKind.value,
+      uri: addUri.value,
+    });
+    if (spec.error) {
+      addError.textContent = spec.error;
+      addError.hidden = false;
+      return;
+    }
+    addError.hidden = true;
+    doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri); // R-0014 binding
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    renderStudyResources();
+    addTitle.value = "";
+    addUri.value = "";
+  });
+
+  // Study with the companion (R-0023 AC4): each action sends a prompt grounded in
+  // a PLATEAU-SCOPED context (this topic's body + its resources) through the same
+  // bring-your-own model turn the global companion uses. The plateau body —
+  // possibly imported/synced peer content — rides to the configured endpoint under
+  // the SAME trust boundary as R-0007 (the visitor's own endpoint, key in-browser).
+  function studyAction(prompt) {
+    if (!studyPlateau || !activePersona) return;
+    const rs = doc
+      .to_graph()
+      .resources()
+      .filter((r) => r.plateau_id === studyPlateau.id);
+    const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
+    companion.hidden = false;
+    appendMessage("user", prompt);
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        appendMessage("bot", reply);
+        // Shares the global transcript by design — one companion, one history
+        // (R-0023): a plateau answer can context a later global turn, and vice-versa.
+        history.push({ role: "user", content: prompt }, { role: "assistant", content: reply });
+      })
+      .catch((err) => appendMessage("error", `⚠ ${err.message}`)); // graceful (R-0007 AC4)
+  }
+  const studyButtons = document.getElementById("detail-study");
+  for (const a of STUDY_ACTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => studyAction(a.prompt));
+    studyButtons.append(btn);
+  }
+
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
   });
