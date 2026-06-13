@@ -85,6 +85,24 @@ fn position_for_picks_the_dominant_axis() {
 // ── Pure: deterministic ids ───────────────────────────────────────────────────
 
 #[test]
+fn domain_ids_match_the_web_app_literals() {
+    // Cross-crate contract (R-0022): apps/web/src/persona.js pins these same
+    // literals in persona.test.mjs. Either side drifting fails its own suite.
+    assert_eq!(
+        MATH_DOMAIN.to_string(),
+        "11111111-1111-1111-1111-111111111111"
+    );
+    assert_eq!(
+        MUSIC_DOMAIN.to_string(),
+        "22222222-2222-2222-2222-222222222222"
+    );
+    assert_eq!(
+        PHYSICS_DOMAIN.to_string(),
+        "33333333-3333-3333-3333-333333333333"
+    );
+}
+
+#[test]
 fn note_id_is_deterministic_and_path_keyed() {
     assert_eq!(
         note_id("Calculus.md"),

@@ -6,9 +6,11 @@ import assert from "node:assert/strict";
 
 import {
   ARCHETYPES,
+  DOMAINS,
   seedReputation,
   MATH_DOMAIN,
   MUSIC_DOMAIN,
+  PHYSICS_DOMAIN,
 } from "./persona.js";
 
 const byId = (id) => ARCHETYPES.find((a) => a.id === id);
@@ -29,6 +31,26 @@ test("polymath seeds one grade-1 vector per domain", () => {
   const r = seedReputation(byId("polymath"));
   assert.deepEqual(r.domain_reps[MATH_DOMAIN], [0, 0.16, 0, 0, 0, 0, 0, 0]);
   assert.deepEqual(r.domain_reps[MUSIC_DOMAIN], [0, 0, 0, 0, 0.16, 0, 0, 0]);
+});
+
+test("physicist seeds e2 in the Physics domain only (R-0022)", () => {
+  const r = seedReputation(byId("physicist"));
+  assert.deepEqual(Object.keys(r.domain_reps), [PHYSICS_DOMAIN]);
+  assert.deepEqual(r.domain_reps[PHYSICS_DOMAIN], [0, 0, 0.16, 0, 0, 0, 0, 0]);
+});
+
+test("PHYSICS_DOMAIN matches the importer's domain id (R-0022 cross-crate contract)", () => {
+  // mp-host's import::PHYSICS_DOMAIN tags e2-dominant notes with this exact id;
+  // the Rust side pins the same literal in mp-host/tests/import.rs. Either
+  // side drifting fails its own suite.
+  assert.equal(PHYSICS_DOMAIN, "33333333-3333-3333-3333-333333333333");
+});
+
+test("DOMAINS offers Physics with a canonical e2 axis (R-0022)", () => {
+  const physics = DOMAINS.find((d) => d.id === PHYSICS_DOMAIN);
+  assert.ok(physics, "Physics is an orientable domain");
+  assert.equal(physics.label, "Physics");
+  assert.deepEqual(physics.canonical, { e1: 0, e2: 1, e3: 0 });
 });
 
 test("the mapping is deterministic", () => {

@@ -56,3 +56,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0019](0019-onboarding-wayfinding.md) | Onboarding & wayfinding: career-lens copy, pure `centerOn` travel, remembered first-run tutorial | R-0019 | Implemented |
 | [SPEC-0020](0020-plateau-content.md) | Plateau content: Markdown body + vendored-KaTeX typeset math + a read view | R-0020 | Implemented |
 | [SPEC-0021](0021-obsidian-import.md) | Obsidian vault importer: mp-host `import` (pure parse → GA position → blob) + browser "Import a world" | R-0021 | Implemented |
+| [SPEC-0022](0022-physicist-lens.md) | Physicist lens: PHYSICS domain row + archetype + Motion trailhead (seeds extracted to seeds.js) | R-0022 | Implemented |
