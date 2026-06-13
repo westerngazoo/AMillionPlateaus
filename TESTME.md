@@ -9,10 +9,15 @@ Your Obsidian vault, as an explorable knowledge world. Everything below runs
 cd ~/projects/a-million-plateus
 # Fresh clone only — build the wasm core (pkg/ is gitignored):
 wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
-python3 -m http.server 8143 --directory apps/web
+python3 scripts/serve.py          # serves apps/web on http://localhost:8143
 ```
 
 Open **http://localhost:8143** in a browser.
+
+> `scripts/serve.py` sends no-cache headers, so a normal reload always picks up
+> the latest code — plain `python3 -m http.server` serves stale modules after
+> rebuilds. Stop it with Ctrl-C; if one is running in the background:
+> `pkill -f serve.py`.
 
 > Your vault is already imported as `apps/web/igoose-world.bin` (630 notes ·
 > 642 bridges · 60 resources, built from `westerngazoo/obsidian_vaults/IGoose`).
