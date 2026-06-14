@@ -156,10 +156,16 @@ further owner decisions are blocking._
   motion sickness), smooth-fly as an opt-in with a comfort vignette;
   seated-friendly default, room-scale supported. Motion-sickness mitigation is
   first-class.
-- **Relationship to Phase 7 — proposed:** with one engine chosen this is now
-  clean — **Godot _is_ the Phase 7 "3D World"** (flat-3D build), and R-0025 is its
-  **OpenXR immersive mode** within the same Godot project. Phase 7 lands first; VR
-  is an enable-flag on the same scene, not a parallel rewrite.
+- **Relationship to Phase 7 / parallelism — proposed:** with one engine chosen
+  this is clean — **Godot _is_ the Phase 7 "3D World"** and R-0025 is its
+  **OpenXR mode** within the *same project + same scene*. Because flat-3D and VR
+  render the **identical Godot scene**, VR is **not a strictly-later phase**: the
+  shared work (graph binding + scene + content) serves both, the **OpenXR rig can
+  be stood up in parallel** with it, and only the **comfort-sensitive VR UX**
+  (locomotion feel, vignette, worldspace panels) is sequenced *after* scene
+  stability so it isn't tuned against shifting ground. So — **parallel tracks
+  converging on one scene, gated only by the graph binding**, not by Phase 7
+  shipping in full first.
 
 ## 6. Decision log
 
@@ -172,6 +178,7 @@ further owner decisions are blocking._
 | 2026-06-13 | **Engine = Godot (OpenXR)** — owner decision, supersedes the WebXR/three.js lean above | Owner: stronger long-term foundation (full engine, native/console path) for an open-ended 3D/VR world. Accepts the cost of a separate client + a graph binding; GA/CRDT/reputation core stays unchanged. Re-frames Phase 7 as the Godot 3D world and R-0025 as its OpenXR mode |
 | 2026-06-13 | Delivery target (Godot **Web export vs native client**) left **open/owner-gated** | It determines the integration (wasm bridge vs GDExtension) and whether zero-install/in-browser is kept; decentralized + offline hold either way. Lean native-first with the 2D web app as the zero-install entry |
 | 2026-06-13 | **Delivery = both (native + web)** — owner decision | Owner wants full native/OpenXR fidelity *and* a zero-install in-browser fallback. Two thin bindings over one unchanged core (GDExtension native, wasm bridge web). Proposed native-first sequencing so milestones stay shippable; spec confirms. Closes the last owner-gated fork |
+| 2026-06-13 | VR **develops in parallel** with the flat-3D world, not strictly after it | In Godot flat-3D and VR are the *same scene*; the real dependency is the graph binding + a stable scene, which both modes share, so the OpenXR rig parallelizes. Only the comfort-sensitive VR UX is sequenced after scene stability. Refines the earlier "Phase 7 lands first" note |
 
 ## Changelog
 
@@ -196,3 +203,7 @@ further owner decisions are blocking._
   web), proposed native-first. **All owner-gated forks are now closed** — the
   only thing between here and `Accepted` is sharpening the draft-level AC into
   testable form, which can wait until the phase approaches. Still `Draft`.
+- 2026-06-13 refined the sequencing per owner: VR **develops in parallel** on the
+  shared Godot scene (gated only by the graph binding + scene stability), not as
+  a strictly-later phase — only the comfort-sensitive VR UX follows scene
+  stability. Still `Draft`.
