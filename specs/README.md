@@ -59,3 +59,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0022](0022-physicist-lens.md) | Physicist lens: PHYSICS domain row + archetype + Motion trailhead (seeds extracted to seeds.js) | R-0022 | Implemented |
 | [SPEC-0023](0023-study-view.md) | Study view: stone-ranked resources + inline add + plateau-scoped companion (pure study.js) | R-0023 | Implemented |
 | [SPEC-0024](0024-map-zoom-lod.md) | Map zoom/pan (cursor-anchored `zoomAt`) + label overlap-culling (`planLabels`) | R-0024 | Implemented |
+| [SPEC-0025](0025-vr-immersive-visualization.md) | VR/immersive: Godot client over the unchanged core (`GraphSource`, native GDExtension + web wasm, pure `place_node`/`plan_labels`) | R-0025 | Accepted |

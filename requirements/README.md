@@ -57,4 +57,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0022](0022-physicist-lens.md) | Physicist lens: Physics as a first-class faced domain | POC — Knowledge content | Met |
 | [R-0023](0023-study-view.md) | Study view: read, collect, and learn on a plateau | POC — Knowledge content | Met |
 | [R-0024](0024-map-zoom-lod.md) | Map zoom, pan & label level-of-detail | POC — Navigation | Met |
-| [R-0025](0025-vr-immersive-visualization.md) | VR / immersive visualization: walk the true 3D GA geometry | Phase 11 — Immersive (VR) | Draft |
+| [R-0025](0025-vr-immersive-visualization.md) | VR / immersive visualization: walk the true 3D GA geometry | Phase 11 — Immersive (VR) | Accepted |

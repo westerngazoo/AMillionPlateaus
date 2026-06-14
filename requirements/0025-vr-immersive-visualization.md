@@ -1,11 +1,11 @@
 # R-0025 — VR / immersive visualization: walk the true 3D GA geometry
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Milestone:** Phase 11 — Immersive (VR)
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-13
 - **Depends on:** R-0005 (render/projection + the synced world), R-0008 (domain-agnostic GA store), R-0016 (presence), R-0019 (travel/`centerOn`), R-0020/R-0023 (plateau read & study surfaces), R-0024 (camera + label level-of-detail). Conceptually extends the roadmap's Phase 7 "3D World".
-- **Realized by:** _none yet — Draft_
+- **Realized by:** SPEC-0025 (pending)
 - **QA:** `qa` agent run scoped to this requirement
 
 ## 1. Statement
@@ -54,7 +54,9 @@ client).
 
 ## 3. Acceptance criteria
 
-_Draft-level — to be sharpened into testable form before status → `Accepted`._
+_Each criterion is verified by the test handle named in §3.1 — a headless/pure
+check where one exists, plus a manual in-headset pass for the embodied parts
+(the analogue of the 2D specs' "browser-verified" portion)._
 
 - **AC1 — True-geometry scene.** Each plateau is rendered at its Grade-1
   `(e1, e2, e3)` coordinates in an immersive Godot (OpenXR) scene, with the three
@@ -95,6 +97,37 @@ _Draft-level — to be sharpened into testable form before status → `Accepted`
   derivable from the graph (CLAUDE.md §6). Reputation is never persisted as a
   scalar or a CRDT field — it is recomputed from the signed log on both clients
   (CLAUDE.md §4, §7).
+
+### 3.1 Test handles
+
+The headless/pure handles run in CI without a GPU or headset; the manual handle
+is the in-headset e2e pass.
+
+- **Position map (AC1) — pure unit test.** The DTO→world-transform function
+  `placeNode({e1,e2,e3}, fit)` is pure and deterministic; tested that it maps
+  the three axes to the three world axes and that the auto-fit (R-0024-style)
+  keeps the cluster inside the comfortable volume. No engine needed.
+- **Core parity (AC2, AC7) — fixture parity test.** Loading the committed
+  `igoose-world.bin` through the binding yields the **same** plateau count,
+  positions, bridge count, and `reachable` set as the 2D web app for a fixed
+  persona/event-log fixture (the core is unchanged, so the numbers must match
+  the existing suites). Asserts no `f32`/CRDT reputation field exists.
+- **Label declutter (AC3) — pure unit test.** The priority+overlap planner
+  (focused→lit→rest, drop collisions) is a pure function over projected screen
+  rects, tested exactly as R-0024's `planLabels` is.
+- **Scene smoke (AC1, AC3, AC6) — headless Godot run.** A headless
+  (`--headless`) scene load over the fixture instantiates N plateau + M bridge
+  nodes and the flat-3D camera with **no error/parse failure**; XR disabled.
+- **Additivity (AC6) — repo gate.** `git diff` shows **no change to the
+  protected core** (`mp-graph`, `mp-domain`, `mp-reputation`, `mp-crdt`,
+  `mp-identity`, garust) or `apps/web/` product code — all additions confined to
+  `crates/mp-godot/`, `apps/godot/`, and the workspace-member line in the root
+  `Cargo.toml`. `cargo test --workspace` + the JS suites stay green unchanged.
+- **Embodied & study (AC4, AC5, AC7) — manual in-headset e2e.** On an OpenXR
+  device over the imported vault: teleport + travel-to-plateau move the rig,
+  presence avatars appear, opening a plateau shows its body/resources on a
+  worldspace panel, and a vote cast in VR appears in the 2D app after sync —
+  recorded as manual evidence in SPEC-0025, like the 2D specs' browser pass.
 
 ## 4. Constraints & non-goals
 
@@ -207,3 +240,9 @@ further owner decisions are blocking._
   shared Godot scene (gated only by the graph binding + scene stability), not as
   a strictly-later phase — only the comfort-sensitive VR UX follows scene
   stability. Still `Draft`.
+- 2026-06-13 **Status → Accepted.** Owner directed the parallel track to proceed.
+  AC sharpened into testable form with explicit §3.1 test handles (pure
+  position-map + core-parity + declutter unit tests, headless scene smoke,
+  additivity repo gate, manual in-headset e2e). All owner forks closed
+  (Godot · native+web · parallel-on-shared-scene). SPEC-0025 to follow +
+  architect review before implementation.
