@@ -25,6 +25,7 @@ P3 — Polish (Phase 9)
 | 8 — Resource Crystallization | 19–20 | P2 | Voting changes terrain |
 | 9 — Nostr Identity | 21–22 | P2 | Signed events, verifiable rank |
 | 10 — Beta Polish | 23–26 | P3 | Deployable, shareable |
+| 11 — Immersive (VR) | 27+ | P3 | 📝 WebXR view of the true 3D GA geometry — walk the fog, no projection collapse (R-0025, Draft). Immersive successor to Phase 7. |
 
 ## First week checklist (start here)
 
