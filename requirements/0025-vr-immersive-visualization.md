@@ -119,29 +119,27 @@ _Draft-level — to be sharpened into testable form before status → `Accepted`
 
 ## 5. Open questions
 
-_Engine settled (Godot, owner decision 2026-06-13). The remaining **owner-gated**
-item is the delivery target — it must be settled before status → `Accepted`._
+_Both owner-gated items are now settled (engine + delivery target, 2026-06-13).
+What remains before `Accepted` is sharpening the AC into testable form — no
+further owner decisions are blocking._
 
 - **Engine — resolved: Godot** (OpenXR). Owner decision: the stronger long-term
   foundation (full engine + path to native/console). Supersedes the earlier
   WebXR/three.js lean. See §2 for the cost (a separate client + a graph binding).
-- **Delivery target — OPEN (owner-gated): Godot Web export vs. native client.**
-  The crux that shapes the whole integration:
-  - **Web export** (HTML5/WebAssembly + WebXR) keeps the **zero-install,
-    in-browser** property; cost: web export's threading/`SharedArrayBuffer`
-    constraints, larger download, and bridging **two wasm modules** in one page
-    (Godot's engine + the existing `mp-wasm` graph core).
-  - **Native client** (desktop/standalone-headset binary) gets the **full engine
-    performance + OpenXR** and can call the Rust graph crates **directly via
-    GDExtension** (no wasm bridge) — but it's an **install**, so the in-browser
-    property is dropped (the 2D web app remains the zero-install entry). Still
-    decentralized + offline (P2P sync + local store travel with it).
-  *Lean:* native-first for fidelity and the clean GDExtension binding, with the 2D
-  web app covering zero-install — but this is the owner's call.
-- **Graph-integration binding — follows the delivery choice.** Native →
-  **GDExtension** calling `mp-graph`/`mp-domain`/`mp-reputation`/`mp-crdt`
-  directly; Web → a **wasm bridge** to the existing `mp-wasm` exports. Either way
-  the core crates are consumed unchanged. Spec details the boundary.
+- **Delivery target — resolved: both, native + web** (owner decision). Native
+  (desktop/standalone-headset) is the fidelity target; a Godot **Web export** is
+  the zero-install, in-browser fallback. *Proposed sequencing (spec to confirm):*
+  **native-first** — it carries the clean GDExtension binding and full OpenXR
+  fidelity, with the existing 2D web app already covering zero-install reach;
+  the Godot Web export then follows as a second deliverable, not a simultaneous
+  build. This keeps each milestone shippable rather than blocking on two
+  integrations at once.
+- **Graph-integration binding — two bindings, one core.** Native → **GDExtension**
+  calling `mp-graph`/`mp-domain`/`mp-reputation`/`mp-crdt` directly; Web → a
+  **wasm bridge** to the existing `mp-wasm` exports. Both consume the **unchanged**
+  core crates; the spec defines the shared boundary so the two bindings stay thin
+  and equivalent. Web export carries the known threading/`SharedArrayBuffer`
+  constraints + two-wasm-modules-in-one-page concern (Godot engine + `mp-wasm`).
 - **World scale & origin — proposed:** auto-fit the bounding box of all plateau
   positions into a fixed, comfortable volume (the cluster ≈ a 10–15 m
   room-to-plaza around the spawn rig), recentred on the focused/travelled-to
@@ -173,6 +171,7 @@ item is the delivery target — it must be settled before status → `Accepted`.
 | 2026-06-13 | Proposed engine **WebXR / three.js**, superseding the earlier Phase 7 "Godot" note (pending owner confirm) | A native engine breaks the single-browser-app, offline-first, reuse-the-wasm-core properties; three.js is the most mature WebXR path |
 | 2026-06-13 | **Engine = Godot (OpenXR)** — owner decision, supersedes the WebXR/three.js lean above | Owner: stronger long-term foundation (full engine, native/console path) for an open-ended 3D/VR world. Accepts the cost of a separate client + a graph binding; GA/CRDT/reputation core stays unchanged. Re-frames Phase 7 as the Godot 3D world and R-0025 as its OpenXR mode |
 | 2026-06-13 | Delivery target (Godot **Web export vs native client**) left **open/owner-gated** | It determines the integration (wasm bridge vs GDExtension) and whether zero-install/in-browser is kept; decentralized + offline hold either way. Lean native-first with the 2D web app as the zero-install entry |
+| 2026-06-13 | **Delivery = both (native + web)** — owner decision | Owner wants full native/OpenXR fidelity *and* a zero-install in-browser fallback. Two thin bindings over one unchanged core (GDExtension native, wasm bridge web). Proposed native-first sequencing so milestones stay shippable; spec confirms. Closes the last owner-gated fork |
 
 ## Changelog
 
@@ -192,3 +191,8 @@ item is the delivery target — it must be settled before status → `Accepted`.
   owner-gated fork now remains before `Accepted`: **delivery target — Godot Web
   export vs. native client** (drives wasm-bridge vs. GDExtension and the
   in-browser property). Still `Draft`.
+- 2026-06-13 **delivery decided: both (native + web)** at the owner's direction.
+  Two thin bindings over one unchanged core (GDExtension native, wasm bridge
+  web), proposed native-first. **All owner-gated forks are now closed** — the
+  only thing between here and `Accepted` is sharpening the draft-level AC into
+  testable form, which can wait until the phase approaches. Still `Draft`.

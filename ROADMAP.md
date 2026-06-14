@@ -25,7 +25,7 @@ P3 — Polish (Phase 9)
 | 8 — Resource Crystallization | 19–20 | P2 | Voting changes terrain |
 | 9 — Nostr Identity | 21–22 | P2 | Signed events, verifiable rank |
 | 10 — Beta Polish | 23–26 | P3 | Deployable, shareable |
-| 11 — Immersive (VR) | 27+ | P3 | 📝 OpenXR immersive mode of the Phase 7 Godot 3D world — walk the true GA geometry, no projection collapse (R-0025, Draft). Engine = Godot; delivery (Web export vs native) owner-gated. |
+| 11 — Immersive (VR) | 27+ | P3 | 📝 OpenXR immersive mode of the Phase 7 Godot 3D world — walk the true GA geometry, no projection collapse (R-0025, Draft). Engine = Godot; delivery = native + web (native-first), two thin bindings over the unchanged Rust core. |
 
 ## First week checklist (start here)
 
