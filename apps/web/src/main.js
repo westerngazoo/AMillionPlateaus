@@ -869,6 +869,7 @@ async function main() {
   const detail = document.getElementById("plateau-detail");
   const detailName = document.getElementById("detail-name");
   const detailBody = document.getElementById("detail-body");
+  const detailReply = document.getElementById("detail-reply");
   const detailResources = document.getElementById("detail-resources");
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
@@ -878,8 +879,19 @@ async function main() {
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
+    detailReply.hidden = true; // clear any prior plateau's study answer
+    detailReply.textContent = "";
     renderStudyResources();
     detail.hidden = false;
+  }
+
+  // The study answer shown INSIDE the detail drawer, where the buttons are: the
+  // global companion panel (still the transcript of record) sits behind this
+  // fixed drawer, so a study reply must surface here to be seen. textContent
+  // only — never innerHTML (no injection).
+  function showStudyReply(text) {
+    detailReply.textContent = text;
+    detailReply.hidden = false;
   }
 
   // Resources anchored to the open plateau, ranked best-first (R-0023): each row
@@ -1006,19 +1018,25 @@ async function main() {
     if (modelConfig.kind === "fake") {
       const reply = offlineDigest({ action: action.key, plateau: studyPlateau, resources: rs });
       appendMessage("bot", reply);
+      showStudyReply(reply); // visible in the drawer, not just the occluded companion
       history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
       return;
     }
+    showStudyReply("…"); // feedback in the drawer while the model answers
     const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
     const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
       .then((reply) => {
         appendMessage("bot", reply);
+        showStudyReply(reply);
         // Shares the global transcript by design — one companion, one history
         // (R-0023): a plateau answer can context a later global turn, and vice-versa.
         history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
       })
-      .catch((err) => appendMessage("error", `⚠ ${err.message}`)); // graceful (R-0007 AC4)
+      .catch((err) => {
+        appendMessage("error", `⚠ ${err.message}`); // graceful (R-0007 AC4)
+        showStudyReply(`⚠ ${err.message}`);
+      });
   }
   const studyButtons = document.getElementById("detail-study");
   for (const a of STUDY_ACTIONS) {

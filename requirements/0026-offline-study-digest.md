@@ -104,6 +104,17 @@ path is untouched.
 | 2026-06-14 | Scope to the four study actions, not free-chat | Study actions have grounded context to digest; free-chat does not — echoing there is acceptable |
 | 2026-06-14 | Reuse `rankResources` (R-0023) for "what to read first" | One ranking everywhere; the reading order matches the visible resource list |
 
+## Changelog
+
+- 2026-06-14 follow-up visibility fix: study replies posted only to the global
+  companion panel, which is fully occluded by the fixed `#plateau-detail` drawer
+  (z-index 25) while a plateau is open — so the digest generated but "did not
+  show". Added a `#detail-reply` region inside the drawer (under the study
+  buttons) and surfaced the reply there (offline digest, model reply, and
+  errors), cleared on plateau open. textContent-only (no injection). The global
+  transcript/history is unchanged (R-0023). Browser-verified on "Motion"; 184 JS
+  tests green; console clean.
+
 ## QA sign-off
 
 ## QA — R-0026 Offline study digest: the companion helps with no model connected

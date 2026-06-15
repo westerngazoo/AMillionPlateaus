@@ -262,6 +262,11 @@
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
       }
       .detail-study button:hover { background: #345780; }
+      .detail-reply {
+        font-size: 13px; line-height: 1.5; color: #d6e0ea; white-space: pre-wrap;
+        background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
+      }
+      .detail-reply[hidden] { display: none; }
       .detail-add { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
       .detail-add .detail-add-row { display: flex; gap: 6px; }
       .detail-add input[type="text"], .detail-add select {
@@ -587,6 +592,7 @@
            resources, via the bring-your-own model (R-0007). Buttons filled by main.js. -->
       <h3 class="detail-res-title">Study with your companion</h3>
       <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
+      <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
