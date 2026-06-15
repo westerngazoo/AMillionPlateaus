@@ -17,6 +17,7 @@ import init, {
   rank_wizards,
   crystallize_threshold,
   wizard_id_of,
+  mastery_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
@@ -51,6 +52,7 @@ import {
   bridgeResources,
 } from "./study.js";
 import { offlineDigest } from "./offline-digest.js";
+import { masteredTopics, MASTERY_KIND } from "./mastery.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -205,6 +207,17 @@ async function main() {
   function recompute() {
     reputation = log.reputation();
   }
+  // Topics this wizard has mastered (R-0030) — derived from the SAME verified log,
+  // refreshed alongside reputation. Mastery is a completion layer, NOT reach.
+  let mastered = masteredTopics(log.all(), myPubkey);
+  function recomputeMastered() {
+    mastered = masteredTopics(log.all(), myPubkey);
+  }
+  // Pin the JS MASTERY_KIND to the Rust source (one source of truth, R-0030 AC6).
+  console.assert(
+    mastery_kind() === MASTERY_KIND,
+    `MASTERY_KIND ${MASTERY_KIND} ≠ Rust mastery_kind() ${mastery_kind()}`,
+  );
 
   // The persona is the page's local lens. Null until the visitor chooses one; the
   // world is not interactive before then (R-0006 AC1). Phase 8: the persona only
@@ -268,6 +281,7 @@ async function main() {
       resources,
       peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
       focusedId, // transient travel highlight (R-0019); null most of the time
+      mastered, // ✓ on topics this wizard has mastered (R-0030)
     });
     const who = activePersona ? `${activePersona.name} · ` : "";
     hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges · ${resources.length} markers`;
@@ -330,6 +344,7 @@ async function main() {
   function ingest(json, { broadcast = true } = {}) {
     if (!log.add(json)) return false; // invalid signature or duplicate — inert
     recompute();
+    recomputeMastered(); // refresh ✓ set (own + discovered mastery events, R-0030)
     if (broadcast) {
       try {
         bus.broadcast(json);
@@ -368,6 +383,17 @@ async function main() {
       ingest(identity.sign_traversal(domain, e1, e2, e3, TRAVERSAL_DEPTH, plateau.id));
     } catch (err) {
       console.error("[mp] sign_traversal failed:", err);
+    }
+  }
+
+  // R-0030 — sign a mastery event for the topic (self-tested upstream). NOT
+  // reputation-bearing; ingest refreshes the ✓ set + redraws. Idempotent (the
+  // mastered SET dedupes by plateau id).
+  function signMastery(plateau) {
+    try {
+      ingest(identity.sign_mastery(plateau.id));
+    } catch (err) {
+      console.error("[mp] sign_mastery failed:", err);
     }
   }
 
@@ -896,6 +922,7 @@ async function main() {
   const detailReply = document.getElementById("detail-reply");
   const detailResources = document.getElementById("detail-resources");
   const detailBridge = document.getElementById("detail-bridge");
+  const detailMastery = document.getElementById("detail-mastery");
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
 
@@ -908,8 +935,42 @@ async function main() {
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
     renderStudyResources();
+    renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
     detail.hidden = false;
+  }
+
+  // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
+  // "Mark as mastered" which runs the Quiz me self-test and reveals a confirm
+  // ("I can answer these") that signs the mastery event. Self-attested gate —
+  // nothing is signed without running the test and confirming.
+  function renderMastery(p) {
+    detailMastery.replaceChildren();
+    if (mastered.has(p.id)) {
+      const done = document.createElement("span");
+      done.className = "mastered-badge";
+      done.textContent = "✓ Mastered";
+      detailMastery.append(done);
+      return;
+    }
+    const markBtn = document.createElement("button");
+    markBtn.type = "button";
+    markBtn.className = "mastery-mark";
+    markBtn.textContent = "Mark as mastered";
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "mastery-confirm";
+    confirm.textContent = "✓ I can answer these — mark mastered";
+    confirm.hidden = true; // only after the self-test runs
+    markBtn.addEventListener("click", () => {
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz")); // run the recall self-test
+      confirm.hidden = false; // now the attestation is available
+    });
+    confirm.addEventListener("click", () => {
+      signMastery(p); // ingest → recomputeMastered → draw
+      renderMastery(p); // becomes "✓ Mastered"
+    });
+    detailMastery.append(markBtn, confirm);
   }
 
   // A bridge is a CONNECTION, not a topic (R-0029): clicking it opens a read-only
@@ -1507,7 +1568,9 @@ async function main() {
   document.getElementById("reset-fog").addEventListener("click", () => {
     log.clear();
     recompute();
+    recomputeMastered(); // mastery lives in the log too — reset re-opens every topic (R-0030 AC5)
     renderDiscovery();
+    if (studyPlateau) renderMastery(studyPlateau); // refresh the open drawer's ✓ state
     draw();
   });
 

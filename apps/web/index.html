@@ -286,7 +286,17 @@
       #plateau-detail[data-mode="bridge"] #detail-study,
       #plateau-detail[data-mode="bridge"] #detail-reply,
       #plateau-detail[data-mode="bridge"] #detail-resources,
+      #plateau-detail[data-mode="bridge"] #detail-mastery,
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
+      /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
+      .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .mastery-mark, .mastery-confirm {
+        font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+      }
+      .mastery-confirm { background: #14463a; border-color: #1d6e56; color: #d6f5ea; }
+      .mastery-confirm[hidden] { display: none; }
+      .mastered-badge { font-size: 13px; color: #5dcaa5; font-weight: 500; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -625,6 +635,8 @@
       <h3 class="detail-res-title">Study with your companion</h3>
       <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
       <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
+      <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm. -->
+      <div id="detail-mastery" class="detail-mastery"><!-- mastery control, by main.js --></div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>

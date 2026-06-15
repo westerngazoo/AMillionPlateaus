@@ -17,7 +17,9 @@ use mp_domain::ga::Mv;
 use mp_domain::{
     Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceKind, ResourceState, WizardReputation,
 };
-use mp_identity::{Keypair, NostrEvent, Traversal, Vouch, KIND_TRAVERSAL, KIND_VOUCH};
+use mp_identity::{
+    Keypair, Mastery, NostrEvent, Traversal, Vouch, KIND_MASTERY, KIND_TRAVERSAL, KIND_VOUCH,
+};
 use uuid::Uuid;
 
 use crate::error::{EventError, QueryError, ReputationParseError};
@@ -350,6 +352,21 @@ pub fn sign_traversal_json(
     Ok(serde_json::to_string(&event)?)
 }
 
+/// R-0030 — sign a mastery event ("I have studied & self-tested this topic"),
+/// returning its NostrEvent JSON. Mirrors `sign_traversal_json` but is NOT
+/// reputation-bearing: `recompute` ignores `KIND_MASTERY`, so it never changes
+/// the GA multivector. Content is self-contained (`{plateau}`).
+pub fn sign_mastery_json(
+    kp: &Keypair,
+    plateau_id: &str,
+    created_at: u64,
+) -> Result<String, EventError> {
+    let plateau = Uuid::parse_str(plateau_id)?;
+    let content = serde_json::to_string(&Mastery { plateau })?;
+    let event = mp_identity::sign(kp, KIND_MASTERY, vec![], &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
+}
+
 /// SPEC-0010 AC2/AC5 — sign a vouch event for `vouched_pubkey`, returning its
 /// NostrEvent JSON. `from`/`to` are the grade-1 endpoints the recompute rebuilds
 /// the even-grade bridge rotor from (the only public Bridge path).
@@ -663,6 +680,46 @@ mod tests {
         assert_eq!(ranked.len(), 2);
         assert_eq!(ranked[0].pubkey, deep.pubkey_hex());
         assert!(ranked[0].reach > ranked[1].reach);
+    }
+
+    #[test]
+    fn mastery_signs_verifies_and_leaves_reputation_untouched() {
+        // R-0030 AC2/AC4/AC6: a mastery event is a real signed event (verifies,
+        // kind 30080, content {plateau}), but `recompute` ignores KIND_MASTERY,
+        // so reputation is byte-identical with vs. without it — even over a log
+        // that includes a vouch (recompute's order-sensitive phase).
+        let kp = Keypair::generate();
+        let other = Keypair::generate();
+        let domain = Uuid::new_v4();
+        let plateau = Uuid::new_v4();
+
+        let trav =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 1).unwrap();
+        let vouch = sign_vouch_json(
+            &kp,
+            &domain.to_string(),
+            &other.pubkey_hex(),
+            &[1.0, 0.0, 0.0],
+            &[0.0, 0.0, 1.0],
+            2,
+        )
+        .unwrap();
+        let mastery = sign_mastery_json(&kp, &plateau.to_string(), 3).unwrap();
+
+        // The mastery event is well-formed, verifiable, kind 30080, content {plateau}.
+        assert!(crate::verify_event(&mastery), "mastery verifies");
+        assert_eq!(crate::mastery_kind(), KIND_MASTERY);
+        let ev: NostrEvent = serde_json::from_str(&mastery).unwrap();
+        assert_eq!(ev.kind, KIND_MASTERY);
+        let m: Mastery = serde_json::from_str(&ev.content).unwrap();
+        assert_eq!(m.plateau, plateau);
+
+        // Reputation identical with vs. without the mastery event in the log.
+        let without = format!("[{trav},{vouch}]");
+        let with = format!("[{trav},{vouch},{mastery}]");
+        let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
+        let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
+        assert_eq!(rep_without, rep_with, "mastery must not change reputation");
     }
 
     #[test]

@@ -531,6 +531,17 @@ impl WasmIdentity {
             now_secs(),
         )?)
     }
+
+    /// R-0030 — sign a mastery event for `plateau_id`; returns the NostrEvent
+    /// JSON. NOT reputation-bearing (recompute ignores `KIND_MASTERY`), so it
+    /// never changes reach — it just records a verifiable "I mastered this".
+    pub fn sign_mastery(&self, plateau_id: &str) -> Result<String, JsError> {
+        Ok(convert::sign_mastery_json(
+            &self.inner,
+            plateau_id,
+            now_secs(),
+        )?)
+    }
 }
 
 impl Default for WasmIdentity {
@@ -571,6 +582,13 @@ pub fn rank_wizards(events_json: &str, domain: &str, k: usize) -> Result<JsValue
 #[wasm_bindgen]
 pub fn crystallize_threshold() -> f32 {
     mp_domain::CRYSTALLIZE_THRESHOLD
+}
+
+/// R-0030 — the mastery event kind. Exposed so the web app can pin its
+/// `MASTERY_KIND` constant to the Rust source (one source of truth).
+#[wasm_bindgen]
+pub fn mastery_kind() -> u32 {
+    mp_identity::KIND_MASTERY
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`

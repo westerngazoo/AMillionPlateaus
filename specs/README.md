@@ -64,3 +64,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0027](0027-seeded-example-resources.md) | Seeded example resources: fixed-id `seed_resource` + `SEED_RESOURCES` (Calculus/Algebra/Harmony) | R-0027 | Implemented |
 | [SPEC-0028](0028-cross-cutting-resources.md) | Cross-cutting resources: pure URL threading (`normalizeUrl`/`crossLinks`) + "Also covers" + multi-pin | R-0028 | Implemented |
 | [SPEC-0029](0029-clickable-bridges.md) | Clickable bridges: pure `pickBridge` hit-test + read-only connection view (`openBridge`) | R-0029 | Implemented |
+| [SPEC-0030](0030-topic-mastery.md) | Topic mastery: `KIND_MASTERY` signed event + pure `masteredTopics` + self-tested "Mark as mastered" + ✓ (recompute unchanged) | R-0030 | Implemented |

@@ -12,6 +12,7 @@ const BRIDGE = "rgba(180, 200, 220, 0.5)";
 const LABEL = "rgba(220, 230, 240, 0.85)";
 const MARKER = "#7fd0a0"; // Floating trail-marker glyph (R-0014)
 const MARKER_SOLID = "#ffd166"; // Crystallized marker — bedrock gold (R-0015)
+const MASTERED = "#5dcaa5"; // mastered-topic ✓ (R-0030)
 const RADIUS = 16;
 
 /// Draw bridges, plateaus, markers, then remote-wizard silhouettes.
@@ -20,7 +21,7 @@ const RADIUS = 16;
 /// presence list (`{ pubkey, plateau }`, R-0016); `reachable` is a Set of lit
 /// plateau ids. Returns the per-plateau screen points for hit-testing — peers are
 /// NOT added to it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [], focusedId = null }) {
+export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [], focusedId = null, mastered = new Set() }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -72,6 +73,16 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
       ctx.font = lit ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
+    }
+
+    // Mastered ✓ (R-0030): a small green check at the disc's upper-right. Purely
+    // additive — the disc radius / hit-test is unchanged.
+    if (mastered.has(p.id)) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = MASTERED;
+      ctx.font = "bold 14px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("✓", pt.x + RADIUS, pt.y - RADIUS + 4);
     }
     ctx.globalAlpha = 1;
   }

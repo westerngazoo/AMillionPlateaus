@@ -17,6 +17,10 @@ use crate::keys::Keypair;
 pub const KIND_TRAVERSAL: u32 = 30078;
 /// Vouch (reputation-bearing vote) kind.
 pub const KIND_VOUCH: u32 = 30079;
+/// Mastery kind (R-0030): "I have studied & self-tested this topic." A
+/// completion claim, NOT reputation — `recompute` ignores it, so it never
+/// changes the GA multivector (it sums only traversal/vouch).
+pub const KIND_MASTERY: u32 = 30080;
 
 /// A Nostr event (NIP-01 shape).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +64,14 @@ pub struct Vouch {
     pub vouched: String,
     pub from: [f32; 3],
     pub to: [f32; 3],
+}
+
+/// Mastery content payload (R-0030) — names the studied topic. Self-contained
+/// and **not read by [`crate::recompute`]** (mastery is a completion claim, not
+/// reputation): the only consumer is the client's derived "mastered" set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Mastery {
+    pub plateau: Uuid,
 }
 
 /// The canonical serialization whose SHA-256 is the event id (NIP-01):
