@@ -267,6 +267,33 @@
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
       }
       .detail-reply[hidden] { display: none; }
+      /* "Also covers" cross-links on a resource row (R-0028). */
+      .res-also { font-size: 12px; color: #8aa0b4; margin-top: 3px; }
+      .res-also-link {
+        background: none; border: none; color: #9fd0ff; cursor: pointer;
+        font: inherit; padding: 0; text-decoration: underline;
+      }
+      .res-also-link:hover { color: #cfe8ff; }
+      /* Multi-pin checklist in the add form (R-0028). */
+      .detail-add-also { font-size: 12px; color: #8aa0b4; }
+      .detail-add-also summary { cursor: pointer; }
+      .also-pin-list { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+      .also-pin-item { display: flex; align-items: center; gap: 6px; color: #cdd9e6; }
+      /* Bridge "connection" view (R-0029): shown only in bridge mode. */
+      #plateau-detail:not([data-mode="bridge"]) #detail-bridge { display: none; }
+      #plateau-detail[data-mode="bridge"] #detail-body,
+      #plateau-detail[data-mode="bridge"] .detail-res-title,
+      #plateau-detail[data-mode="bridge"] #detail-study,
+      #plateau-detail[data-mode="bridge"] #detail-reply,
+      #plateau-detail[data-mode="bridge"] #detail-resources,
+      #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
+      .bridge-connects { font-size: 14px; color: #cdd9e6; }
+      .bridge-topic {
+        background: none; border: none; color: #9fd0ff; cursor: pointer;
+        font: inherit; padding: 0; text-decoration: underline;
+      }
+      .bridge-topic:hover { color: #cfe8ff; }
+      .bridge-res-label { font-size: 12px; color: #8aa0b4; margin-top: 10px; }
       .detail-add { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
       .detail-add .detail-add-row { display: flex; gap: 6px; }
       .detail-add input[type="text"], .detail-add select {
@@ -586,6 +613,11 @@
         <h2 id="detail-name">Topic</h2>
         <button id="detail-close" type="button" aria-label="Close">×</button>
       </div>
+
+      <!-- Connection view (R-0029): shown only in bridge mode (data-mode="bridge"),
+           filled by main.js openBridge — the two topics + books that span both. -->
+      <div id="detail-bridge" class="detail-bridge"><!-- connection, by main.js --></div>
+
       <div id="detail-body" class="detail-body"><!-- rendered Markdown --></div>
 
       <!-- Study with your companion (R-0023): grounded in THIS plateau's body +
@@ -605,6 +637,11 @@
           <input id="detail-add-uri" type="text" placeholder="https://… (book, link, video)" autocomplete="off" />
           <button type="submit">Pin</button>
         </div>
+        <!-- Pin the same link to other topics too (R-0028): one book across many. -->
+        <details class="detail-add-also">
+          <summary>Also pin to other topics</summary>
+          <div id="detail-add-also-list" class="also-pin-list"><!-- checkboxes, by main.js --></div>
+        </details>
         <p id="detail-add-error" class="dp-error" hidden></p>
       </form>
     </aside>

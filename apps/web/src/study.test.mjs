@@ -6,7 +6,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { rankResources, buildPlateauStudyContext, STUDY_ACTIONS } from "./study.js";
+import {
+  rankResources,
+  buildPlateauStudyContext,
+  STUDY_ACTIONS,
+  normalizeUrl,
+  crossLinks,
+  bridgeResources,
+} from "./study.js";
 
 const res = (id, vote_count, over = {}) => ({
   id,
@@ -84,4 +91,81 @@ test("STUDY_ACTIONS are well-formed (label + non-empty prompt)", () => {
     assert.ok(a.label.length > 0);
     assert.ok(a.prompt.length > 0);
   }
+});
+
+// ── Cross-cutting resources (R-0028 / SPEC-0028) ───────────────────────────────
+
+test("normalizeUrl: http(s)-only, lowercases scheme/host, strips trailing slash, drops hash", () => {
+  assert.equal(normalizeUrl("HTTPS://Example.COM/Path/"), "https://example.com/Path");
+  assert.equal(normalizeUrl("https://ex.com/a?q=1#frag"), "https://ex.com/a?q=1");
+  assert.equal(normalizeUrl("https://ex.com"), "https://ex.com");
+  // path case is preserved (paths can be case-sensitive); query is part of the key
+  assert.notEqual(normalizeUrl("https://ex.com/a"), normalizeUrl("https://ex.com/a?utm=1"));
+  // non-http / empty / junk never group
+  for (const bad of ["", "  ", "javascript:alert(1)", "mailto:x@y.com", "ftp://h/f", "not a url"]) {
+    assert.equal(normalizeUrl(bad), "");
+  }
+});
+
+const r = (id, plateau_id, uri, vote_count = 0, over = {}) => ({
+  id,
+  plateau_id,
+  uri,
+  vote_count,
+  title: over.title ?? "T",
+  kind: over.kind ?? "Article",
+});
+
+test("crossLinks: other topics sharing the URL, excludes current, sorted by name, with max count", () => {
+  const plateaus = [
+    { id: "p1", name: "Calculus" },
+    { id: "p2", name: "Motion" },
+    { id: "p3", name: "Algebra" },
+  ];
+  const resources = [
+    r("a", "p1", "https://book.test/x"), // current
+    r("b", "p2", "https://book.test/x", 5),
+    r("c", "p3", "https://book.test/x/", 2), // trailing slash → same book
+    r("d", "p2", "https://other.test/y"), // different book, ignored
+  ];
+  const out = crossLinks({ resources, plateaus, uri: "https://book.test/x", currentPlateauId: "p1" });
+  assert.deepEqual(out.map((x) => x.name), ["Algebra", "Motion"]); // sorted by name, current excluded
+  assert.equal(out.find((x) => x.name === "Motion").count, 5);
+});
+
+test("crossLinks: empty/unsafe URL never groups; unique book → []", () => {
+  const plateaus = [{ id: "p1", name: "A" }, { id: "p2", name: "B" }];
+  assert.deepEqual(crossLinks({ resources: [r("a", "p2", "")], plateaus, uri: "", currentPlateauId: "p1" }), []);
+  assert.deepEqual(
+    crossLinks({ resources: [r("a", "p2", "https://x.test/lonely")], plateaus, uri: "https://x.test/other", currentPlateauId: "p1" }),
+    [],
+  );
+});
+
+test("crossLinks is deterministic across two calls", () => {
+  const plateaus = [{ id: "p2", name: "Motion" }, { id: "p3", name: "Algebra" }];
+  const resources = [r("b", "p2", "https://b.test/x"), r("c", "p3", "https://b.test/x")];
+  const args = { resources, plateaus, uri: "https://b.test/x", currentPlateauId: "p1" };
+  assert.deepEqual(crossLinks(args), crossLinks(args));
+});
+
+// ── Bridge resources (R-0029 / SPEC-0029) ──────────────────────────────────────
+
+test("bridgeResources: books whose URL is on BOTH endpoints, sorted by title then uri", () => {
+  const resources = [
+    r("a", "from", "https://book.test/feyn", 0, { title: "Feynman" }),
+    r("b", "to", "https://book.test/feyn", 0, { title: "Feynman" }), // spans both → kept
+    r("c", "from", "https://book.test/only-from"), // one side only → excluded
+    r("d", "to", "https://book.test/only-to"), // one side only → excluded
+    r("e", "from", ""), // unsafe → ignored
+  ];
+  const out = bridgeResources({ resources, fromId: "from", toId: "to" });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, "Feynman");
+  assert.equal(out[0].uri, "https://book.test/feyn");
+});
+
+test("bridgeResources: none span both → []; deterministic", () => {
+  const resources = [r("a", "from", "https://x.test/a"), r("b", "to", "https://x.test/b")];
+  assert.deepEqual(bridgeResources({ resources, fromId: "from", toId: "to" }), []);
 });

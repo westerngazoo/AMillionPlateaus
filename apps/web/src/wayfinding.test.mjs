@@ -7,7 +7,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { centerOn, zoomAt, clampScale, SCALE_MIN, SCALE_MAX } from "./wayfinding.js";
+import {
+  centerOn,
+  zoomAt,
+  clampScale,
+  SCALE_MIN,
+  SCALE_MAX,
+  pointToSegmentDistance,
+  pickBridge,
+} from "./wayfinding.js";
 import { project } from "./project.js";
 
 const CANVAS = { width: 800, height: 600 };
@@ -93,4 +101,50 @@ test("clampScale bounds both ends; a zoom past the edge leaves the origin unchan
 test("zoomAt is deterministic", () => {
   const v = { cx: 230, cy: 150, scale: 320 };
   assert.deepEqual(zoomAt(v, 1.15, 400, 300), zoomAt(v, 1.15, 400, 300));
+});
+
+// ── Bridge hit-test geometry (R-0029 / SPEC-0029) ──────────────────────────────
+
+test("pointToSegmentDistance: on-segment ≈ 0, perpendicular, zero-length, beyond-end clamps", () => {
+  // a point on the segment
+  assert.ok(pointToSegmentDistance(5, 0, 0, 0, 10, 0) < 1e-9);
+  // perpendicular distance to a horizontal segment
+  assert.equal(pointToSegmentDistance(5, 3, 0, 0, 10, 0), 3);
+  // zero-length segment → distance to A
+  assert.equal(pointToSegmentDistance(3, 4, 0, 0, 0, 0), 5);
+  // beyond endpoint B clamps to B (not the infinite line)
+  assert.equal(pointToSegmentDistance(20, 0, 0, 0, 10, 0), 10);
+});
+
+const seg = (id, from, to) => ({ id, from, to });
+
+test("pickBridge: nearest within tol; null when beyond; inclusive boundary", () => {
+  const points = new Map([
+    ["A", { x: 0, y: 0 }],
+    ["B", { x: 100, y: 0 }],
+  ]);
+  const bridges = [seg("b1", "A", "B")];
+  // 3px off the line → within tol 6
+  assert.equal(pickBridge({ bridges, points, mx: 50, my: 3, tol: 6 }), "b1");
+  // exactly at the tolerance boundary (6px) → INCLUSIVE, still selectable
+  assert.equal(pickBridge({ bridges, points, mx: 50, my: 6, tol: 6 }), "b1");
+  // just beyond tol → null
+  assert.equal(pickBridge({ bridges, points, mx: 50, my: 6.5, tol: 6 }), null);
+});
+
+test("pickBridge: missing endpoint skipped; same-distance tie → smallest id (order-independent)", () => {
+  const points = new Map([
+    ["A", { x: 0, y: 0 }],
+    ["B", { x: 100, y: 0 }],
+    ["C", { x: 0, y: 100 }],
+    // "D" intentionally absent
+  ]);
+  // a bridge with a missing endpoint is skipped (not a crash, not a hit)
+  assert.equal(pickBridge({ bridges: [seg("bx", "A", "D")], points, mx: 50, my: 0, tol: 6 }), null);
+  // two bridges share endpoint A; cursor on A → distance 0 to both → smallest id wins,
+  // regardless of array order
+  const b1 = seg("b1", "A", "B");
+  const b2 = seg("b2", "A", "C");
+  assert.equal(pickBridge({ bridges: [b1, b2], points, mx: 0, my: 0, tol: 6 }), "b1");
+  assert.equal(pickBridge({ bridges: [b2, b1], points, mx: 0, my: 0, tol: 6 }), "b1");
 });

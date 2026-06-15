@@ -64,3 +64,69 @@ export const STUDY_ACTIONS = [
     prompt: "Ask me three short questions, one at a time, to check my understanding of this topic.",
   },
 ];
+
+// ── Cross-cutting resources (R-0028 / SPEC-0028) ───────────────────────────────
+// A book/link that covers several topics is "the same book" iff it shares a
+// normalized URL. Resources stay single-anchor; these PURE helpers thread them
+// for display. No DOM/network/GA.
+
+/**
+ * Normalize a URL for "same book" grouping: http(s) only (else "" → never
+ * groups), lowercase scheme+host, strip trailing slashes, keep path+query, drop
+ * the hash. `new URL` is a standard global in node and the browser; malformed or
+ * unsafe input returns "" and never throws.
+ */
+export function normalizeUrl(uri = "") {
+  const s = String(uri).trim();
+  if (!/^https?:\/\//i.test(s)) return "";
+  try {
+    const u = new URL(s);
+    return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The OTHER plateaus whose resources share `uri` — the "Also covers" set.
+ * Deterministic: excludes `currentPlateauId`, one row per plateau (max
+ * `vote_count` kept for an optional `●N`), sorted by name then id. Empty/unsafe
+ * URL → []. Pure.
+ */
+export function crossLinks({ resources = [], plateaus = [], uri, currentPlateauId } = {}) {
+  const key = normalizeUrl(uri);
+  if (!key) return [];
+  const nameOf = new Map(plateaus.map((p) => [p.id, p.name]));
+  const best = new Map(); // plateauId -> max vote_count
+  for (const r of resources) {
+    if (normalizeUrl(r.uri) !== key || r.plateau_id === currentPlateauId) continue;
+    if (!nameOf.has(r.plateau_id)) continue;
+    const prev = best.get(r.plateau_id);
+    if (prev === undefined || r.vote_count > prev) best.set(r.plateau_id, r.vote_count);
+  }
+  return [...best.entries()]
+    .map(([id, count]) => ({ id, name: nameOf.get(id), count }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Resources whose URL appears on BOTH endpoints of a bridge — the books that
+ * span the connection (R-0029). One row per shared URL with a representative
+ * title/kind/uri, sorted by title then uri. Pure.
+ */
+export function bridgeResources({ resources = [], fromId, toId } = {}) {
+  const onFrom = new Set();
+  const onTo = new Set();
+  const meta = new Map(); // url -> { title, kind, uri }
+  for (const r of resources) {
+    const key = normalizeUrl(r.uri);
+    if (!key) continue;
+    if (r.plateau_id === fromId) onFrom.add(key);
+    if (r.plateau_id === toId) onTo.add(key);
+    if (!meta.has(key)) meta.set(key, { title: r.title, kind: r.kind, uri: r.uri });
+  }
+  return [...onFrom]
+    .filter((k) => onTo.has(k))
+    .map((k) => meta.get(k))
+    .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
+}

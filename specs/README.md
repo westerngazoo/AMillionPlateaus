@@ -62,3 +62,5 @@ field. The build order across requirements and specs is in
 | [SPEC-0025](0025-vr-immersive-visualization.md) | VR/immersive: Godot client over the unchanged core (`GraphSource`, native GDExtension + web wasm, pure `place_node`/`plan_labels`) | R-0025 | Accepted |
 | [SPEC-0026](0026-offline-study-digest.md) | Offline study digest: pure `offline-digest.js` behind the study actions when no model is connected | R-0026 | Implemented |
 | [SPEC-0027](0027-seeded-example-resources.md) | Seeded example resources: fixed-id `seed_resource` + `SEED_RESOURCES` (Calculus/Algebra/Harmony) | R-0027 | Implemented |
+| [SPEC-0028](0028-cross-cutting-resources.md) | Cross-cutting resources: pure URL threading (`normalizeUrl`/`crossLinks`) + "Also covers" + multi-pin | R-0028 | Implemented |
+| [SPEC-0029](0029-clickable-bridges.md) | Clickable bridges: pure `pickBridge` hit-test + read-only connection view (`openBridge`) | R-0029 | Implemented |

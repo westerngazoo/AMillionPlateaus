@@ -95,4 +95,21 @@ export const SEED_RESOURCES = [
     title: "Open Music Theory",
     uri: "https://viva.pressbooks.pub/openmusictheory/",
   },
+  // A cross-cutting book (R-0028): the same URL on Calculus AND Motion, so it
+  // threads ("Also covers") and is the book the "equations of motion" connection
+  // (R-0029) surfaces. Same uri, distinct ids — not a collision.
+  {
+    id: "00000000-0000-0000-0000-0000000000f6",
+    plateau: P.Calculus,
+    kind: "Article",
+    title: "The Feynman Lectures on Physics, Vol. I",
+    uri: "https://www.feynmanlectures.caltech.edu/I_toc.html",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000f7",
+    plateau: P.Motion,
+    kind: "Article",
+    title: "The Feynman Lectures on Physics, Vol. I",
+    uri: "https://www.feynmanlectures.caltech.edu/I_toc.html",
+  },
 ];

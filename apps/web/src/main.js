@@ -43,13 +43,19 @@ import { assembleMessages, sendTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
-import { rankResources, buildPlateauStudyContext, STUDY_ACTIONS } from "./study.js";
+import {
+  rankResources,
+  buildPlateauStudyContext,
+  STUDY_ACTIONS,
+  crossLinks,
+  bridgeResources,
+} from "./study.js";
 import { offlineDigest } from "./offline-digest.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
-import { centerOn, zoomAt } from "./wayfinding.js";
+import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
@@ -862,6 +868,21 @@ async function main() {
       // Visiting a topic is reading it: open the read view (R-0020). Purely
       // presentational — it does not edit the graph or change reachability.
       openPlateau(hit);
+      return;
+    }
+    // No lit disc hit. Test bridges ONLY if the cursor is not over ANY disc (lit
+    // or fogged) — a disc of any fog state takes precedence, so a fogged disc
+    // never opens a bridge behind it (R-0029 AC1/AC4). Opening a bridge is
+    // read-only (openBridge signs no traversal / announces no presence / no edit).
+    const overAnyDisc = graph.plateaus().some((p) => {
+      const pt = points.get(p.id);
+      return pt && (pt.x - mx) ** 2 + (pt.y - my) ** 2 <= RADIUS * RADIUS;
+    });
+    if (overAnyDisc) return;
+    const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
+    if (bid) {
+      const b = graph.bridges().find((x) => x.id === bid);
+      if (b) openBridge(b, graph);
     }
   });
 
@@ -874,10 +895,12 @@ async function main() {
   const detailBody = document.getElementById("detail-body");
   const detailReply = document.getElementById("detail-reply");
   const detailResources = document.getElementById("detail-resources");
+  const detailBridge = document.getElementById("detail-bridge");
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
 
   function openPlateau(p) {
+    detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
     studyPlateau = p;
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
@@ -885,6 +908,69 @@ async function main() {
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
     renderStudyResources();
+    renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
+    detail.hidden = false;
+  }
+
+  // A bridge is a CONNECTION, not a topic (R-0029): clicking it opens a read-only
+  // view of the concept, the two topics it joins (each opens its Study view), and
+  // the books that span both ends (R-0028). It signs NO traversal, announces NO
+  // presence, and makes NO graph edit — a bridge is not a reachable position.
+  function openBridge(b, graph) {
+    detail.dataset.mode = "bridge"; // CSS hides body/study/reply/resources/add
+    detailName.textContent = b.concept || "Connection";
+    const plats = graph.plateaus();
+    const byId = new Map(plats.map((p) => [p.id, p]));
+    detailBridge.replaceChildren();
+
+    const head = document.createElement("p");
+    head.className = "bridge-connects";
+    head.append(document.createTextNode("Connects: "));
+    for (const [i, endId] of [b.from, b.to].entries()) {
+      const p = byId.get(endId);
+      if (i > 0) head.append(document.createTextNode(" ↔ "));
+      if (!p) {
+        head.append(document.createTextNode("(unknown)"));
+        continue;
+      }
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "bridge-topic";
+      link.textContent = p.name; // textContent — inert
+      link.addEventListener("click", () => openPlateau(p));
+      head.append(link);
+    }
+    detailBridge.append(head);
+
+    const shared = bridgeResources({ resources: graph.resources(), fromId: b.from, toId: b.to });
+    const label = document.createElement("p");
+    label.className = "bridge-res-label";
+    label.textContent = shared.length ? "Books that span both:" : "No resources span both topics yet.";
+    detailBridge.append(label);
+    if (shared.length) {
+      const ul = document.createElement("ul");
+      ul.className = "res-list";
+      for (const r of shared) {
+        const li = document.createElement("li");
+        const kind = document.createElement("span");
+        kind.className = "res-kind";
+        kind.textContent = r.kind;
+        li.append(kind, document.createTextNode(" "));
+        const href = safeHref(r.uri);
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = r.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(r.title));
+        }
+        ul.append(li);
+      }
+      detailBridge.append(ul);
+    }
     detail.hidden = false;
   }
 
@@ -904,10 +990,10 @@ async function main() {
   // chokepoint for the link, exactly as the old flat list did.
   function renderStudyResources() {
     if (!studyPlateau) return;
-    const rs = doc
-      .to_graph()
-      .resources()
-      .filter((r) => r.plateau_id === studyPlateau.id);
+    const g = doc.to_graph();
+    const allResources = g.resources(); // full set — to thread cross-cutting books (R-0028)
+    const allPlateaus = g.plateaus();
+    const rs = allResources.filter((r) => r.plateau_id === studyPlateau.id);
     detailResources.replaceChildren();
     if (rs.length === 0) {
       const empty = document.createElement("p");
@@ -962,6 +1048,32 @@ async function main() {
         renderStudyResources();
       });
       li.append(vote);
+
+      // "Also covers" (R-0028): other topics where the SAME book (URL) is pinned.
+      const also = crossLinks({
+        resources: allResources,
+        plateaus: allPlateaus,
+        uri: r.uri,
+        currentPlateauId: studyPlateau.id,
+      });
+      if (also.length) {
+        const line = document.createElement("div");
+        line.className = "res-also";
+        line.append(document.createTextNode("Also covers: "));
+        also.forEach((t, i) => {
+          if (i > 0) line.append(document.createTextNode(" · "));
+          const link = document.createElement("button");
+          link.type = "button";
+          link.className = "res-also-link";
+          link.textContent = t.count > 0 ? `${t.name} ●${Math.round(t.count)}` : t.name;
+          link.addEventListener("click", () => {
+            const target = allPlateaus.find((p) => p.id === t.id);
+            if (target) openPlateau(target);
+          });
+          line.append(link);
+        });
+        li.append(line);
+      }
       ul.append(li);
     }
     detailResources.append(ul);
@@ -978,6 +1090,27 @@ async function main() {
     o.textContent = k;
     addKind.appendChild(o);
   }
+  // R-0028 multi-pin: a collapsed checklist of OTHER plateaus, repopulated each
+  // time a plateau opens, so one add can pin the same link across several topics.
+  const alsoPinList = document.getElementById("detail-add-also-list");
+  function renderAlsoPin(currentId) {
+    alsoPinList.replaceChildren();
+    const others = doc
+      .to_graph()
+      .plateaus()
+      .filter((p) => p.id !== currentId)
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const p of others) {
+      const label = document.createElement("label");
+      label.className = "also-pin-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = p.id;
+      label.append(cb, document.createTextNode(" " + p.name)); // name via textNode — inert
+      alsoPinList.append(label);
+    }
+  }
+
   document.getElementById("detail-add-form").addEventListener("submit", (e) => {
     e.preventDefault();
     if (!studyPlateau) return;
@@ -994,11 +1127,21 @@ async function main() {
     }
     addError.hidden = true;
     doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri); // R-0014 binding
+    // Also pin the same link to each checked topic (best-effort, per-id — a stale
+    // id must not abort the rest or the pump/persist, parity with the stone path).
+    for (const cb of alsoPinList.querySelectorAll("input:checked")) {
+      try {
+        doc.add_resource(cb.value, spec.title, spec.kind, spec.uri);
+      } catch {
+        /* stale/unknown plateau id — skip this one */
+      }
+    }
     sync.pump();
     pumpPeer();
     persist();
     draw();
     renderStudyResources();
+    renderAlsoPin(studyPlateau.id); // reset the checklist (unchecked)
     addTitle.value = "";
     addUri.value = "";
   });
