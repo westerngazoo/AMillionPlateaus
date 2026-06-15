@@ -59,3 +59,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0024](0024-map-zoom-lod.md) | Map zoom, pan & label level-of-detail | POC — Navigation | Met |
 | [R-0025](0025-vr-immersive-visualization.md) | VR / immersive visualization: walk the true 3D GA geometry | Phase 11 — Immersive (VR) | Accepted |
 | [R-0026](0026-offline-study-digest.md) | Offline study digest: the companion helps with no model connected | POC — Knowledge content | Met |
+| [R-0027](0027-seeded-example-resources.md) | Seeded example resources: the world ships with things to read | POC — Knowledge content | Met |

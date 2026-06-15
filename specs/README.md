@@ -61,3 +61,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0024](0024-map-zoom-lod.md) | Map zoom/pan (cursor-anchored `zoomAt`) + label overlap-culling (`planLabels`) | R-0024 | Implemented |
 | [SPEC-0025](0025-vr-immersive-visualization.md) | VR/immersive: Godot client over the unchanged core (`GraphSource`, native GDExtension + web wasm, pure `place_node`/`plan_labels`) | R-0025 | Accepted |
 | [SPEC-0026](0026-offline-study-digest.md) | Offline study digest: pure `offline-digest.js` behind the study actions when no model is connected | R-0026 | Implemented |
+| [SPEC-0027](0027-seeded-example-resources.md) | Seeded example resources: fixed-id `seed_resource` + `SEED_RESOURCES` (Calculus/Algebra/Harmony) | R-0027 | Implemented |

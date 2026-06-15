@@ -309,6 +309,37 @@ impl WasmCrdtDoc {
         Ok(id)
     }
 
+    /// Upsert a resource with a DETERMINISTIC id — the seed sibling of
+    /// `add_resource` (which mints a random id), mirroring `seed_plateau`. The
+    /// `resources` map is id-keyed, so re-seeding the same id overwrites the same
+    /// entry: reload/sync converge (R-0004) and never duplicate. Votes live in
+    /// the separate `votes` map keyed by this id and the count/state are derived
+    /// in `to_graph`, so re-seeding leaves any earned stones intact (R-0027 AC3).
+    pub fn seed_resource(
+        &mut self,
+        id: &str,
+        plateau_id: &str,
+        title: &str,
+        kind: &str,
+        uri: &str,
+    ) -> Result<(), JsError> {
+        let id = Uuid::parse_str(id)?;
+        let pid = Uuid::parse_str(plateau_id)?;
+        self.inner
+            .plateau(&pid)?
+            .ok_or_else(|| JsError::new("unknown plateau"))?;
+        let mut r = Resource::new(
+            pid,
+            title,
+            convert::parse_resource_kind(kind),
+            uri,
+            Uuid::nil(),
+        );
+        r.id = id; // deterministic seed id (same pattern as seed_plateau's `p.id = id`)
+        self.inner.add_resource(&r)?;
+        Ok(())
+    }
+
     /// Project this replica into a queryable [`WasmGraph`] (re-validating every
     /// decoded entity's GA invariants). This is how the fog-world renders the
     /// synced state.

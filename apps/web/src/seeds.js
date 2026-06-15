@@ -50,3 +50,49 @@ export const SEED_BRIDGES = [
   // taken — next free id is …ba (the architect caught a …b4 collision here).
   { id: "00000000-0000-0000-0000-0000000000ba", from: P.Calculus, to: P.Motion, concept: "equations of motion" },
 ];
+
+// Example resources so the Study view / "what to read first" aren't empty on a
+// fresh world (R-0027). Fixed ids in the …f namespace (a/b/c/d are taken; e is
+// skipped to avoid eyeballing it as the GA e-axes) → seeded as an idempotent,
+// convergent upsert via WasmCrdtDoc::seed_resource. Seeded un-stoned; votes are
+// earned. Curated public links only; nothing is fetched (R-0023 boundary).
+export const SEED_RESOURCES = [
+  // Calculus
+  {
+    id: "00000000-0000-0000-0000-0000000000f1",
+    plateau: P.Calculus,
+    kind: "Video",
+    title: "3Blue1Brown — Essence of Calculus",
+    uri: "https://www.youtube.com/playlist?list=PLZHQObOWTQDMsr9K-rj53DwVRMYO3t5Yr",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000f2",
+    plateau: P.Calculus,
+    kind: "Article",
+    title: "Khan Academy — Calculus 1",
+    uri: "https://www.khanacademy.org/math/calculus-1",
+  },
+  // Algebra
+  {
+    id: "00000000-0000-0000-0000-0000000000f3",
+    plateau: P.Algebra,
+    kind: "Article",
+    title: "Khan Academy — Algebra basics",
+    uri: "https://www.khanacademy.org/math/algebra-basics",
+  },
+  // Harmony
+  {
+    id: "00000000-0000-0000-0000-0000000000f4",
+    plateau: P.Harmony,
+    kind: "Interactive",
+    title: "musictheory.net — Lessons",
+    uri: "https://www.musictheory.net/lessons",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000f5",
+    plateau: P.Harmony,
+    kind: "Article",
+    title: "Open Music Theory",
+    uri: "https://viva.pressbooks.pub/openmusictheory/",
+  },
+];

@@ -275,6 +275,85 @@ fn add_resource_round_trips_and_validates_anchor() {
     );
 }
 
+// R-0027: seed_resource is the fixed-id, idempotent, CONVERGENT upsert sibling of
+// add_resource (which mints a random id). It must (a) not duplicate on re-seed,
+// (b) converge across independently-started replicas under merge (R-0004 AC4),
+// and (c) reject an unknown plateau anchor.
+#[wasm_bindgen_test]
+fn seed_resource_is_idempotent_and_convergent() {
+    #[derive(serde::Deserialize)]
+    struct Row {
+        id: String,
+    }
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let pid = "00000000-0000-0000-0000-0000000000a4";
+    let rid = "00000000-0000-0000-0000-0000000000f1";
+
+    // (a) local idempotency — seeding the same id twice yields ONE entry.
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    doc.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("seed plateau");
+    doc.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("seed 1");
+    doc.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("seed 2");
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<Row> =
+        serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode");
+    assert_eq!(rows.len(), 1, "re-seeding the same id must not duplicate");
+    assert_eq!(rows[0].id, rid, "the fixed seed id is preserved");
+
+    // (b) cross-replica convergence — two independent replicas seed the SAME id,
+    // then merge to quiescence → still exactly one entry.
+    let mut a = WasmCrdtDoc::new().expect("A");
+    let mut b = WasmCrdtDoc::new().expect("B");
+    a.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("A plateau");
+    b.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("B plateau");
+    a.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("A resource");
+    b.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("B resource");
+    let mut sa = WasmSyncSession::new();
+    let mut sb = WasmSyncSession::new();
+    let mut quiet = false;
+    let mut guard = 0;
+    while !quiet {
+        quiet = true;
+        if let Some(msg) = a.generate_message(&mut sa) {
+            b.receive_message(&mut sb, &msg).expect("B applies A");
+            quiet = false;
+        }
+        if let Some(msg) = b.generate_message(&mut sb) {
+            a.receive_message(&mut sa, &msg).expect("A applies B");
+            quiet = false;
+        }
+        guard += 1;
+        assert!(guard < 100, "sync did not converge");
+    }
+    let ga = a.to_graph().expect("project A");
+    let merged: Vec<Row> =
+        serde_wasm_bindgen::from_value(ga.resources().expect("resources")).expect("decode");
+    assert_eq!(
+        merged.len(),
+        1,
+        "independent replicas converge to one resource at the shared id"
+    );
+    assert_eq!(
+        a.root_keys(),
+        vec!["bridges", "plateaus", "resources", "votes"]
+    );
+
+    // (c) unknown plateau anchor errors — never a silent orphan.
+    let mut d2 = WasmCrdtDoc::new().expect("doc2");
+    assert!(
+        d2.seed_resource(rid, "99999999-0000-0000-0000-000000000000", "x", "Note", "")
+            .is_err(),
+        "seeding onto a missing plateau must error"
+    );
+}
+
 // R-0015 AC2/AC3/AC8: voting accrues and crossing the threshold flips the
 // projected state Floating → Crystallized — derived, never client-set.
 #[wasm_bindgen_test]

@@ -7,12 +7,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { SEED_PLATEAUS, SEED_BRIDGES, P } from "./seeds.js";
+import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { MATH_DOMAIN, MUSIC_DOMAIN, PHYSICS_DOMAIN, DOMAINS } from "./persona.js";
 
-test("every seed id is unique across plateaus AND bridges (id-keyed upsert safety)", () => {
-  const ids = [...SEED_PLATEAUS.map((p) => p.id), ...SEED_BRIDGES.map((b) => b.id)];
+// The exact strings parse_resource_kind matches (convert.rs); "Note" is its
+// fallback, so a typo here would silently degrade to Note in Rust — guard the
+// exact set so the typo is caught in JS instead (R-0027 AC5).
+const KNOWN_KINDS = new Set(["Article", "Video", "Interactive", "Paper", "Tool"]);
+
+test("every seed id is unique across plateaus, bridges AND resources (id-keyed upsert safety)", () => {
+  const ids = [
+    ...SEED_PLATEAUS.map((p) => p.id),
+    ...SEED_BRIDGES.map((b) => b.id),
+    ...SEED_RESOURCES.map((r) => r.id),
+  ];
   assert.equal(new Set(ids).size, ids.length, `duplicate seed id found in: ${ids.join(", ")}`);
+});
+
+test("every seed resource anchors to a seeded plateau and uses a known kind (R-0027)", () => {
+  const plateauIds = new Set(SEED_PLATEAUS.map((p) => p.id));
+  assert.ok(SEED_RESOURCES.length >= 3, "ships a handful of example resources");
+  for (const r of SEED_RESOURCES) {
+    assert.ok(plateauIds.has(r.plateau), `resource "${r.title}" anchors to an unknown plateau`);
+    assert.ok(KNOWN_KINDS.has(r.kind), `resource "${r.title}" has unknown kind ${r.kind}`);
+    assert.match(r.uri, /^https:\/\//, `resource "${r.title}" must be an https link`);
+  }
+  // At least three distinct topics carry resources (incl. Harmony, the owner's).
+  const topics = new Set(SEED_RESOURCES.map((r) => r.plateau));
+  assert.ok(topics.size >= 3, "resources spread across ≥3 topics");
+  assert.ok(SEED_RESOURCES.some((r) => r.plateau === P.Harmony), "Harmony has a resource");
 });
 
 test("every seed bridge endpoint is a seeded plateau", () => {
