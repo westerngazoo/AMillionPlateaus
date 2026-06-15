@@ -44,6 +44,7 @@ import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
 import { rankResources, buildPlateauStudyContext, STUDY_ACTIONS } from "./study.js";
+import { offlineDigest } from "./offline-digest.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -992,22 +993,30 @@ async function main() {
   // bring-your-own model turn the global companion uses. The plateau body —
   // possibly imported/synced peer content — rides to the configured endpoint under
   // the SAME trust boundary as R-0007 (the visitor's own endpoint, key in-browser).
-  function studyAction(prompt) {
+  function studyAction(action) {
     if (!studyPlateau || !activePersona) return;
     const rs = doc
       .to_graph()
       .resources()
       .filter((r) => r.plateau_id === studyPlateau.id);
-    const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
     companion.hidden = false;
-    appendMessage("user", prompt);
-    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    appendMessage("user", action.prompt);
+    // OFFLINE (no model): a real, local extractive digest of THIS plateau's notes
+    // + ranked resources instead of the echo (R-0026). Pure + synchronous.
+    if (modelConfig.kind === "fake") {
+      const reply = offlineDigest({ action: action.key, plateau: studyPlateau, resources: rs });
+      appendMessage("bot", reply);
+      history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+      return;
+    }
+    const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
       .then((reply) => {
         appendMessage("bot", reply);
         // Shares the global transcript by design — one companion, one history
         // (R-0023): a plateau answer can context a later global turn, and vice-versa.
-        history.push({ role: "user", content: prompt }, { role: "assistant", content: reply });
+        history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
       })
       .catch((err) => appendMessage("error", `⚠ ${err.message}`)); // graceful (R-0007 AC4)
   }
@@ -1016,7 +1025,7 @@ async function main() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = a.label;
-    btn.addEventListener("click", () => studyAction(a.prompt));
+    btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
   }
 
