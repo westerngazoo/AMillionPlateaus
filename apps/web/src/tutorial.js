@@ -15,8 +15,8 @@ export const TUTORIAL_STEPS = [
     body: "Pick a career lens — it orients you and lights where you start. A geometer wakes facing maths; a composer, music. Change it anytime.",
   },
   {
-    title: "The fog is earned",
-    body: "Topics you haven't earned sit in fog. Reach lights up as you explore adjacent topics — depth, not shortcuts.",
+    title: "Colour is your progress",
+    body: "Every topic is open — click any to study it. Colour shows how far you've got: unexplored, studying, then mastered once you quiz yourself. Your covered trail lights between the topics you've walked.",
   },
   {
     title: "Grow & travel",

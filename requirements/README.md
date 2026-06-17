@@ -64,3 +64,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0029](0029-clickable-bridges.md) | Clickable bridges: open a connection | POC — Navigation | Met |
 | [R-0030](0030-topic-mastery.md) | Topic mastery: close a topic you've studied (self-tested, signed) | POC — Knowledge content | Met |
 | [R-0031](0031-community-approved-topics.md) | Community-approved topics: a topic the crowd has mastered | POC — Knowledge content | Accepted |
+| [R-0033](0033-browsable-progress-map.md) | Browsable progress map: explore freely, color by progress, trace your trail | POC — Navigation | Met |

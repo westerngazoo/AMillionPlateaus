@@ -52,7 +52,7 @@ import {
   bridgeResources,
 } from "./study.js";
 import { offlineDigest } from "./offline-digest.js";
-import { masteredTopics, MASTERY_KIND } from "./mastery.js";
+import { masteredTopics, visitedTopics, MASTERY_KIND } from "./mastery.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -207,11 +207,14 @@ async function main() {
   function recompute() {
     reputation = log.reputation();
   }
-  // Topics this wizard has mastered (R-0030) — derived from the SAME verified log,
-  // refreshed alongside reputation. Mastery is a completion layer, NOT reach.
+  // Progress derived from the SAME verified log (R-0030 mastered, R-0033 visited),
+  // refreshed alongside reputation. Both are completion layers, NOT reach: a topic
+  // is "studying" once visited, "mastered" once quizzed.
   let mastered = masteredTopics(log.all(), myPubkey);
-  function recomputeMastered() {
+  let visited = visitedTopics(log.all(), myPubkey);
+  function recomputeProgress() {
     mastered = masteredTopics(log.all(), myPubkey);
+    visited = visitedTopics(log.all(), myPubkey);
   }
   // Pin the JS MASTERY_KIND to the Rust source (one source of truth, R-0030 AC6).
   console.assert(
@@ -268,23 +271,22 @@ async function main() {
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
-    // EARNED reach comes purely from the recomputed reputation (empty log ⇒ none).
-    const earned = new Set(graph.reachable_plateaus(JSON.stringify(reputation)));
-    // Trailheads are lit on top as a navigable start (orientation-gated, not reach).
-    const lit = new Set(earned);
-    for (const id of trailheadIds()) lit.add(id);
+    // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
+    // browsable. Reach/reputation is still recomputed (it grounds the companion +
+    // discovery, R-0010); it just no longer gates or colours the map.
     points = render(ctx, {
       plateaus,
       bridges,
-      reachable: lit,
       view: VIEW,
       resources,
       peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
       focusedId, // transient travel highlight (R-0019); null most of the time
-      mastered, // ✓ on topics this wizard has mastered (R-0030)
+      visited, // studying set (R-0033)
+      mastered, // mastered set — ✓ + gold (R-0030)
     });
+    const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
-    hud.textContent = `${who}${lit.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges · ${resources.length} markers`;
+    hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges`;
   }
 
   // ── Ephemeral presence (SPEC-0016 / R-0016) ─────────────────────────────────
@@ -344,7 +346,7 @@ async function main() {
   function ingest(json, { broadcast = true } = {}) {
     if (!log.add(json)) return false; // invalid signature or duplicate — inert
     recompute();
-    recomputeMastered(); // refresh ✓ set (own + discovered mastery events, R-0030)
+    recomputeProgress(); // refresh studying/mastered sets (own + discovered events, R-0030/R-0033)
     if (broadcast) {
       try {
         bus.broadcast(json);
@@ -716,7 +718,7 @@ async function main() {
     const hint = document.createElement("p");
     hint.className = "author-hint";
     hint.textContent =
-      "Sliders set direction only — which way the lens faces, never how strong it is. Face nothing and the world stays fogged until you explore.";
+      "Sliders set direction only — which way the lens faces, never how strong it is. It orients where you begin; every topic is open to explore.";
 
     const actions = document.createElement("div");
     actions.className = "author-actions";
@@ -863,16 +865,11 @@ async function main() {
     const my = e.clientY - rect.top;
 
     const graph = doc.to_graph();
-    // Clickable = EARNED reach plus the always-navigable trailheads, so the very
-    // first traversal (with an empty log) is reachable from a trailhead.
-    const clickable = new Set(graph.reachable_plateaus(JSON.stringify(reputation)));
-    for (const id of trailheadIds()) clickable.add(id);
-
-    // Hit-test the nearest LIT plateau within its disc.
+    // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
+    // (no reachability gate). Opening one is "studying" it.
     let hit = null;
     let best = RADIUS * RADIUS;
     for (const p of graph.plateaus()) {
-      if (!clickable.has(p.id)) continue;
       const pt = points.get(p.id);
       const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
       if (d <= best) {
@@ -885,26 +882,21 @@ async function main() {
       // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
       myPlateau = hit.id;
       announcePresence();
-      // Sign a traversal toward the plateau (R-0010 AC2/AC3). Grow the plateau's OWN
-      // domain bucket (fallback: the persona's first faced domain — an authored
-      // persona may face nothing, R-0009 AC6). The signed event — never any graph
-      // edit — feeds reputation, so reach stays off the CRDT (AC6).
+      // Opening = studying: sign a traversal toward the plateau (R-0010 AC2/AC3),
+      // growing the plateau's OWN domain bucket (fallback: the persona's first
+      // faced domain — an authored persona may face nothing, R-0009 AC6). The
+      // signed event — never any graph edit — feeds reputation (now demoted to
+      // rank/discovery; the map colours by progress, R-0033).
       const domain = DOMAIN_OF.get(hit.id) ?? activePersona.orient[0]?.domain;
       if (domain) signTraversal(domain, hit);
       // Visiting a topic is reading it: open the read view (R-0020). Purely
-      // presentational — it does not edit the graph or change reachability.
+      // presentational — it does not edit the graph.
       openPlateau(hit);
       return;
     }
-    // No lit disc hit. Test bridges ONLY if the cursor is not over ANY disc (lit
-    // or fogged) — a disc of any fog state takes precedence, so a fogged disc
-    // never opens a bridge behind it (R-0029 AC1/AC4). Opening a bridge is
-    // read-only (openBridge signs no traversal / announces no presence / no edit).
-    const overAnyDisc = graph.plateaus().some((p) => {
-      const pt = points.get(p.id);
-      return pt && (pt.x - mx) ** 2 + (pt.y - my) ** 2 <= RADIUS * RADIUS;
-    });
-    if (overAnyDisc) return;
+    // No disc hit → test bridges (R-0029). Every disc is now a hit candidate, so
+    // "cursor over a disc" ⇔ `hit` is set above — a disc already wins precedence
+    // over a bridge, and opening a bridge stays read-only.
     const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
     if (bid) {
       const b = graph.bridges().find((x) => x.id === bid);
@@ -1568,7 +1560,7 @@ async function main() {
   document.getElementById("reset-fog").addEventListener("click", () => {
     log.clear();
     recompute();
-    recomputeMastered(); // mastery lives in the log too — reset re-opens every topic (R-0030 AC5)
+    recomputeProgress(); // progress lives in the log too — reset → every topic unexplored (R-0030/R-0033)
     renderDiscovery();
     if (studyPlateau) renderMastery(studyPlateau); // refresh the open drawer's ✓ state
     draw();

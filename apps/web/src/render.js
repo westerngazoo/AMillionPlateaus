@@ -1,27 +1,33 @@
 // render.js — draw the graph to a <canvas>. Pure presentation: no GA math (the
-// projection lives in project.js; reachability comes from the wasm core). Lit
-// plateaus are drawn solid; fogged ones dimmed and low-alpha (R-0005 AC4).
+// projection lives in project.js). Discs are coloured by PROGRESS (R-0033):
+// unexplored / studying (visited) / mastered (✓), with the covered trail drawn
+// between visited topics. The map is browsable — nothing is dimmed/locked.
 
 import { project } from "./project.js";
 import { planLabels } from "./labels.js";
 
-const LIT = "#ffd166";
-const LIT_RING = "#fff3c4";
-const FOG = "#3a4a5a";
+// Progress palette (R-0033): the map colours by how far you've got, not reach.
+const UNEXPLORED = "#2f3e50"; // never visited — a clickable node, not "locked"
+const UNEXPLORED_RING = "#4a5d72";
+const STUDYING = "#e0a64a"; // visited, not yet quizzed
+const MASTERED_FILL = "#ffd166"; // quizzed — bedrock gold
+const LIT_RING = "#fff3c4"; // ring on a mastered disc
+const COVERED = "#6fb6e0"; // a bridge between two visited topics — your trail
 const BRIDGE = "rgba(180, 200, 220, 0.5)";
 const LABEL = "rgba(220, 230, 240, 0.85)";
 const MARKER = "#7fd0a0"; // Floating trail-marker glyph (R-0014)
 const MARKER_SOLID = "#ffd166"; // Crystallized marker — bedrock gold (R-0015)
-const MASTERED = "#5dcaa5"; // mastered-topic ✓ (R-0030)
+const MASTERED = "#5dcaa5"; // mastered-topic ✓ glyph (R-0030)
 const RADIUS = 16;
 
 /// Draw bridges, plateaus, markers, then remote-wizard silhouettes.
 /// `plateaus`/`bridges`/`resources` are the DTO arrays from
 /// `WasmGraph.plateaus()/bridges()/resources()`; `peers` is the ephemeral
-/// presence list (`{ pubkey, plateau }`, R-0016); `reachable` is a Set of lit
-/// plateau ids. Returns the per-plateau screen points for hit-testing — peers are
-/// NOT added to it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, reachable, view, resources = [], peers = [], focusedId = null, mastered = new Set() }) {
+/// presence list (`{ pubkey, plateau }`, R-0016); `visited`/`mastered` are Sets
+/// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
+/// Returns the per-plateau screen points for hit-testing — peers are NOT added to
+/// it, so silhouettes are unclickable and never affect hit-testing.
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set() }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -30,18 +36,21 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
     points.set(p.id, project(p.position, view));
   }
 
-  // Label level-of-detail (R-0024): decide which plateau names to draw so none
-  // overlap (focused → lit → rest, greedy box-pack). Discs all draw regardless.
-  const labelled = planLabels({ plateaus, points, reachable, focusedId });
+  // Label level-of-detail (R-0024): which plateau names to draw so none overlap
+  // (priority focused → in-progress → rest, greedy box-pack). The `visited` set is
+  // the priority tier post-R-0033 (studied topics keep label priority).
+  const labelled = planLabels({ plateaus, points, reachable: visited, focusedId });
 
-  // Bridges first, so plateau discs sit on top.
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = BRIDGE;
+  // Bridges first, so plateau discs sit on top. A bridge between two VISITED
+  // plateaus is "covered" — your trail (R-0033).
   ctx.font = "12px system-ui, sans-serif";
   for (const b of bridges) {
     const a = points.get(b.from);
     const c = points.get(b.to);
     if (!a || !c) continue;
+    const covered = visited.has(b.from) && visited.has(b.to);
+    ctx.lineWidth = covered ? 2.5 : 2;
+    ctx.strokeStyle = covered ? COVERED : BRIDGE;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(c.x, c.y);
@@ -52,39 +61,37 @@ export function render(ctx, { plateaus, bridges, reachable, view, resources = []
     }
   }
 
-  // Plateaus.
+  // Plateaus — coloured by PROGRESS (R-0033), not earned reach. All full alpha:
+  // nothing is locked, so unexplored discs read as clickable nodes.
   for (const p of plateaus) {
     const pt = points.get(p.id);
-    const lit = reachable.has(p.id);
-    ctx.globalAlpha = lit ? 1 : 0.35;
+    const done = mastered.has(p.id);
+    const studying = !done && visited.has(p.id);
 
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = lit ? LIT : FOG;
+    ctx.fillStyle = done ? MASTERED_FILL : studying ? STUDYING : UNEXPLORED;
     ctx.fill();
-    if (lit) {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = LIT_RING;
-      ctx.stroke();
-    }
+    ctx.lineWidth = done ? 3 : 1.5;
+    ctx.strokeStyle = done ? LIT_RING : UNEXPLORED_RING;
+    ctx.stroke();
 
     if (labelled.has(p.id)) {
-      ctx.fillStyle = lit ? "#1b2330" : LABEL;
-      ctx.font = lit ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
+      // Dark text reads on the bright studying/mastered fills; light on unexplored.
+      ctx.fillStyle = done || studying ? "#1b2330" : LABEL;
+      ctx.font = done || studying ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
     }
 
-    // Mastered ✓ (R-0030): a small green check at the disc's upper-right. Purely
-    // additive — the disc radius / hit-test is unchanged.
-    if (mastered.has(p.id)) {
-      ctx.globalAlpha = 1;
+    // Mastered ✓ (R-0030): a small check at the disc's upper-right. Additive —
+    // the disc radius / hit-test is unchanged.
+    if (done) {
       ctx.fillStyle = MASTERED;
       ctx.font = "bold 14px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("✓", pt.x + RADIUS, pt.y - RADIUS + 4);
     }
-    ctx.globalAlpha = 1;
   }
 
   // Travel focus ring (R-0019): a transient dashed halo around the topic the

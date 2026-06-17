@@ -42,21 +42,21 @@ export const ARCHETYPES = [
     id: "geometer",
     name: "The Geometer",
     domainLabel: "Mathematics",
-    blurb: "Wakes facing Mathematics — arithmetic in reach, all else in fog.",
+    blurb: "Wakes facing Mathematics — begins at Arithmetic.",
     orient: [{ domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } }],
   },
   {
     id: "composer",
     name: "The Composer",
     domainLabel: "Music",
-    blurb: "Wakes facing Music — rhythm in reach, all else in fog.",
+    blurb: "Wakes facing Music — begins at Rhythm.",
     orient: [{ domain: MUSIC_DOMAIN, dir: { e1: 0, e2: 0, e3: 1 } }],
   },
   {
     id: "polymath",
     name: "The Polymath",
     domainLabel: "Mathematics × Music",
-    blurb: "A foothold in each domain — arithmetic and rhythm lit, the depths fogged.",
+    blurb: "A foothold in each domain — begins at Arithmetic and Rhythm.",
     orient: [
       { domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } },
       { domain: MUSIC_DOMAIN, dir: { e1: 0, e2: 0, e3: 1 } },
@@ -66,7 +66,7 @@ export const ARCHETYPES = [
     id: "physicist",
     name: "The Physicist",
     domainLabel: "Physics",
-    blurb: "Wakes facing Physics — motion in reach, all else in fog.",
+    blurb: "Wakes facing Physics — begins at Motion.",
     orient: [{ domain: PHYSICS_DOMAIN, dir: { e1: 0, e2: 1, e3: 0 } }],
   },
 ];
@@ -102,9 +102,9 @@ function labelForDomain(domain) {
 
 // A one-line human blurb describing which way the lens faces. Pure, no GA.
 function describeOrientation(faced) {
-  if (faced.length === 0) return "Faces nothing yet — the world stays in fog until you orient.";
+  if (faced.length === 0) return "Faces nothing yet — orient toward a domain to set where you begin.";
   const labels = faced.map(({ domain }) => labelForDomain(domain));
-  return `Wakes facing ${labels.join(" and ")} — that neighbourhood lit, all else in fog.`;
+  return `Wakes facing ${labels.join(" and ")} — your starting orientation.`;
 }
 
 // Pure: { name, orient, tone } → an archetype-shaped persona. Drops any domain whose
