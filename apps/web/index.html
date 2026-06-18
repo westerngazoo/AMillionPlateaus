@@ -287,6 +287,7 @@
       #plateau-detail[data-mode="bridge"] #detail-reply,
       #plateau-detail[data-mode="bridge"] #detail-resources,
       #plateau-detail[data-mode="bridge"] #detail-mastery,
+      #plateau-detail[data-mode="bridge"] #detail-proof,
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -297,6 +298,34 @@
       .mastery-confirm { background: #14463a; border-color: #1d6e56; color: #d6f5ea; }
       .mastery-confirm[hidden] { display: none; }
       .mastered-badge { font-size: 13px; color: #5dcaa5; font-weight: 500; }
+      /* Prove it (R-0032): an AI-checked proof path. Static sibling of #detail-mastery
+         so renderMastery()'s replaceChildren never destroys the draft. */
+      .detail-proof { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+      .detail-proof[hidden] { display: none; }
+      .proof-note { font-size: 12px; color: #8aa0b4; }
+      .proof-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+      .proof-palette button {
+        font-size: 12px; padding: 3px 7px; border-radius: 5px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .proof-palette button:hover { background: #283546; }
+      #proof-input {
+        width: 100%; box-sizing: border-box; min-height: 90px; resize: vertical;
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px;
+        padding: 8px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .proof-preview {
+        min-height: 20px; font-size: 13px; color: #cdd9e6; padding: 6px 8px;
+        background: #11181f; border: 1px solid #1f2937; border-radius: 6px;
+      }
+      .proof-preview:empty::before { content: "preview"; color: #5a6b7d; }
+      .proof-check {
+        align-self: flex-start; font-size: 12px; padding: 5px 12px; border-radius: 6px;
+        cursor: pointer; border: 1px solid #1d6e56; background: #14463a; color: #d6f5ea;
+      }
+      .proof-check:hover { background: #195441; }
+      .proof-feedback { font-size: 13px; color: #cdd9e6; white-space: pre-wrap; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -635,8 +664,24 @@
       <h3 class="detail-res-title">Study with your companion</h3>
       <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
       <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
-      <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm. -->
+      <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm.
+           A model-gated "Prove it" toggle (R-0032) is appended here by main.js. -->
       <div id="detail-mastery" class="detail-mastery"><!-- mastery control, by main.js --></div>
+
+      <!-- Prove it (R-0032): an AI-checked proof path, shown only when a model is
+           connected and "Prove it" is clicked. A STATIC SIBLING of #detail-mastery
+           (not a child) so renderMastery's replaceChildren never wipes the draft. -->
+      <div id="detail-proof" class="detail-proof" hidden>
+        <p class="proof-note">
+          An AI tutor judges your proof — feedback + a verdict, not a formal verifier.
+          A pass signs the same mastery as the self-test.
+        </p>
+        <div id="proof-palette" class="proof-palette"><!-- symbol buttons, by main.js --></div>
+        <textarea id="proof-input" placeholder="Write your proof or explanation. Use $…$ for math, e.g. $\frac{d}{dx}x^n = n x^{n-1}$."></textarea>
+        <div id="proof-preview" class="proof-preview"><!-- live KaTeX preview, by main.js --></div>
+        <button id="proof-check" class="proof-check" type="button">Check my proof</button>
+        <div id="proof-feedback" class="proof-feedback"><!-- model feedback, by main.js --></div>
+      </div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>

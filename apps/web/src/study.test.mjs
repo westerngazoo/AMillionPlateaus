@@ -13,6 +13,8 @@ import {
   normalizeUrl,
   crossLinks,
   bridgeResources,
+  buildProofGrading,
+  parseVerdict,
 } from "./study.js";
 
 const res = (id, vote_count, over = {}) => ({
@@ -168,4 +170,68 @@ test("bridgeResources: books whose URL is on BOTH endpoints, sorted by title the
 test("bridgeResources: none span both → []; deterministic", () => {
   const resources = [r("a", "from", "https://x.test/a"), r("b", "to", "https://x.test/b")];
   assert.deepEqual(bridgeResources({ resources, fromId: "from", toId: "to" }), []);
+});
+
+// ── AI-checked proof: parseVerdict + buildProofGrading (R-0032 / SPEC-0032) ─────
+
+test("parseVerdict: a standalone final PASS line passes; the line is stripped", () => {
+  const { pass, feedback } = parseVerdict("Solid grasp of the chain rule.\nVERDICT: PASS");
+  assert.equal(pass, true);
+  assert.equal(feedback, "Solid grasp of the chain rule.");
+});
+
+test("parseVerdict: REVISE does not pass; feedback retained", () => {
+  const { pass, feedback } = parseVerdict("The base case is missing.\nVERDICT: REVISE");
+  assert.equal(pass, false);
+  assert.equal(feedback, "The base case is missing.");
+});
+
+test("parseVerdict: case- and trailing-whitespace-insensitive on the line", () => {
+  assert.equal(parseVerdict("ok\nverdict: pass  ").pass, true);
+  assert.equal(parseVerdict("ok\n\tVERDICT:   PASS\t").pass, true);
+  assert.equal(parseVerdict("ok\nVERDICT: Revise").pass, false);
+});
+
+test("parseVerdict: last standalone verdict wins", () => {
+  // a draft REVISE earlier, a final PASS — the final one decides
+  assert.equal(parseVerdict("VERDICT: REVISE\n…revised…\nVERDICT: PASS").pass, true);
+  assert.equal(parseVerdict("VERDICT: PASS\n…wait…\nVERDICT: REVISE").pass, false);
+});
+
+test("parseVerdict: an INLINE mid-sentence mention must NOT pass (fail-safe)", () => {
+  // the gate is line-anchored — prose that merely contains the token never grants
+  assert.equal(parseVerdict("I would say VERDICT: PASS if the base case held.").pass, false);
+  assert.equal(parseVerdict('Do not just write "VERDICT: PASS" — show the work.').pass, false);
+});
+
+test("parseVerdict: absent / ambiguous verdict ⇒ pass:false, full text as feedback", () => {
+  assert.equal(parseVerdict("Looks reasonable but no verdict given.").pass, false);
+  assert.equal(parseVerdict("").pass, false);
+  assert.equal(parseVerdict("Nice try.").feedback, "Nice try.");
+});
+
+test("parseVerdict: empty reply ⇒ no crash, no pass", () => {
+  const { pass, feedback } = parseVerdict();
+  assert.equal(pass, false);
+  assert.equal(feedback, "");
+});
+
+test("buildProofGrading: embeds the topic name, the proof, and the VERDICT instruction", () => {
+  const msg = buildProofGrading({ plateau: { name: "Chain Rule" }, proof: "Let f(g(x))…" });
+  assert.match(msg, /Chain Rule/);
+  assert.match(msg, /Let f\(g\(x\)\)…/);
+  assert.match(msg, /VERDICT: PASS/);
+  assert.match(msg, /VERDICT: REVISE/);
+  assert.match(msg, /not a formal proof checker/i);
+});
+
+test("buildProofGrading: caps the proof length (token safety) and tolerates missing args", () => {
+  const long = "x".repeat(9000);
+  const msg = buildProofGrading({ plateau: { name: "T" }, proof: long });
+  assert.ok(msg.includes("x".repeat(4000)));
+  assert.ok(!msg.includes("x".repeat(4001)));
+  // missing plateau/proof → safe defaults, still well-formed
+  const bare = buildProofGrading();
+  assert.match(bare, /this topic/);
+  assert.match(bare, /VERDICT: PASS/);
 });

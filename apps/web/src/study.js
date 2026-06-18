@@ -65,6 +65,49 @@ export const STUDY_ACTIONS = [
   },
 ];
 
+// ── AI-checked proof (R-0032 / SPEC-0032) ──────────────────────────────────────
+// A "Prove it" mastery path: the learner writes a proof, the model judges it
+// (feedback + a verdict), a PASS signs the R-0030 mastery. Pure helpers only —
+// no DOM/network/GA. The model is a JUDGE, not a formal verifier.
+
+const PROOF_CAP = 4000; // bound the proof we send the model (token safety)
+
+/**
+ * The grading USER message: the topic name + the learner's proof + the verdict
+ * instruction. The plateau grounding rides separately (assembleMessages). Pure.
+ */
+export function buildProofGrading({ plateau, proof } = {}) {
+  const name = plateau?.name ?? "this topic";
+  const p = String(proof ?? "").slice(0, PROOF_CAP);
+  return [
+    `I'm demonstrating my understanding of "${name}". My proof / explanation:`,
+    "",
+    p,
+    "",
+    "You are a tutor giving JUDGMENT, not a formal proof checker. Judge whether " +
+      "this correctly demonstrates understanding of THIS topic, grounded ONLY in " +
+      "its notes above. Give brief, specific feedback. Then end with EXACTLY one " +
+      "final line: `VERDICT: PASS` if it holds, or `VERDICT: REVISE` if it needs work.",
+  ].join("\n");
+}
+
+/**
+ * Parse the model's verdict → `{ pass, feedback }`. Detection is LINE-ANCHORED
+ * (a standalone final `VERDICT: PASS`/`REVISE`), so a mid-sentence mention in the
+ * model's prose never passes; the last standalone verdict wins; an absent or
+ * ambiguous verdict ⇒ `pass: false` (fail-safe — never auto-grant mastery).
+ * `feedback` strips the verdict line(s). Pure + deterministic. NOTE: only the
+ * MODEL's reply is passed here — never the learner's proof — so the gate can't
+ * be self-granted by writing the token in the proof.
+ */
+export function parseVerdict(reply = "") {
+  const text = String(reply);
+  const last = [...text.matchAll(/^[ \t]*VERDICT:\s*(PASS|REVISE)\b/gim)].pop();
+  const pass = last ? last[1].toUpperCase() === "PASS" : false;
+  const feedback = text.replace(/^[ \t]*VERDICT:\s*(PASS|REVISE)[ \t]*$/gim, "").trim();
+  return { pass, feedback: feedback || text.trim() };
+}
+
 // ── Cross-cutting resources (R-0028 / SPEC-0028) ───────────────────────────────
 // A book/link that covers several topics is "the same book" iff it shares a
 // normalized URL. Resources stay single-anchor; these PURE helpers thread them

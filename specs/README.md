@@ -66,4 +66,5 @@ field. The build order across requirements and specs is in
 | [SPEC-0029](0029-clickable-bridges.md) | Clickable bridges: pure `pickBridge` hit-test + read-only connection view (`openBridge`) | R-0029 | Implemented |
 | [SPEC-0030](0030-topic-mastery.md) | Topic mastery: `KIND_MASTERY` signed event + pure `masteredTopics` + self-tested "Mark as mastered" + ✓ (recompute unchanged) | R-0030 | Implemented |
 | [SPEC-0031](0031-community-approved-topics.md) | Community-approved topics: pure `communityApproved` distinct-wizard count + bedrock overlay ring | R-0031 | Implemented |
+| [SPEC-0032](0032-ai-checked-proof-mastery.md) | Math mastery by AI-checked proof: pure `parseVerdict`/`buildProofGrading` + model-gated "Prove it" box wired to `signMastery` | R-0032 | Implemented |
 | [SPEC-0033](0033-browsable-progress-map.md) | Browsable progress map: ungate clicks + `visitedTopics` + progress palette (unexplored/studying/mastered) + covered trail | R-0033 | Implemented |

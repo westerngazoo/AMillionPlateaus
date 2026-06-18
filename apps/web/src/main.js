@@ -50,6 +50,8 @@ import {
   STUDY_ACTIONS,
   crossLinks,
   bridgeResources,
+  buildProofGrading,
+  parseVerdict,
 } from "./study.js";
 import { offlineDigest } from "./offline-digest.js";
 import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
@@ -921,6 +923,21 @@ async function main() {
   const detailResources = document.getElementById("detail-resources");
   const detailBridge = document.getElementById("detail-bridge");
   const detailMastery = document.getElementById("detail-mastery");
+  // Prove it (R-0032): the AI-checked proof box is a STATIC SIBLING of
+  // #detail-mastery (so renderMastery's replaceChildren never wipes the draft);
+  // its nodes are queried once here and wired once below.
+  const detailProof = document.getElementById("detail-proof");
+  const proofPalette = document.getElementById("proof-palette");
+  const proofInput = document.getElementById("proof-input");
+  const proofPreview = document.getElementById("proof-preview");
+  const proofCheck = document.getElementById("proof-check");
+  const proofFeedback = document.getElementById("proof-feedback");
+  function hideProofBox() {
+    detailProof.hidden = true;
+    proofInput.value = "";
+    proofPreview.replaceChildren();
+    proofFeedback.textContent = "";
+  }
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
 
@@ -932,6 +949,7 @@ async function main() {
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
+    hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
     renderStudyResources();
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
@@ -969,6 +987,20 @@ async function main() {
       renderMastery(p); // becomes "✓ Mastered"
     });
     detailMastery.append(markBtn, confirm);
+    // R-0032 — "Prove it (AI-checked)": only when a model is connected (offline
+    // has no judge, so the self-attest path above stands alone). Toggles the
+    // sibling #detail-proof box; opening a different topic hides + clears it.
+    if (modelConfig.kind !== "fake") {
+      const proveBtn = document.createElement("button");
+      proveBtn.type = "button";
+      proveBtn.className = "mastery-mark";
+      proveBtn.textContent = "Prove it (AI-checked)";
+      proveBtn.addEventListener("click", () => {
+        detailProof.hidden = !detailProof.hidden;
+        if (!detailProof.hidden) proofInput.focus();
+      });
+      detailMastery.append(proveBtn);
+    }
   }
 
   // A bridge is a CONNECTION, not a topic (R-0029): clicking it opens a read-only
@@ -1251,6 +1283,78 @@ async function main() {
     btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
   }
+
+  // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
+  // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS
+  // verdict it signs the SAME mastery as the self-test (signMastery → ✓ + the
+  // community count). The model is a JUDGE, not a verifier (the note says so);
+  // the verdict parse is fail-safe. Wired once — the box is a static sibling, so
+  // a draft survives renderMastery's replaceChildren.
+  const PROOF_SYMBOLS = [
+    ["∀", "\\forall "], ["∃", "\\exists "], ["∈", "\\in "], ["≤", "\\le "],
+    ["≥", "\\ge "], ["⇒", "\\Rightarrow "], ["⇔", "\\iff "], ["√", "\\sqrt{}"],
+    ["∑", "\\sum"], ["∫", "\\int"], ["a/b", "\\frac{}{}"], ["lim", "\\lim_{}"],
+    ["$ $", "$$"],
+  ];
+  function insertAtCursor(el, text) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    const brace = text.indexOf("{}"); // park the caret inside the first {} if any
+    const caret = brace >= 0 ? start + brace + 1 : start + text.length;
+    el.selectionStart = el.selectionEnd = caret;
+    el.focus();
+    el.dispatchEvent(new Event("input")); // refresh the live preview
+  }
+  for (const [label, latex] of PROOF_SYMBOLS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => insertAtCursor(proofInput, latex));
+    proofPalette.append(b);
+  }
+  proofInput.addEventListener("input", () => {
+    // R-0020 SAFE path: same sanitiser as a plateau body — the learner's
+    // LaTeX/markdown is inert (no innerHTML injection), then KaTeX typesets it.
+    proofPreview.innerHTML = renderMarkdown(proofInput.value);
+    typesetMath(proofPreview);
+  });
+  proofCheck.addEventListener("click", () => {
+    if (!studyPlateau || !activePersona) return;
+    const proof = proofInput.value;
+    if (!proof.trim()) {
+      proofFeedback.textContent = "Write a proof or explanation first."; // signs nothing
+      return;
+    }
+    const p = studyPlateau;
+    const rs = doc
+      .to_graph()
+      .resources()
+      .filter((r) => r.plateau_id === p.id);
+    const grounding = buildPlateauStudyContext({ plateau: p, resources: rs });
+    // Empty history ([]) — grading is a stateless turn, not the chat transcript.
+    // Only the MODEL's reply reaches parseVerdict (the proof rides in the user
+    // message), so a learner can't self-grant by writing the verdict token.
+    const messages = assembleMessages(
+      voiceFor(activePersona),
+      grounding,
+      [],
+      buildProofGrading({ plateau: p, proof }),
+    );
+    proofFeedback.textContent = "Checking…";
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        const { pass, feedback } = parseVerdict(reply);
+        proofFeedback.textContent = feedback;
+        if (pass) {
+          signMastery(p); // the ONLY sign path — proof mastery == self-test mastery
+          renderMastery(p); // #detail-mastery becomes "✓ Mastered"
+        }
+      })
+      .catch((err) => {
+        proofFeedback.textContent = `⚠ ${err.message}`; // graceful, signs nothing
+      });
+  });
 
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
