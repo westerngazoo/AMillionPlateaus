@@ -40,23 +40,32 @@ export function buildProofGrading({ plateau, proof } = {}) {
 // Parse the model's verdict. Fail-safe: only an explicit PASS passes; an absent or
 // ambiguous verdict ⇒ revise (never auto-grant mastery). `feedback` strips the
 // verdict line(s). Pure + deterministic.
+const VERDICT_LINE = /^[ \t]*VERDICT:\s*(PASS|REVISE)\b/i;
+const VERDICT_TAIL = 3; // only the trailing lines decide (the model ENDS with the verdict)
 export function parseVerdict(reply = "") {
   const text = String(reply);
-  // LINE-ANCHORED detection (mirrors the strip) — a mid-sentence "VERDICT: PASS"
-  // in the model's prose must NOT pass (fail-safe). Last standalone verdict wins.
-  const last = [...text.matchAll(/^[ \t]*VERDICT:\s*(PASS|REVISE)\b/gim)].pop();
-  const pass = last ? last[1].toUpperCase() === "PASS" : false;
+  // LINE-ANCHORED + TRAILING-ONLY: only a standalone VERDICT line among the last
+  // few non-empty lines decides — a mid-sentence mention, OR a verdict echoed
+  // earlier in the body, must NOT pass (fail-safe). Last verdict in the tail wins.
+  const tail = text.split(/\r?\n/).filter((l) => l.trim() !== "").slice(-VERDICT_TAIL);
+  let pass = false;
+  for (const line of tail) {
+    const m = VERDICT_LINE.exec(line);
+    if (m) pass = m[1].toUpperCase() === "PASS";
+  }
   const feedback = text.replace(/^[ \t]*VERDICT:\s*(PASS|REVISE)[ \t]*$/gim, "").trim();
   return { pass, feedback: feedback || text.trim() };
 }
 ```
 
-The detection regex is **line-anchored** (`^…`, multiline), matching the strip —
-so only a standalone final `VERDICT: PASS` line passes; an inline mention
-(`"… VERDICT: PASS …"`), a quoted instruction, or an absent token ⇒ `pass:false`.
-And the **proof text never reaches `parseVerdict`** — only the model's reply does
-(the proof rides in the user message), so a learner can't self-grant by writing
-the token in their own proof.
+The detection is **line-anchored AND trailing-only** — only a standalone
+`VERDICT:` line among the last `VERDICT_TAIL` non-empty lines counts (the prompt
+asks the model to END with one verdict line). So an inline mention
+(`"… VERDICT: PASS …"`), a quoted instruction, an absent token, **or a verdict
+echoed earlier in the body** (e.g. the model quoting the learner's proof, which
+itself contains the token) all ⇒ `pass:false`. And the **proof text never reaches
+`parseVerdict`** — only the model's reply does (the proof rides in the user
+message), so a learner can't self-grant by writing the token in their own proof.
 
 ### 2.2 `main.js` — the "Prove it" path (in `renderMastery`)
 
@@ -167,6 +176,13 @@ Maps to R-0032 AC:
 
 ## Changelog
 
+- 2026-06-18 hardening (post-QA): `parseVerdict` detection is now **trailing-only**
+  (last `VERDICT_TAIL=3` non-empty lines) in addition to line-anchored — closes the
+  QA-noted edge where a verdict line *echoed* from the learner's proof in the
+  model's reply could parse as a pass. The proof still never reaches `parseVerdict`;
+  this hardens the model-behavior edge. +3 unit tests (echo overridden by a final
+  REVISE; body-echoed PASS with no trailing verdict ⇒ no pass; final PASS + sign-off
+  still passes). Suite 220 green. Pure-function-only — no UI/integration change.
 - 2026-06-18 created (Draft) — "Prove it" LaTeX proof path: pure
   `parseVerdict`/`buildProofGrading` + a model-gated proof box wired to
   `signMastery`. Pending architect review, then `Accepted`.

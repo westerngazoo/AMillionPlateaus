@@ -91,19 +91,35 @@ export function buildProofGrading({ plateau, proof } = {}) {
   ].join("\n");
 }
 
+// Only a verdict in the reply's TRAILING lines decides the gate. The prompt asks
+// the model to END with exactly one VERDICT line, so a verdict appearing earlier
+// — e.g. the model echoing the learner's proof, which itself contains the token —
+// must NOT grant mastery. We scan the last few non-empty lines (a little slack for
+// a closing sign-off after the verdict); the last verdict among them wins.
+const VERDICT_LINE = /^[ \t]*VERDICT:\s*(PASS|REVISE)\b/i;
+const VERDICT_TAIL = 3;
+
 /**
  * Parse the model's verdict → `{ pass, feedback }`. Detection is LINE-ANCHORED
- * (a standalone final `VERDICT: PASS`/`REVISE`), so a mid-sentence mention in the
- * model's prose never passes; the last standalone verdict wins; an absent or
- * ambiguous verdict ⇒ `pass: false` (fail-safe — never auto-grant mastery).
- * `feedback` strips the verdict line(s). Pure + deterministic. NOTE: only the
- * MODEL's reply is passed here — never the learner's proof — so the gate can't
- * be self-granted by writing the token in the proof.
+ * and TRAILING-ONLY: only a standalone `VERDICT: PASS`/`REVISE` among the last
+ * `VERDICT_TAIL` non-empty lines counts, so neither a mid-sentence mention nor a
+ * verdict echoed earlier in the body passes; the last verdict in the tail wins;
+ * an absent or ambiguous verdict ⇒ `pass: false` (fail-safe — never auto-grant
+ * mastery). `feedback` strips the verdict line(s). Pure + deterministic. NOTE:
+ * only the MODEL's reply is passed here — never the learner's proof — so the gate
+ * can't be self-granted by writing the token in the proof.
  */
 export function parseVerdict(reply = "") {
   const text = String(reply);
-  const last = [...text.matchAll(/^[ \t]*VERDICT:\s*(PASS|REVISE)\b/gim)].pop();
-  const pass = last ? last[1].toUpperCase() === "PASS" : false;
+  const tail = text
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== "")
+    .slice(-VERDICT_TAIL);
+  let pass = false;
+  for (const line of tail) {
+    const m = VERDICT_LINE.exec(line);
+    if (m) pass = m[1].toUpperCase() === "PASS"; // last verdict in the tail wins
+  }
   const feedback = text.replace(/^[ \t]*VERDICT:\s*(PASS|REVISE)[ \t]*$/gim, "").trim();
   return { pass, feedback: feedback || text.trim() };
 }
