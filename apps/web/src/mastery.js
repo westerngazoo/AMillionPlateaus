@@ -56,3 +56,41 @@ export function visitedTopics(events = [], pubkey) {
   }
   return out;
 }
+
+// ── Community approval (R-0031 / SPEC-0031) ────────────────────────────────────
+// A topic the crowd has mastered. Counted from the SAME verified corpus
+// (own + discovered mastery events) — never the CRDT. Pubkey-AGNOSTIC, unlike
+// masteredTopics. Raw distinct-pubkey count this phase (Sybil-resistant weighting
+// by the master's reputation is a future Rust-side refinement, R-0031 §4).
+
+// Distinct wizards a topic needs before it's community-approved (canonical).
+// A wizard COUNT (R-0015's crystallize threshold is a Rust vote-weight sum; this
+// has no GA semantics, so it lives in JS).
+export const COMMUNITY_THRESHOLD = 3;
+
+/** plateauId → number of DISTINCT pubkeys with a (verified) mastery event for it. */
+export function masteryCounts(events = []) {
+  const byTopic = new Map(); // plateauId → Set<pubkey>
+  for (const e of events) {
+    if (!e || e.kind !== MASTERY_KIND) continue;
+    try {
+      const plateau = JSON.parse(e.content)?.plateau;
+      if (!plateau) continue;
+      let who = byTopic.get(plateau);
+      if (!who) byTopic.set(plateau, (who = new Set()));
+      who.add(e.pubkey);
+    } catch {
+      /* malformed content — skip */
+    }
+  }
+  const counts = new Map();
+  for (const [plateau, who] of byTopic) counts.set(plateau, who.size);
+  return counts;
+}
+
+/** Topics with ≥ `threshold` distinct masters — community-approved. Deterministic. */
+export function communityApproved(events = [], threshold = COMMUNITY_THRESHOLD) {
+  const out = new Set();
+  for (const [plateau, n] of masteryCounts(events)) if (n >= threshold) out.add(plateau);
+  return out;
+}

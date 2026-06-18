@@ -52,7 +52,7 @@ import {
   bridgeResources,
 } from "./study.js";
 import { offlineDigest } from "./offline-digest.js";
-import { masteredTopics, visitedTopics, MASTERY_KIND } from "./mastery.js";
+import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -212,9 +212,13 @@ async function main() {
   // is "studying" once visited, "mastered" once quizzed.
   let mastered = masteredTopics(log.all(), myPubkey);
   let visited = visitedTopics(log.all(), myPubkey);
+  // Community-approved (R-0031): topics ≥N distinct wizards have mastered, counted
+  // over the SAME verified corpus (own + discovered) — pubkey-agnostic, off the CRDT.
+  let community = communityApproved(log.all());
   function recomputeProgress() {
     mastered = masteredTopics(log.all(), myPubkey);
     visited = visitedTopics(log.all(), myPubkey);
+    community = communityApproved(log.all());
   }
   // Pin the JS MASTERY_KIND to the Rust source (one source of truth, R-0030 AC6).
   console.assert(
@@ -283,10 +287,12 @@ async function main() {
       focusedId, // transient travel highlight (R-0019); null most of the time
       visited, // studying set (R-0033)
       mastered, // mastered set — ✓ + gold (R-0030)
+      community, // crowd-approved set — bedrock ring (R-0031)
     });
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
-    hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges`;
+    const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
+    hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
   }
 
   // ── Ephemeral presence (SPEC-0016 / R-0016) ─────────────────────────────────

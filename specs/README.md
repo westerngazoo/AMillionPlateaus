@@ -65,4 +65,5 @@ field. The build order across requirements and specs is in
 | [SPEC-0028](0028-cross-cutting-resources.md) | Cross-cutting resources: pure URL threading (`normalizeUrl`/`crossLinks`) + "Also covers" + multi-pin | R-0028 | Implemented |
 | [SPEC-0029](0029-clickable-bridges.md) | Clickable bridges: pure `pickBridge` hit-test + read-only connection view (`openBridge`) | R-0029 | Implemented |
 | [SPEC-0030](0030-topic-mastery.md) | Topic mastery: `KIND_MASTERY` signed event + pure `masteredTopics` + self-tested "Mark as mastered" + ✓ (recompute unchanged) | R-0030 | Implemented |
+| [SPEC-0031](0031-community-approved-topics.md) | Community-approved topics: pure `communityApproved` distinct-wizard count + bedrock overlay ring | R-0031 | Implemented |
 | [SPEC-0033](0033-browsable-progress-map.md) | Browsable progress map: ungate clicks + `visitedTopics` + progress palette (unexplored/studying/mastered) + covered trail | R-0033 | Implemented |

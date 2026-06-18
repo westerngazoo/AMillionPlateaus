@@ -13,6 +13,7 @@ const STUDYING = "#e0a64a"; // visited, not yet quizzed
 const MASTERED_FILL = "#ffd166"; // quizzed — bedrock gold
 const LIT_RING = "#fff3c4"; // ring on a mastered disc
 const COVERED = "#6fb6e0"; // a bridge between two visited topics — your trail
+const CANONICAL = "#bfe3ff"; // outer ring on a community-approved (crowd-mastered) topic (R-0031)
 const BRIDGE = "rgba(180, 200, 220, 0.5)";
 const LABEL = "rgba(220, 230, 240, 0.85)";
 const MARKER = "#7fd0a0"; // Floating trail-marker glyph (R-0014)
@@ -27,7 +28,7 @@ const RADIUS = 16;
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set() }) {
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set() }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -75,6 +76,18 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     ctx.lineWidth = done ? 3 : 1.5;
     ctx.strokeStyle = done ? LIT_RING : UNEXPLORED_RING;
     ctx.stroke();
+
+    // Community-approved (R-0031): an outer "bedrock" ring at RADIUS+4, overlaid on
+    // the personal progress fill. Drawn after the disc, before the ✓/markers; the
+    // hit radius (RADIUS) is unchanged. Composes all four cases (you / crowd / both
+    // / neither) distinctly.
+    if (community.has(p.id)) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, RADIUS + 4, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = CANONICAL;
+      ctx.stroke();
+    }
 
     if (labelled.has(p.id)) {
       // Dark text reads on the bright studying/mastered fills; light on unexplored.

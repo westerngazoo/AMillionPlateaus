@@ -1,11 +1,11 @@
 # R-0031 — Community-approved topics: a topic the crowd has mastered
 
-- **Status:** Accepted
+- **Status:** Met (2026-06-18)
 - **Milestone:** POC — Knowledge content
 - **Owner:** Gustavo Delgadillo
 - **Created:** 2026-06-15
 - **Depends on:** R-0030 (the signed mastery event this counts), R-0010 (the signed-event corpus + relay/discovery that aggregates peers' events), R-0015 (the crystallization pattern this mirrors), R-0005 (the bedrock/disc render)
-- **Realized by:** SPEC-0031 (pending)
+- **Realized by:** SPEC-0031
 - **QA:** `qa` agent run scoped to this requirement
 
 ## 1. Statement
@@ -97,8 +97,36 @@ language and rendering are already familiar.
 | 2026-06-15 | Approval reflects **events this client has seen** (own + discovered) | Same no-global-authority trust model as reputation; honest about a decentralized world |
 | 2026-06-15 | Distinct pubkeys, grow-only, no decay this phase | Simplest honest count; matches the grow-only stone/traversal model |
 
+## QA sign-off (2026-06-18)
+
+**Verdict: PASS.** All six acceptance criteria are demonstrably met.
+
+### Acceptance criteria coverage
+
+| AC | Test(s) / evidence | Result |
+|----|--------------------|--------|
+| AC1 — crowd-mastered ⇒ approved; single named threshold | `mastery.test.mjs`: "COMMUNITY_THRESHOLD is a sane POC count" (= 3), "communityApproved: threshold boundary (N-1 not approved, N approved)" | PASS |
+| AC2 — derived from verified corpus, distinct pubkeys, twice-by-one=1 | `mastery.test.mjs`: "masteryCounts counts DISTINCT pubkeys per topic (twice-by-one = 1)"; corpus is `log.all()` (BIP340-verified own + discovered via `events.js makeLog`, never the CRDT); root keys still `{bridges, plateaus, resources, votes}` (`mp-crdt/src/doc.rs:364`) | PASS |
+| AC3 — bedrock render distinct from personal ✓ and ordinary; hit radius unchanged | `render.js`: `CANONICAL` ring at `RADIUS+4` drawn after disc fill/stroke, before ✓/markers; hit-test in `main.js` still `RADIUS*RADIUS`; four cases (you / crowd / both / neither) distinct. Browser-verified (AC6) | PASS |
+| AC4 — pure + unit-tested (distinct, boundary, ignores junk, deterministic) | `mastery.test.mjs`: distinct-count, threshold boundary, "ignores non-mastery kinds, malformed, and null plateau", "empty → ∅; deterministic"; `masteryCounts`/`communityApproved` are pure (no DOM/wasm/GA) | PASS |
+| AC5 — additive; no CRDT/reputation change; reuses corpus + R-0015 language; no injection | `git diff --stat` only `apps/web/*` + R/SPEC docs; `crates/` diff empty; `recompute` (`mp-identity/src/recompute.rs`) reads only KIND_TRAVERSAL/KIND_VOUCH — KIND_MASTERY never feeds the multivector; canvas ring only (no DOM/HTML); all suites green | PASS |
+| AC6 — green + browser-verified | All suites green; browser: 2 distinct `from_secret` masteries for Motion → reload → no "canonical" in HUD (N=2); a 3rd distinct master → reload → HUD "· 1 canonical" + `#bfe3ff` ring on Motion's crowd-only disc; console clean | PASS |
+
+### Suites
+
+- **JS unit/e2e** — PASS. `node --test apps/web/src/*.test.mjs`: tests 208, pass 208, fail 0 (mastery.test.mjs: 14 tests incl. the 5 new R-0031 cases).
+- **Rust workspace** — PASS & unchanged. `cargo test --workspace` green; `git diff --stat -- crates/` empty (no Rust/wasm change).
+- **Lint** — PASS. `cargo clippy --workspace --all-targets -- -D warnings` exit 0.
+- **Format** — PASS. `cargo fmt --all --check` exit 0.
+
+### Gaps / failures
+
+None. (Pre-existing `Cargo.lock` `garust-physics` line is unrelated to R-0031 — it was already modified in the working tree before this requirement's work and `crates/` source is untouched.)
+
 ## Changelog
 
+- 2026-06-18 QA sign-off — PASS; Status → Met. 208/208 JS, Rust green & unchanged,
+  clippy/fmt clean; all six ACs covered by passing tests + recorded browser evidence.
 - 2026-06-15 created (Accepted) — community approval as topic crystallization from
   crowd mastery (counts R-0030's events). Pending R-0030 landing + SPEC-0031 +
   architect review.
