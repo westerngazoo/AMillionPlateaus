@@ -14,6 +14,20 @@ pub enum ReputationParseError {
     DomainId(#[from] uuid::Error),
 }
 
+/// Failure signing, parsing, or recomputing from Nostr events (SPEC-0010).
+///
+/// `verify_event` never returns this — an unverifiable event is simply inert
+/// (`false`) — but signing and recompute/discovery surface precise causes.
+#[derive(thiserror::Error, Debug)]
+pub enum EventError {
+    #[error("event JSON is invalid: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("id is not a valid UUID: {0}")]
+    Uuid(#[from] uuid::Error),
+    #[error("identity error: {0}")]
+    Identity(#[from] mp_identity::IdError),
+}
+
 /// Failure answering a single-plateau fog query by id string.
 #[derive(thiserror::Error, Debug)]
 pub enum QueryError {

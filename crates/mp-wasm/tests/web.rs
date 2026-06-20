@@ -120,7 +120,7 @@ fn two_independent_replicas_sync_a_plateau_to_quiescence() {
     let mut sb = WasmSyncSession::new();
 
     let id = a
-        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5)
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
         .expect("A adds a plateau");
 
     // Pump A↔B until neither side has anything left to send (convergence).
@@ -151,4 +151,266 @@ fn two_independent_replicas_sync_a_plateau_to_quiescence() {
         a.root_keys(),
         vec!["bridges", "plateaus", "resources", "votes"]
     );
+}
+
+// R-0012 AC1: save() → load() round-trips the whole doc — the durable-storage
+// contract the web app persists to IndexedDB.
+#[wasm_bindgen_test]
+fn save_load_round_trips_the_doc() {
+    let domain = "00000000-0000-0000-0000-000000000001";
+
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let a = doc
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
+        .expect("add a");
+    let b = doc
+        .add_plateau("Topology", domain, 0.7, 0.3, 0.2, "")
+        .expect("add b");
+    doc.add_bridge(&a, &b, "continuity").expect("bridge");
+
+    let bytes = doc.save();
+    assert!(!bytes.is_empty(), "a saved doc is non-empty");
+
+    // A fresh replica loaded from the bytes sees the same plateaus and the same
+    // four data maps — nothing lost, no reputation key introduced.
+    let restored = WasmCrdtDoc::load(&bytes).expect("load round-trips");
+    let g = restored.to_graph().expect("project restored");
+    assert!(
+        !g.plateau(&a).expect("query a").is_null(),
+        "restored doc retains plateau A"
+    );
+    assert!(
+        !g.plateau(&b).expect("query b").is_null(),
+        "restored doc retains plateau B"
+    );
+    assert_eq!(
+        restored.root_keys(),
+        vec!["bridges", "plateaus", "resources", "votes"]
+    );
+
+    // A corrupt blob is a thrown Error, not a panic (AC7 fallback path).
+    assert!(
+        WasmCrdtDoc::load(&[0xde, 0xad, 0xbe, 0xef]).is_err(),
+        "a corrupt blob must error, never panic"
+    );
+}
+
+// R-0020 AC1/AC2: the authored Markdown body rides the plateau's `description`
+// field through add_plateau → CRDT → to_graph DTO; an empty body stays "".
+#[wasm_bindgen_test]
+fn plateau_body_round_trips_through_the_doc() {
+    #[derive(serde::Deserialize)]
+    struct PlateauRow {
+        id: String,
+        description: String,
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let body = "# Limits\n\nThe slope is $\\frac{dy}{dx}$.";
+    let with = doc
+        .add_plateau("Calculus", domain, 0.9, 0.1, 0.0, body)
+        .expect("add with body");
+    let without = doc
+        .add_plateau("Aside", domain, 0.5, 0.0, 0.0, "")
+        .expect("add without body");
+
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<PlateauRow> =
+        serde_wasm_bindgen::from_value(g.plateaus().expect("plateaus")).expect("decode rows");
+    let row = |id: &str| rows.iter().find(|r| r.id == id).expect("row present");
+    assert_eq!(
+        row(&with).description,
+        body,
+        "authored body round-trips verbatim"
+    );
+    assert_eq!(
+        row(&without).description,
+        "",
+        "empty body stays empty, never a placeholder"
+    );
+}
+
+// R-0014 AC8: add_resource anchors a marker to a plateau and it round-trips
+// through resources() as a Floating, zero-vote DTO; an unknown anchor errors.
+#[wasm_bindgen_test]
+fn add_resource_round_trips_and_validates_anchor() {
+    #[derive(serde::Deserialize)]
+    struct ResourceRow {
+        plateau_id: String,
+        title: String,
+        kind: String,
+        uri: String,
+        state: String,
+        vote_count: f32,
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let p = doc
+        .add_plateau("Linear Algebra", domain, 0.9, 0.2, 0.5, "")
+        .expect("add plateau");
+
+    // A blank/unknown kind falls back to Note; the marker anchors to the plateau.
+    doc.add_resource(&p, "Spectral theorem", "Paper", "https://ex.com")
+        .expect("add resource");
+
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<ResourceRow> =
+        serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode rows");
+    assert_eq!(rows.len(), 1, "one marker present");
+    let r = &rows[0];
+    assert_eq!(r.plateau_id, p, "anchored to its plateau");
+    assert_eq!(r.title, "Spectral theorem");
+    assert_eq!(r.kind, "Paper", "kind label round-trips");
+    assert_eq!(r.uri, "https://ex.com");
+    assert_eq!(r.state, "Floating", "new markers start Floating (AC5)");
+    assert_eq!(r.vote_count, 0.0, "new markers have zero votes (AC5)");
+
+    // An unknown plateau anchor is a thrown Error, never a silent orphan (AC3).
+    assert!(
+        doc.add_resource("99999999-0000-0000-0000-000000000000", "orphan", "Note", "")
+            .is_err(),
+        "a missing plateau anchor must error"
+    );
+}
+
+// R-0027: seed_resource is the fixed-id, idempotent, CONVERGENT upsert sibling of
+// add_resource (which mints a random id). It must (a) not duplicate on re-seed,
+// (b) converge across independently-started replicas under merge (R-0004 AC4),
+// and (c) reject an unknown plateau anchor.
+#[wasm_bindgen_test]
+fn seed_resource_is_idempotent_and_convergent() {
+    #[derive(serde::Deserialize)]
+    struct Row {
+        id: String,
+    }
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let pid = "00000000-0000-0000-0000-0000000000a4";
+    let rid = "00000000-0000-0000-0000-0000000000f1";
+
+    // (a) local idempotency — seeding the same id twice yields ONE entry.
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    doc.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("seed plateau");
+    doc.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("seed 1");
+    doc.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("seed 2");
+    let g = doc.to_graph().expect("project");
+    let rows: Vec<Row> =
+        serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode");
+    assert_eq!(rows.len(), 1, "re-seeding the same id must not duplicate");
+    assert_eq!(rows[0].id, rid, "the fixed seed id is preserved");
+
+    // (b) cross-replica convergence — two independent replicas seed the SAME id,
+    // then merge to quiescence → still exactly one entry.
+    let mut a = WasmCrdtDoc::new().expect("A");
+    let mut b = WasmCrdtDoc::new().expect("B");
+    a.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("A plateau");
+    b.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+        .expect("B plateau");
+    a.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("A resource");
+    b.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
+        .expect("B resource");
+    let mut sa = WasmSyncSession::new();
+    let mut sb = WasmSyncSession::new();
+    let mut quiet = false;
+    let mut guard = 0;
+    while !quiet {
+        quiet = true;
+        if let Some(msg) = a.generate_message(&mut sa) {
+            b.receive_message(&mut sb, &msg).expect("B applies A");
+            quiet = false;
+        }
+        if let Some(msg) = b.generate_message(&mut sb) {
+            a.receive_message(&mut sa, &msg).expect("A applies B");
+            quiet = false;
+        }
+        guard += 1;
+        assert!(guard < 100, "sync did not converge");
+    }
+    let ga = a.to_graph().expect("project A");
+    let merged: Vec<Row> =
+        serde_wasm_bindgen::from_value(ga.resources().expect("resources")).expect("decode");
+    assert_eq!(
+        merged.len(),
+        1,
+        "independent replicas converge to one resource at the shared id"
+    );
+    assert_eq!(
+        a.root_keys(),
+        vec!["bridges", "plateaus", "resources", "votes"]
+    );
+
+    // (c) unknown plateau anchor errors — never a silent orphan.
+    let mut d2 = WasmCrdtDoc::new().expect("doc2");
+    assert!(
+        d2.seed_resource(rid, "99999999-0000-0000-0000-000000000000", "x", "Note", "")
+            .is_err(),
+        "seeding onto a missing plateau must error"
+    );
+}
+
+// R-0015 AC2/AC3/AC8: voting accrues and crossing the threshold flips the
+// projected state Floating → Crystallized — derived, never client-set.
+#[wasm_bindgen_test]
+fn vote_crystallizes_a_marker() {
+    #[derive(serde::Deserialize)]
+    struct ResourceRow {
+        id: String,
+        state: String,
+        vote_count: f32,
+    }
+    fn marker(doc: &WasmCrdtDoc, id: &str) -> ResourceRow {
+        let g = doc.to_graph().expect("project");
+        let rows: Vec<ResourceRow> =
+            serde_wasm_bindgen::from_value(g.resources().expect("resources")).expect("decode");
+        rows.into_iter()
+            .find(|r| r.id == id)
+            .expect("marker present")
+    }
+
+    let domain = "00000000-0000-0000-0000-000000000001";
+    let threshold = mp_wasm::crystallize_threshold();
+    let mut doc = WasmCrdtDoc::new().expect("doc");
+    let p = doc
+        .add_plateau("LA", domain, 0.9, 0.2, 0.5, "")
+        .expect("plateau");
+    let rid = doc.add_resource(&p, "notes", "Note", "").expect("marker");
+
+    // Two distinct wizards each clear half the threshold → crystallizes.
+    let per = threshold / 2.0 + 1.0;
+    let w1 = mp_wasm::wizard_id_of("aa".repeat(32).as_str());
+    let w2 = mp_wasm::wizard_id_of("bb".repeat(32).as_str());
+
+    // One wizard alone, below threshold → still Floating.
+    doc.vote(&rid, &w1, per).expect("vote 1");
+    let m = marker(&doc, &rid);
+    assert!(m.vote_count < threshold, "one voter is below threshold");
+    assert_eq!(m.state, "Floating", "below threshold stays Floating");
+
+    // A second distinct wizard crosses it → Crystallized (derived in to_graph).
+    doc.vote(&rid, &w2, per).expect("vote 2");
+    let m = marker(&doc, &rid);
+    assert!(m.vote_count >= threshold, "two voters cross the threshold");
+    assert_eq!(
+        m.state, "Crystallized",
+        "crossing the threshold crystallizes"
+    );
+
+    // Sybil: the SAME wizard voting again is monotonic (grow-only) — re-voting
+    // the same weight does not stack, so one identity can't inflate the sum.
+    let before = marker(&doc, &rid).vote_count;
+    doc.vote(&rid, &w1, per).expect("re-vote same wizard");
+    assert_eq!(
+        marker(&doc, &rid).vote_count,
+        before,
+        "re-vote is monotonic"
+    );
+
+    // Two different pubkeys yield two different voter ids (no collision).
+    assert_ne!(w1, w2, "distinct pubkeys → distinct wizard ids");
 }

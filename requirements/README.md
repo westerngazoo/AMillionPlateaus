@@ -42,3 +42,27 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0007](0007-companion-graph-grounded.md) | Companion: an always-present, graph-grounded AI guide that embodies your persona | Phase 4 | Met |
 | [R-0008](0008-ga-graph-store-generalization.md) | Generalize `mp-graph` into a domain-agnostic geometric graph store (RFC-0001 Scope A) | Infra | Met |
 | [R-0009](0009-visitor-authored-personas.md) | Visitor-authored personas: craft your own lens, not just pick a card | POC | Met |
+| [R-0010](0010-nostr-identity-signed-events.md) | Wizard identity: Nostr-signed events and verifiable, recomputed rank | Phase 8 | Met |
+| [R-0011](0011-plateau-authoring.md) | Plateau Authoring: draft new knowledge nodes into the fog-world | POC — Draft DB | Met |
+| [R-0012](0012-browser-durable-graph.md) | Browser-durable graph: the Draft DB survives a reload (IndexedDB snapshot) | POC — Draft DB | Met |
+| [R-0013](0013-bridge-authoring.md) | Bridge Authoring: connect two plateaus with a named concept | POC — Draft DB | Met |
+| [R-0014](0014-trail-markers.md) | Trail Markers: anchor a note or resource to a plateau | POC — Draft DB | Met |
+| [R-0015](0015-vote-crystallize.md) | Vote → Crystallize: community votes solidify a marker into terrain | POC — Draft DB | Met |
+| [R-0016](0016-presence.md) | Presence: see other wizards as silhouettes in the fog | POC — Multiplayer presence | Met |
+| [R-0017](0017-native-graph-host.md) | Native graph host: the durable redb backing, wired (mp-host CLI) | Infra | Met |
+| [R-0018](0018-webrtc-p2p-sync.md) | WebRTC peer-to-peer sync: two devices share a world, no server | POC — Cross-device (P2P) | Met |
+| [R-0019](0019-onboarding-wayfinding.md) | Onboarding & wayfinding: career lens, travel-to-topic, first-run tutorial | POC — UX clarity | Met |
+| [R-0020](0020-plateau-content.md) | Plateau content: a Markdown body with typeset math, and a read view | POC — Knowledge content | Met |
+| [R-0021](0021-obsidian-import.md) | Obsidian vault importer: turn real notes into a world | POC — Knowledge content | Met |
+| [R-0022](0022-physicist-lens.md) | Physicist lens: Physics as a first-class faced domain | POC — Knowledge content | Met |
+| [R-0023](0023-study-view.md) | Study view: read, collect, and learn on a plateau | POC — Knowledge content | Met |
+| [R-0024](0024-map-zoom-lod.md) | Map zoom, pan & label level-of-detail | POC — Navigation | Met |
+| [R-0025](0025-vr-immersive-visualization.md) | VR / immersive visualization: walk the true 3D GA geometry | Phase 11 — Immersive (VR) | Accepted |
+| [R-0026](0026-offline-study-digest.md) | Offline study digest: the companion helps with no model connected | POC — Knowledge content | Met |
+| [R-0027](0027-seeded-example-resources.md) | Seeded example resources: the world ships with things to read | POC — Knowledge content | Met |
+| [R-0028](0028-cross-cutting-resources.md) | Cross-cutting resources: a book that spans topics | POC — Knowledge content | Met |
+| [R-0029](0029-clickable-bridges.md) | Clickable bridges: open a connection | POC — Navigation | Met |
+| [R-0030](0030-topic-mastery.md) | Topic mastery: close a topic you've studied (self-tested, signed) | POC — Knowledge content | Met |
+| [R-0031](0031-community-approved-topics.md) | Community-approved topics: a topic the crowd has mastered | POC — Knowledge content | Met |
+| [R-0032](0032-ai-checked-proof-mastery.md) | Math mastery by AI-checked proof: write a proof, the model judges it | POC — Knowledge content | Met |
+| [R-0033](0033-browsable-progress-map.md) | Browsable progress map: explore freely, color by progress, trace your trail | POC — Navigation | Met |

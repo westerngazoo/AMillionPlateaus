@@ -35,7 +35,16 @@
         border: 1px solid #2a3543;
         border-radius: 8px;
         cursor: pointer;
+        touch-action: none; /* R-0024: let drag-pan work on touch (no browser scroll/zoom steal) */
       }
+      /* Zoom controls (R-0024): a small overlay on the map's top-right. */
+      #zoom-controls { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
+      #zoom-controls button {
+        width: 28px; height: 28px; font-size: 15px; line-height: 1; cursor: pointer;
+        background: rgba(20, 28, 38, 0.85); color: #cdd9e6;
+        border: 1px solid #34495f; border-radius: 6px;
+      }
+      #zoom-controls button:hover { background: rgba(34, 51, 70, 0.95); }
       .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
       button {
         background: #2a3a4c; color: #e6eef6; border: 1px solid #3a4d62;
@@ -44,6 +53,35 @@
       button:hover { background: #34495f; }
       .note { font-size: 12px; color: #8aa0b4; max-width: 760px; text-align: center; }
       #hud { font-size: 12px; color: #b7c6d6; font-variant-numeric: tabular-nums; }
+
+      /* Identity + relay row (SPEC-0010). The pubkey/relay status are monospace
+         chips; the relay URL is a slim local-only input. */
+      .bar-id { font-size: 12px; }
+      .idhud {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+        color: #9fd0b4; background: #16222c; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 4px 8px;
+      }
+      #relay-url {
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 6px 10px; font-size: 12px; width: 240px;
+      }
+
+      /* Discovery panel (R-0010 AC7): top traversers per faced domain. */
+      .discovery { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 820px; }
+      .discovery:empty { display: none; }
+      .discovery-domain {
+        min-width: 240px; background: #141c26; border: 1px solid #2a3543;
+        border-radius: 8px; padding: 10px 14px;
+      }
+      .discovery-head {
+        font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+        color: #ffd166; margin-bottom: 8px;
+      }
+      .discovery-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+      .discovery-row span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .discovery-row button { padding: 3px 10px; font-size: 12px; }
+      .discovery-empty { font-size: 12px; color: #8aa0b4; }
 
       /* Persona creator overlay (SPEC-0006). Covers the canvas and captures input
          until a persona is chosen (R-0006 AC1). */
@@ -146,20 +184,393 @@
         border-radius: 6px; padding: 7px 10px; font-size: 13px;
       }
       .setup-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+      /* First-run tutorial overlay (SPEC-0019 / R-0019). A fixed full-screen modal
+         like #setup, but at a HIGHER z-index (30) so it sits above the lens picker
+         (#creator z10) and the model-setup modal (#setup z20) and intercepts input;
+         dismissing it reveals the picker beneath. */
+      #tutorial {
+        position: fixed; inset: 0; z-index: 30;
+        display: flex; align-items: center; justify-content: center; padding: 24px;
+        background: rgba(8, 11, 16, 0.86); backdrop-filter: blur(2px);
+      }
+      #tutorial[hidden] { display: none; }
+      .tutorial-card {
+        width: 460px; max-width: 100%; background: #161f2a; border: 1px solid #34495f;
+        border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 14px;
+      }
+      .tutorial-card h2 { margin: 0; font-size: 19px; }
+      .tutorial-body { margin: 0; font-size: 14px; line-height: 1.5; color: #c4d3e2; min-height: 60px; }
+      .tutorial-dots { display: flex; gap: 7px; justify-content: center; }
+      .tutorial-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #34495f; }
+      .tutorial-dots .dot.on { background: #ffd166; }
+      .tutorial-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+      .tutorial-actions button[hidden] { display: none; }
+      #tutorial-gotit { background: #2c4a6e; }
+
+      /* Plateau read view (SPEC-0020 / R-0020). A right-anchored, scrollable panel
+         showing a topic's Markdown body + anchored resources. z-index 25: above
+         #creator(10)/#setup(20), below #tutorial(30). */
+      #plateau-detail {
+        position: fixed; top: 0; right: 0; bottom: 0; z-index: 25;
+        width: 460px; max-width: 92vw; overflow-y: auto;
+        background: #131b25; border-left: 1px solid #2a3543;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+        padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
+      }
+      #plateau-detail[hidden] { display: none; }
+      .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      .detail-head h2 { margin: 0; font-size: 19px; color: #ffd166; }
+      #detail-close {
+        background: transparent; border: none; color: #9fb2c4;
+        font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px;
+      }
+      #detail-close:hover { color: #e6eef6; }
+      .detail-body { font-size: 14px; line-height: 1.55; color: #cdd9e6; }
+      .detail-body h1, .detail-body h2, .detail-body h3,
+      .detail-body h4, .detail-body h5, .detail-body h6 { color: #e6eef6; margin: 14px 0 6px; line-height: 1.25; }
+      .detail-body h1 { font-size: 19px; } .detail-body h2 { font-size: 17px; } .detail-body h3 { font-size: 15px; }
+      .detail-body p { margin: 8px 0; }
+      .detail-body ul, .detail-body ol { margin: 8px 0; padding-left: 22px; }
+      .detail-body code { background: #0f151d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+      .detail-body pre { background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px; overflow-x: auto; }
+      .detail-body pre code { background: none; padding: 0; }
+      .detail-body a { color: #9fd0ff; }
+      .detail-body .mp-math[data-display="1"] { display: block; margin: 10px 0; text-align: center; }
+      .detail-res-title { margin: 6px 0 0; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #8aa0b4; }
+      .detail-resources ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .detail-resources li { font-size: 13px; }
+      .detail-resources .res-kind {
+        display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: #1b2330; background: #7fd0a0; border-radius: 4px; padding: 1px 6px; margin-right: 4px;
+      }
+      .detail-resources a { color: #9fd0ff; }
+      .detail-empty { font-size: 12px; color: #8aa0b4; margin: 0; }
+      /* Study view (R-0023): ranked rows with a stone count + ＋stone, the
+         companion action buttons, and the inline add-a-resource form. */
+      .res-list li { display: flex; align-items: center; gap: 8px; }
+      .res-stones { margin-left: auto; font-size: 11px; color: #8aa0b4; white-space: nowrap; }
+      .res-stones.bedrock { color: #ffd166; } /* crystallized — community-vouched */
+      .res-stone-btn {
+        font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        background: #1b2735; color: #9fd0b4; border: 1px solid #34495f; cursor: pointer;
+      }
+      .res-stone-btn:hover { background: #223346; }
+      .detail-study { display: flex; flex-wrap: wrap; gap: 6px; }
+      .detail-study button {
+        font-size: 12px; padding: 5px 10px; border-radius: 8px;
+        background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
+      }
+      .detail-study button:hover { background: #345780; }
+      .detail-reply {
+        font-size: 13px; line-height: 1.5; color: #d6e0ea; white-space: pre-wrap;
+        background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
+      }
+      .detail-reply[hidden] { display: none; }
+      /* "Also covers" cross-links on a resource row (R-0028). */
+      .res-also { font-size: 12px; color: #8aa0b4; margin-top: 3px; }
+      .res-also-link {
+        background: none; border: none; color: #9fd0ff; cursor: pointer;
+        font: inherit; padding: 0; text-decoration: underline;
+      }
+      .res-also-link:hover { color: #cfe8ff; }
+      /* Multi-pin checklist in the add form (R-0028). */
+      .detail-add-also { font-size: 12px; color: #8aa0b4; }
+      .detail-add-also summary { cursor: pointer; }
+      .also-pin-list { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+      .also-pin-item { display: flex; align-items: center; gap: 6px; color: #cdd9e6; }
+      /* Bridge "connection" view (R-0029): shown only in bridge mode. */
+      #plateau-detail:not([data-mode="bridge"]) #detail-bridge { display: none; }
+      #plateau-detail[data-mode="bridge"] #detail-body,
+      #plateau-detail[data-mode="bridge"] .detail-res-title,
+      #plateau-detail[data-mode="bridge"] #detail-study,
+      #plateau-detail[data-mode="bridge"] #detail-reply,
+      #plateau-detail[data-mode="bridge"] #detail-resources,
+      #plateau-detail[data-mode="bridge"] #detail-mastery,
+      #plateau-detail[data-mode="bridge"] #detail-proof,
+      #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
+      /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
+      .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .mastery-mark, .mastery-confirm {
+        font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+      }
+      .mastery-confirm { background: #14463a; border-color: #1d6e56; color: #d6f5ea; }
+      .mastery-confirm[hidden] { display: none; }
+      .mastered-badge { font-size: 13px; color: #5dcaa5; font-weight: 500; }
+      /* Prove it (R-0032): an AI-checked proof path. Static sibling of #detail-mastery
+         so renderMastery()'s replaceChildren never destroys the draft. */
+      .detail-proof { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+      .detail-proof[hidden] { display: none; }
+      .proof-note { font-size: 12px; color: #8aa0b4; }
+      .proof-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+      .proof-palette button {
+        font-size: 12px; padding: 3px 7px; border-radius: 5px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .proof-palette button:hover { background: #283546; }
+      #proof-input {
+        width: 100%; box-sizing: border-box; min-height: 90px; resize: vertical;
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px;
+        padding: 8px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .proof-preview {
+        min-height: 20px; font-size: 13px; color: #cdd9e6; padding: 6px 8px;
+        background: #11181f; border: 1px solid #1f2937; border-radius: 6px;
+      }
+      .proof-preview:empty::before { content: "preview"; color: #5a6b7d; }
+      .proof-check {
+        align-self: flex-start; font-size: 12px; padding: 5px 12px; border-radius: 6px;
+        cursor: pointer; border: 1px solid #1d6e56; background: #14463a; color: #d6f5ea;
+      }
+      .proof-check:hover { background: #195441; }
+      .proof-feedback { font-size: 13px; color: #cdd9e6; white-space: pre-wrap; }
+      .bridge-connects { font-size: 14px; color: #cdd9e6; }
+      .bridge-topic {
+        background: none; border: none; color: #9fd0ff; cursor: pointer;
+        font: inherit; padding: 0; text-decoration: underline;
+      }
+      .bridge-topic:hover { color: #cfe8ff; }
+      .bridge-res-label { font-size: 12px; color: #8aa0b4; margin-top: 10px; }
+      .detail-add { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+      .detail-add .detail-add-row { display: flex; gap: 6px; }
+      .detail-add input[type="text"], .detail-add select {
+        flex: 1; min-width: 0; background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 6px 8px; font-size: 12px;
+      }
+      .detail-add select { flex: 0 0 auto; }
+      .detail-add button {
+        background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f;
+        border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+      }
+
+      /* Draft Plateau form (SPEC-0011 / R-0011): collapsible authoring panel. */
+      .draft-plateau {
+        background: #141c26; border: 1px solid #2a3543; border-radius: 8px;
+        padding: 0; font-size: 13px; max-width: 760px; width: 100%;
+      }
+      .draft-plateau summary {
+        padding: 8px 14px; cursor: pointer; user-select: none;
+        color: #9fd0b4; font-size: 13px; list-style: none;
+      }
+      .draft-plateau summary::marker, .draft-plateau summary::-webkit-details-marker { display: none; }
+      .draft-plateau summary::before { content: "▸ "; font-size: 11px; }
+      .draft-plateau[open] summary::before { content: "▾ "; }
+      .draft-plateau-body {
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 12px 14px 14px; border-top: 1px solid #1e2d3d;
+      }
+      .dp-row { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 10px; }
+      .dp-row label { font-size: 12px; color: #b7c6d6; }
+      .dp-row input[type="text"], .dp-row select, .dp-row textarea {
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 100%;
+      }
+      .dp-row textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; resize: vertical; }
+      .dp-row input[type="range"] { width: 100%; }
+      .dp-error { font-size: 12px; color: #ffb4a8; margin: 0; }
+      .dp-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
     </style>
   </head>
   <body>
     <h1>A Million Plateaus — fog world</h1>
     <div class="bar">
-      <button id="change-persona">Change persona</button>
+      <button id="change-persona">Change lens</button>
+      <button id="travel-toggle">Travel</button>
       <button id="model-setup">Model setup</button>
-      <button id="add">Add a plateau (syncs)</button>
-      <button id="reset-fog">Reset my fog</button>
+      <button id="draft-plateau-toggle">Draft a plateau</button>
+      <button id="draft-bridge-toggle">Draft a bridge</button>
+      <button id="drop-marker-toggle">Drop a marker</button>
+      <button id="place-stone-toggle">Place a stone</button>
+      <button id="connect-peer-toggle">Connect a peer (P2P)</button>
+      <button id="import-world">Import a world</button>
+      <button id="discover">Discover wizards</button>
+      <button id="reset-fog">Reset my history</button>
+      <button id="tour">Tour</button>
       <span id="hud">loading…</span>
+      <span id="import-status" class="idhud" hidden></span>
+      <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
+           (or any WasmCrdtDoc.save() blob) and MERGE it into the current world. -->
+      <input id="import-file" type="file" accept=".bin,application/octet-stream" hidden />
     </div>
+    <!-- Wizard identity + optional relay (SPEC-0010 / R-0010). The key's PUBLIC
+         half is shown; the secret stays in localStorage and is never displayed,
+         synced or logged. The relay URL is a local-only setting; empty ⇒ offline. -->
+    <div class="bar bar-id">
+      <span id="identity-hud" class="idhud" title="your public wizard id">🔑 …</span>
+      <input id="relay-url" type="text" placeholder="wss://relay… (optional)" autocomplete="off" />
+      <button id="relay-connect">Connect relay</button>
+      <span id="relay-hud" class="idhud">relay ○ offline</span>
+    </div>
+    <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
+         domain select is populated from DOMAINS at init. Position sliders use
+         HUMAN labels (Formal/Empirical/Creative) — no raw blade indices. -->
+    <details id="draft-plateau" class="draft-plateau" hidden>
+      <summary>Draft a plateau</summary>
+      <form id="draft-plateau-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="dp-name">Name</label>
+          <input id="dp-name" type="text" placeholder="Plateau name (optional)" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-domain">Domain</label>
+          <select id="dp-domain"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dp-e1">Formal</label>
+          <input id="dp-e1" type="range" min="-1" max="1" step="0.05" value="0.8" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-e2">Empirical</label>
+          <input id="dp-e2" type="range" min="-1" max="1" step="0.05" value="0" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-e3">Creative</label>
+          <input id="dp-e3" type="range" min="-1" max="1" step="0.05" value="0" />
+        </div>
+        <div class="dp-row">
+          <label for="dp-body">Body</label>
+          <textarea id="dp-body" rows="3" placeholder="Notes & math — Markdown, e.g. $E=mc^2$ (optional)"></textarea>
+        </div>
+        <p id="dp-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Draft plateau</button>
+        </div>
+      </form>
+    </details>
+    <!-- Draft Bridge form (SPEC-0013 / R-0013). from/to selects are rebuilt from
+         the current graph when the form opens, so plateaus authored this session
+         are selectable. The rotor is computed in Rust (Bridge::between); JS passes
+         only (from, to, concept). -->
+    <details id="draft-bridge" class="draft-plateau" hidden>
+      <summary>Draft a bridge</summary>
+      <form id="draft-bridge-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="db-from">From</label>
+          <select id="db-from"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="db-to">To</label>
+          <select id="db-to"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="db-concept">Concept</label>
+          <input id="db-concept" type="text" placeholder="e.g. frequency ratios" autocomplete="off" />
+        </div>
+        <p id="db-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Draft bridge</button>
+        </div>
+      </form>
+    </details>
+    <!-- Drop a Marker form (SPEC-0014 / R-0014). Anchors a note/resource to a
+         plateau. The plateau select is rebuilt from the current graph on open;
+         the kind select is populated once from RESOURCE_KINDS. A new marker
+         starts Floating; voting it to Crystallized is R-0015. -->
+    <details id="drop-marker" class="draft-plateau" hidden>
+      <summary>Drop a marker</summary>
+      <form id="drop-marker-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="dm-plateau">Plateau</label>
+          <select id="dm-plateau"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dm-title">Title</label>
+          <input id="dm-title" type="text" placeholder="Marker title" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="dm-kind">Kind</label>
+          <select id="dm-kind"><!-- populated by main.js from RESOURCE_KINDS --></select>
+        </div>
+        <div class="dp-row">
+          <label for="dm-uri">Link</label>
+          <input id="dm-uri" type="text" placeholder="https://… (optional)" autocomplete="off" />
+        </div>
+        <p id="dm-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Drop marker</button>
+        </div>
+      </form>
+    </details>
+    <!-- Place a Stone form (SPEC-0015 / R-0015). Vote on a marker; crossing the
+         crystallize threshold flips it Floating → Crystallized. State is computed
+         from votes in Rust (to_graph), never set by the client. The marker select
+         is rebuilt from the current graph on open. -->
+    <details id="place-stone" class="draft-plateau" hidden>
+      <summary>Place a stone</summary>
+      <form id="place-stone-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="vs-marker">Marker</label>
+          <select id="vs-marker"><!-- populated by main.js --></select>
+        </div>
+        <div class="dp-row">
+          <label for="vs-weight">Weight</label>
+          <input id="vs-weight" type="range" min="1" max="100" step="1" value="10" />
+        </div>
+        <p id="dm-hint" class="author-hint">Your stone's weight; a marker crystallizes when the community's weighted votes cross the threshold.</p>
+        <p id="vs-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="submit">Place stone</button>
+        </div>
+      </form>
+    </details>
+    <!-- Connect a peer (SPEC-0018 / R-0018). Direct device-to-device CRDT sync over
+         a WebRTC data channel, with MANUAL copy-paste signaling — no server. One
+         wizard creates an invite; the other accepts it and returns an answer; the
+         first completes. Only WebRTC SDP/ICE crosses out-of-band; graph bytes flow
+         peer-to-peer. Additive — same-origin tabs still sync without this. -->
+    <details id="connect-peer" class="draft-plateau" hidden>
+      <summary>Connect a peer (P2P)</summary>
+      <div class="draft-plateau-body">
+        <p class="author-hint">
+          <strong>Invite a peer:</strong> Create invite → send the blob → paste their answer → Complete.
+          <br /><strong>Join a peer:</strong> paste their invite → Accept → send the answer back.
+        </p>
+        <div class="dp-row">
+          <label for="p2p-offer">Invite</label>
+          <textarea id="p2p-offer" rows="2" placeholder="offer blob (create, or paste a received invite)"></textarea>
+        </div>
+        <div class="dp-row">
+          <label for="p2p-answer">Answer</label>
+          <textarea id="p2p-answer" rows="2" placeholder="answer blob (paste the peer's answer, or copy yours)"></textarea>
+        </div>
+        <p id="p2p-status" class="author-hint">not connected</p>
+        <p id="p2p-error" class="dp-error" hidden></p>
+        <div class="dp-actions">
+          <button type="button" id="p2p-create">Create invite</button>
+          <button type="button" id="p2p-accept">Accept invite</button>
+          <button type="button" id="p2p-complete">Complete</button>
+        </div>
+      </div>
+    </details>
+    <!-- Travel (SPEC-0019 / R-0019). Focus the camera on a topic: pick a topic
+         and the map re-centres on it with a brief highlight ring. The select is
+         rebuilt from the current graph on open. Camera-only wayfinding — it
+         changes NOTHING about reach/fog, the graph, or anything synced/persisted,
+         so it works for lit OR fogged topics alike. -->
+    <details id="travel" class="draft-plateau" hidden>
+      <summary>Travel to a topic</summary>
+      <form id="travel-form" class="draft-plateau-body">
+        <div class="dp-row">
+          <label for="travel-topic">Topic</label>
+          <select id="travel-topic"><!-- populated by main.js --></select>
+        </div>
+        <p class="author-hint">Centres the map on the topic and highlights it. Camera focus only — it doesn't change what's in reach.</p>
+        <div class="dp-actions">
+          <button type="submit">Travel</button>
+        </div>
+      </form>
+    </details>
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>
+        <!-- Zoom controls (R-0024): wheel/drag also pan+zoom the map. -->
+        <div id="zoom-controls">
+          <button id="zoom-in" type="button" title="Zoom in (or scroll)">＋</button>
+          <button id="zoom-out" type="button" title="Zoom out">−</button>
+          <button id="zoom-reset" type="button" title="Reset view">⟳</button>
+        </div>
         <!-- Persona creator overlay; populated by main.js, hidden once chosen. -->
         <div id="creator"></div>
       </div>
@@ -177,6 +588,11 @@
         </form>
       </aside>
     </div>
+
+    <!-- Discovery (R-0010 AC7): top traversers per faced domain, ranked client-side
+         from VERIFIED events, each foreign wizard offering a "Vouch". Populated by
+         main.js on "Discover wizards". -->
+    <div id="discovery" class="discovery"></div>
 
     <!-- Model-setup overlay (R-0007 AC1): bring-your-own model, hosted or local. -->
     <div id="setup" hidden>
@@ -209,17 +625,97 @@
         </div>
       </div>
     </div>
+    <!-- First-run tutorial overlay (SPEC-0019 / R-0019). A stepped welcome that
+         appears on first entry, remembered LOCALLY (localStorage, never synced /
+         never in the CRDT). Mirrors #setup as a fixed full-screen modal at a
+         HIGHER z-index (30) so it covers the lens picker (#creator z10) and the
+         setup modal (#setup z20); "Got it" dismisses + remembers, revealing the
+         picker beneath. The "Tour" toolbar button replays it. -->
+    <div id="tutorial" hidden>
+      <div class="tutorial-card">
+        <h2 id="tutorial-title">Welcome</h2>
+        <p id="tutorial-body" class="tutorial-body"></p>
+        <div id="tutorial-dots" class="tutorial-dots"><!-- step dots, built by main.js --></div>
+        <div class="tutorial-actions">
+          <button id="tutorial-back" type="button">Back</button>
+          <button id="tutorial-next" type="button">Next</button>
+          <button id="tutorial-gotit" type="button">Got it</button>
+        </div>
+      </div>
+    </div>
+    <!-- Plateau read view (SPEC-0020 / R-0020). Opened by clicking a lit plateau.
+         Shows the plateau's Markdown body (typeset math via lazy vendored KaTeX)
+         and the resources anchored to it. Purely presentational; the body is
+         rendered through markdown.js's injection-safe renderer before innerHTML. -->
+    <aside id="plateau-detail" hidden>
+      <div class="detail-head">
+        <h2 id="detail-name">Topic</h2>
+        <button id="detail-close" type="button" aria-label="Close">×</button>
+      </div>
+
+      <!-- Connection view (R-0029): shown only in bridge mode (data-mode="bridge"),
+           filled by main.js openBridge — the two topics + books that span both. -->
+      <div id="detail-bridge" class="detail-bridge"><!-- connection, by main.js --></div>
+
+      <div id="detail-body" class="detail-body"><!-- rendered Markdown --></div>
+
+      <!-- Study with your companion (R-0023): grounded in THIS plateau's body +
+           resources, via the bring-your-own model (R-0007). Buttons filled by main.js. -->
+      <h3 class="detail-res-title">Study with your companion</h3>
+      <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
+      <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
+      <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm.
+           A model-gated "Prove it" toggle (R-0032) is appended here by main.js. -->
+      <div id="detail-mastery" class="detail-mastery"><!-- mastery control, by main.js --></div>
+
+      <!-- Prove it (R-0032): an AI-checked proof path, shown only when a model is
+           connected and "Prove it" is clicked. A STATIC SIBLING of #detail-mastery
+           (not a child) so renderMastery's replaceChildren never wipes the draft. -->
+      <div id="detail-proof" class="detail-proof" hidden>
+        <p class="proof-note">
+          An AI tutor judges your proof — feedback + a verdict, not a formal verifier.
+          A pass signs the same mastery as the self-test.
+        </p>
+        <div id="proof-palette" class="proof-palette"><!-- symbol buttons, by main.js --></div>
+        <textarea id="proof-input" placeholder="Write your proof or explanation. Use $…$ for math, e.g. $\frac{d}{dx}x^n = n x^{n-1}$."></textarea>
+        <div id="proof-preview" class="proof-preview"><!-- live KaTeX preview, by main.js --></div>
+        <button id="proof-check" class="proof-check" type="button">Check my proof</button>
+        <div id="proof-feedback" class="proof-feedback"><!-- model feedback, by main.js --></div>
+      </div>
+
+      <h3 class="detail-res-title">Resources — ranked by stones</h3>
+      <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
+
+      <!-- Add a book / link / video, pinned to this plateau (R-0023 / R-0014). -->
+      <form id="detail-add-form" class="detail-add">
+        <input id="detail-add-title" type="text" placeholder="Title" autocomplete="off" />
+        <div class="detail-add-row">
+          <select id="detail-add-kind"><!-- RESOURCE_KINDS, by main.js --></select>
+          <input id="detail-add-uri" type="text" placeholder="https://… (book, link, video)" autocomplete="off" />
+          <button type="submit">Pin</button>
+        </div>
+        <!-- Pin the same link to other topics too (R-0028): one book across many. -->
+        <details class="detail-add-also">
+          <summary>Also pin to other topics</summary>
+          <div id="detail-add-also-list" class="also-pin-list"><!-- checkboxes, by main.js --></div>
+        </details>
+        <p id="detail-add-error" class="dp-error" hidden></p>
+      </form>
+    </aside>
     <p class="note">
-      Your <strong>persona</strong> is a local lens: it orients you in the
-      knowledge geometry, so a different starting map is lit. Your
-      <strong>companion</strong> embodies that persona and is grounded in the graph
-      — its context is the plateaus nearest your orientation, queried from the GA
-      core. Click a <strong>lit</strong> plateau to grow your local reputation
-      toward it and lift the fog on neighbours that align. The persona, this
-      reputation, the companion chat and your model config are a
-      <strong>local lens — never synced</strong> (real wizard rank is
-      Phase&nbsp;8). Only graph state (plateaus, bridges, votes) crosses the
-      BroadcastChannel between tabs.
+      You hold a <strong>wizard key</strong> (Nostr/BIP340) minted in this browser:
+      its public half is your stable id; the secret stays local and is never
+      displayed, synced or logged. Your <strong>career lens</strong> only orients you —
+      it lights each faced domain's <strong>trailhead</strong>, no free rank. Click a
+      <strong>lit</strong> plateau to <strong>sign a traversal</strong>; reach is then
+      <strong>recomputed from your verified signed history</strong> by the GA core —
+      earned, not gifted. <strong>Vouch</strong> for a discovered wizard to flow your
+      earned reach to them (mutual-only vouching collapses to nothing — Sybil
+      resistance). Connect a <strong>relay</strong> to publish/discover across hosts,
+      or stay offline — the world plays either way. Reputation, keys and signatures
+      <strong>never enter the CRDT</strong>; only graph state (plateaus, bridges,
+      votes) crosses the graph-sync channel, while signed events ride a separate
+      channel + the relay.
     </p>
     <script type="module" src="./src/main.js"></script>
   </body>

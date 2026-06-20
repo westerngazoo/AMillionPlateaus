@@ -1,0 +1,1 @@
+Not a markdown note — the importer must ignore non-.md files.

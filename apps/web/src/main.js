@@ -1,28 +1,66 @@
-// main.js — wire wasm + render + input + sync + the persona creator
-// (SPEC-0005 §2.3/§2.4, extended by SPEC-0006).
+// main.js — wire wasm + render + input + sync + identity + the persona creator
+// (SPEC-0005/0006/0007/0009, SPEC-0010 Nostr identity, SPEC-0011 plateau authoring).
 //
-// No GA, graph or CRDT logic lives here: it parses input, calls the wasm core,
-// and marshals results to the render layer. The persona and the local reputation
-// it seeds are the bits of state the page owns, and they are deliberately never
-// synced (R-0006 AC5).
+// No GA, graph, CRDT or crypto logic lives here: it parses input, calls the wasm
+// core, and marshals results to the render layer. Phase 8 makes reach EARNED — the
+// visitor holds a Nostr keypair, traversals/vouches are signed events, and
+// reputation is recomputed from the verified event log by the Rust engine (no seed
+// magnitude). The persona is now only an ORIENTATION hint; the key, the event log,
+// the companion chat and the model config are all LOCAL and never synced.
 
-import init, { WasmCrdtDoc, WasmSyncSession } from "../pkg/mp_wasm.js";
+import init, {
+  WasmCrdtDoc,
+  WasmSyncSession,
+  WasmIdentity,
+  verify_event,
+  recompute_reputation,
+  rank_wizards,
+  crystallize_threshold,
+  wizard_id_of,
+  mastery_kind,
+} from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
-import { accumulate } from "./traverse.js";
 import { createSync } from "./sync.js";
+import { createSnapshotStore } from "./persistence.js";
+import { createPeer } from "./webrtc.js";
+import { loadOrMintIdentity } from "./identity.js";
+import { makeLog } from "./events.js";
+import { createRelay, RELAY_KEY } from "./relay.js";
+import { createEventBus } from "./eventbus.js";
 import {
   ARCHETYPES,
-  seedReputation,
   authorPersona,
   DOMAINS,
   AXES,
   MATH_DOMAIN,
   MUSIC_DOMAIN,
+  PHYSICS_DOMAIN,
 } from "./persona.js";
+import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
+import { buildPlateau } from "./plateau.js";
+import { renderMarkdown, safeHref } from "./markdown.js";
+import { typesetMath } from "./katex.js";
+import {
+  rankResources,
+  buildPlateauStudyContext,
+  STUDY_ACTIONS,
+  crossLinks,
+  bridgeResources,
+  buildProofGrading,
+  parseVerdict,
+} from "./study.js";
+import { offlineDigest } from "./offline-digest.js";
+import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
+import { buildBridge } from "./bridge.js";
+import { buildResource, RESOURCE_KINDS } from "./resource.js";
+import { buildVote } from "./vote.js";
+import { createPresence, HEARTBEAT_MS } from "./presence.js";
+import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
+import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
 // browser and NEVER synced (R-0007 AC5). Default to the offline `fake` provider
@@ -62,62 +100,93 @@ function saveAuthored(seed) {
   localStorage.setItem(AUTHORED_KEY, JSON.stringify(seed)); // local only — never on the wire
 }
 
+// The relay endpoint is a LOCAL setting (like the model config). Empty ⇒ offline,
+// and the world stays fully playable from the local event log (R-0010 AC7).
+function loadRelayUrl() {
+  try {
+    return localStorage.getItem(RELAY_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+function saveRelayUrl(url) {
+  try {
+    if (url) localStorage.setItem(RELAY_KEY, url);
+    else localStorage.removeItem(RELAY_KEY);
+  } catch {
+    /* storage denied — the URL still applies for this session */
+  }
+}
+
 // How many nearest-by-projection plateaus to ground the companion with.
 const NEAREST_K = 5;
 
-// Two domains in different GA regions so domain choice means something
-// (R-0006 AC3): Mathematics lives on the e1 axis, Music on the e3 axis. e2 is a
-// small shared "depth" jitter for visual spread and never discriminates at these
-// magnitudes. This seed supersedes the SPEC-0005 single-domain seed.
-//
-// Fixed (deterministic) ids so two independently-loaded tabs converge to ONE
-// shared map rather than doubling it (see WasmCrdtDoc::seed_plateau).
-const SEED_PLATEAUS = [
-  // Mathematics (e1 axis)
-  { id: "00000000-0000-0000-0000-0000000000a1", name: "Arithmetic", domain: MATH_DOMAIN, e1: 1.0, e2: 0.05, e3: 0.05 },
-  { id: "00000000-0000-0000-0000-0000000000a2", name: "Algebra", domain: MATH_DOMAIN, e1: 0.8, e2: 0.2, e3: 0.1 },
-  { id: "00000000-0000-0000-0000-0000000000a3", name: "Geometry", domain: MATH_DOMAIN, e1: 0.7, e2: 0.1, e3: 0.35 },
-  { id: "00000000-0000-0000-0000-0000000000a4", name: "Calculus", domain: MATH_DOMAIN, e1: 0.6, e2: 0.3, e3: 0.3 },
-  // Music (e3 axis)
-  { id: "00000000-0000-0000-0000-0000000000c1", name: "Rhythm", domain: MUSIC_DOMAIN, e1: 0.05, e2: 0.05, e3: 1.0 },
-  { id: "00000000-0000-0000-0000-0000000000c2", name: "Melody", domain: MUSIC_DOMAIN, e1: 0.1, e2: 0.2, e3: 0.8 },
-  { id: "00000000-0000-0000-0000-0000000000c3", name: "Harmony", domain: MUSIC_DOMAIN, e1: 0.35, e2: 0.1, e3: 0.7 },
-  { id: "00000000-0000-0000-0000-0000000000c4", name: "Counterpoint", domain: MUSIC_DOMAIN, e1: 0.3, e2: 0.3, e3: 0.6 },
-];
+// A reached plateau signs a depth-1 traversal toward its position (R-0010 AC3).
+const TRAVERSAL_DEPTH = 1.0;
+// How many top traversers per domain discovery surfaces (R-0010 AC7).
+const DISCOVERY_K = 5;
 
-// Bridges are decorative — reachability is positional, not adjacency-based, so a
-// bridge only draws a labelled line. One cross-domain bridge hints the domains
-// connect.
-const P = Object.fromEntries(SEED_PLATEAUS.map((p) => [p.name, p.id]));
-const SEED_BRIDGES = [
-  { id: "00000000-0000-0000-0000-0000000000b1", from: P.Arithmetic, to: P.Algebra, concept: "variables" },
-  { id: "00000000-0000-0000-0000-0000000000b2", from: P.Algebra, to: P.Geometry, concept: "coordinates" },
-  { id: "00000000-0000-0000-0000-0000000000b3", from: P.Algebra, to: P.Calculus, concept: "rates of change" },
-  { id: "00000000-0000-0000-0000-0000000000b4", from: P.Geometry, to: P.Calculus, concept: "limits" },
-  { id: "00000000-0000-0000-0000-0000000000b5", from: P.Rhythm, to: P.Melody, concept: "pitch" },
-  { id: "00000000-0000-0000-0000-0000000000b6", from: P.Melody, to: P.Harmony, concept: "chords" },
-  { id: "00000000-0000-0000-0000-0000000000b7", from: P.Harmony, to: P.Counterpoint, concept: "voice-leading" },
-  { id: "00000000-0000-0000-0000-0000000000b8", from: P.Rhythm, to: P.Counterpoint, concept: "meter" },
-  // cross-domain — purely visual
-  { id: "00000000-0000-0000-0000-0000000000b9", from: P.Geometry, to: P.Harmony, concept: "ratio" },
-];
+// The deterministic seed world (fixed-id plateaus + bridges) lives in seeds.js
+// (SPEC-0022): pure data, node-testable (seeds.test.mjs asserts id uniqueness),
+// imported above. Mathematics on e1, Music on e3, Physics on e2 (R-0022).
 
 // id → domain, so traverse grows the plateau's OWN domain bucket. Foreign synced
 // plateaus (added in another tab) fall back to the active persona's first domain
 // — a best-effort heuristic, harmless to the positional fog math.
 const DOMAIN_OF = new Map(SEED_PLATEAUS.map((p) => [p.id, p.domain]));
 
+// Each faced domain's on-axis origin plateau is always drawn as a navigable
+// trailhead (SPEC-0010 §2.3): with an empty log reputation reaches nothing, but a
+// trailhead lets the visitor sign their FIRST traversal. This is a render/interaction
+// affordance gated on persona ORIENTATION, never on reputation — so "empty log ⇒
+// empty domain_reps ⇒ reaches nothing" stays true at the reputation layer.
+const TRAILHEAD_OF = {
+  [MATH_DOMAIN]: P.Arithmetic,
+  [MUSIC_DOMAIN]: P.Rhythm,
+  [PHYSICS_DOMAIN]: P.Motion, // R-0022: the Physicist's first step
+};
+
 // Math on the upper-right (high e1), Music on the lower-left (high e3).
-const VIEW = { cx: 230, cy: 150, scale: 320 };
+// `let`, not `const`: Travel (R-0019) re-origins the camera by overwriting
+// VIEW.cx/cy via wayfinding.centerOn — the only state travel ever touches.
+let VIEW = { cx: 230, cy: 150, scale: 320 };
 
 async function main() {
   await init();
 
-  const doc = WasmCrdtDoc.new(); // fallible ctor — throws on Err
+  // ── Durable graph (SPEC-0012 / R-0012) ──────────────────────────────────
+  // Restore the CRDT doc from its IndexedDB snapshot, else start fresh. A
+  // corrupt/old blob throwing in load() must NOT abort main() (the top-level
+  // catch does not reseed), so catch it here and discard-and-reseed (AC7). In
+  // node/private-mode the store is inert and load() resolves null.
+  const snapshots = createSnapshotStore();
+  const saved = await snapshots.load();
+  let doc;
+  try {
+    doc = saved ? WasmCrdtDoc.load(saved) : WasmCrdtDoc.new();
+  } catch {
+    doc = WasmCrdtDoc.new(); // corrupt blob → fresh doc, reseed below, overwrite on next persist
+  }
   const session = new WasmSyncSession();
 
+  // Apply the deterministic seed on every load — an idempotent upsert on fixed
+  // ids (convergent, R-0004 AC4); authored nodes have random ids and are never
+  // touched (AC4).
   for (const p of SEED_PLATEAUS) doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3);
   for (const b of SEED_BRIDGES) doc.seed_bridge(b.id, b.from, b.to, b.concept);
+  // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
+  // fresh world has something to read; re-seeding never resets earned stones.
+  for (const r of SEED_RESOURCES) doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
+
+  // Rebuild id→domain from the (possibly restored) doc so a restored authored
+  // plateau scores reputation under its OWN domain, not a fallback (AC5).
+  for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+
+  // Persist the whole converged doc to IndexedDB; debounced inside the store
+  // (AC3). Called after every local edit and inbound sync.
+  function persist() {
+    snapshots.save(doc.save());
+  }
 
   // AC5 — the synced doc carries exactly the four data maps, no reputation key.
   const keys = doc.root_keys();
@@ -125,10 +194,44 @@ async function main() {
   console.log(`[mp] doc root keys: ${keys.join(", ")} ${ok ? "✓" : "✗ UNEXPECTED"}`);
   console.assert(ok, "synced doc must hold exactly {bridges, plateaus, resources, votes}");
 
+  // ── Identity + event log (SPEC-0010 §2.3, R-0010 AC1/AC3) ───────────────
+  // All crypto/GA stays in Rust; this object just injects the wasm entry points
+  // into the pure JS orchestration of identity.js / events.js.
+  const idWasm = { WasmIdentity, verify_event, recompute_reputation };
+  // Mint or restore the wizard key; the SECRET is persisted only locally and never
+  // displayed/synced/logged. The pubkey is the stable public wizard id.
+  const identity = loadOrMintIdentity(idWasm, localStorage);
+  const myPubkey = identity.pubkey();
+  // The verified event log is the SOURCE of reputation — no seed magnitude.
+  const log = makeLog(idWasm, myPubkey, localStorage);
+  // Cached `{domain_reps, synthesis}`; recomputed from the log after every change.
+  let reputation = log.reputation();
+  function recompute() {
+    reputation = log.reputation();
+  }
+  // Progress derived from the SAME verified log (R-0030 mastered, R-0033 visited),
+  // refreshed alongside reputation. Both are completion layers, NOT reach: a topic
+  // is "studying" once visited, "mastered" once quizzed.
+  let mastered = masteredTopics(log.all(), myPubkey);
+  let visited = visitedTopics(log.all(), myPubkey);
+  // Community-approved (R-0031): topics ≥N distinct wizards have mastered, counted
+  // over the SAME verified corpus (own + discovered) — pubkey-agnostic, off the CRDT.
+  let community = communityApproved(log.all());
+  function recomputeProgress() {
+    mastered = masteredTopics(log.all(), myPubkey);
+    visited = visitedTopics(log.all(), myPubkey);
+    community = communityApproved(log.all());
+  }
+  // Pin the JS MASTERY_KIND to the Rust source (one source of truth, R-0030 AC6).
+  console.assert(
+    mastery_kind() === MASTERY_KIND,
+    `MASTERY_KIND ${MASTERY_KIND} ≠ Rust mastery_kind() ${mastery_kind()}`,
+  );
+
   // The persona is the page's local lens. Null until the visitor chooses one; the
-  // world is not interactive before then (R-0006 AC1).
+  // world is not interactive before then (R-0006 AC1). Phase 8: the persona only
+  // ORIENTS (which domains' trailheads/camera) — it never seeds a reputation vector.
   let activePersona = null;
-  let localRep = { domain_reps: {} };
 
   // The visitor's last authored persona inputs `{ name, orient, tone }`, restored
   // from localStorage and surfaced in the creator (SPEC-0009 §2.5). LOCAL only.
@@ -141,6 +244,9 @@ async function main() {
   const canvas = document.getElementById("world");
   const ctx = canvas.getContext("2d");
   const hud = document.getElementById("hud");
+  const identityHud = document.getElementById("identity-hud");
+  const relayHud = document.getElementById("relay-hud");
+  const discovery = document.getElementById("discovery");
   const creator = document.getElementById("creator");
   const companion = document.getElementById("companion");
   const companionName = document.getElementById("companion-name");
@@ -149,28 +255,253 @@ async function main() {
   const companionForm = document.getElementById("companion-form");
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
+  let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
+
+  // Show the PUBLIC half of the key (safe to display). The secret is never shown.
+  identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
+
+  // The domains the active persona faces, and each one's always-navigable trailhead.
+  function facedDomains() {
+    return new Set((activePersona?.orient ?? []).map((o) => o.domain));
+  }
+  function trailheadIds() {
+    const ids = [];
+    for (const d of facedDomains()) {
+      if (TRAILHEAD_OF[d]) ids.push(TRAILHEAD_OF[d]);
+    }
+    return ids;
+  }
 
   function draw() {
     const graph = doc.to_graph();
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
-    const reachable = new Set(graph.reachable_plateaus(JSON.stringify(localRep)));
-    points = render(ctx, { plateaus, bridges, reachable, view: VIEW });
+    const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
+    // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
+    // browsable. Reach/reputation is still recomputed (it grounds the companion +
+    // discovery, R-0010); it just no longer gates or colours the map.
+    points = render(ctx, {
+      plateaus,
+      bridges,
+      view: VIEW,
+      resources,
+      peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+      focusedId, // transient travel highlight (R-0019); null most of the time
+      visited, // studying set (R-0033)
+      mastered, // mastered set — ✓ + gold (R-0030)
+      community, // crowd-approved set — bedrock ring (R-0031)
+    });
+    const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
-    hud.textContent = `${who}${reachable.size}/${plateaus.length} plateaus lit · ${bridges.length} bridges`;
+    const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
+    hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
   }
 
-  // After any LOCAL graph edit, ship the change to the other tab.
-  const sync = createSync(doc, session, draw);
+  // ── Ephemeral presence (SPEC-0016 / R-0016) ─────────────────────────────────
+  // A per-TAB session id (NOT persisted) — two tabs of the same wizard are two
+  // presences. Beacons ride a SEPARATE channel; nothing here touches the CRDT,
+  // the event log, or any store. A beacon arriving redraws immediately; the
+  // heartbeat re-announces AND redraws so a gone wizard's silhouette expires.
+  const sessionId = crypto.randomUUID();
+  let myPlateau = null; // current position (a plateau id), set on focus
+  const presence = createPresence({ session: sessionId, onChange: draw });
+  function announcePresence() {
+    if (myPlateau) presence.announce({ pubkey: myPubkey, plateau: myPlateau });
+  }
+  setInterval(() => {
+    announcePresence();
+    draw();
+  }, HEARTBEAT_MS);
+
+  // After any LOCAL graph edit, ship the change to the other tab. The inbound
+  // callback redraws AND persists the converged doc (AC3) — wrapping keeps
+  // sync.js a pure transport (it never learns about persistence).
+  const sync = createSync(doc, session, () => {
+    draw();
+    persist();
+  });
+
+  // ── WebRTC peer-to-peer sync (SPEC-0018 / R-0018) ───────────────────────
+  // An OPTIONAL, additive second pipe for the SAME CRDT sync bytes — directly
+  // between devices, no server. `peer` is null until the wizard opts in; with no
+  // peer the app is unchanged (BroadcastChannel sync above still runs). Each peer
+  // drives its OWN WasmSyncSession; the pump mirrors sync.js, over peer.send.
+  let peer = null;
+  let peerSession = null;
+  function pumpPeer() {
+    if (!peer || !peer.isOpen()) return;
+    let msg;
+    while ((msg = doc.generate_message(peerSession)) !== undefined) peer.send(msg);
+  }
+  function startPeer() {
+    peerSession = new WasmSyncSession();
+    peer = createPeer({
+      onOpen: () => pumpPeer(), // catch the remote up with our state on connect
+      onMessage: (bytes) => {
+        doc.receive_message(peerSession, bytes);
+        pumpPeer(); // a received change may unblock more to send
+        draw();
+        persist(); // durable (R-0012); the doc carries plateaus/bridges/markers/votes
+      },
+    });
+    return peer;
+  }
+
+  // ── Signed-event transport (SPEC-0010 §2.3, R-0010 AC2/AC4/AC7) ─────────
+  // Verify-gate an event into the local log, recompute reputation, re-light, and —
+  // for locally-signed events — ship it to the other tab and the relay. Inbound
+  // peer/relay events arrive with broadcast:false so they are not echoed back.
+  function ingest(json, { broadcast = true } = {}) {
+    if (!log.add(json)) return false; // invalid signature or duplicate — inert
+    recompute();
+    recomputeProgress(); // refresh studying/mastered sets (own + discovered events, R-0030/R-0033)
+    if (broadcast) {
+      try {
+        bus.broadcast(json);
+      } catch {
+        /* no BroadcastChannel (e.g. older runtime) — relay/local still work */
+      }
+      relay.publish(json);
+    }
+    draw();
+    return true;
+  }
+
+  // Cross-tab signed-event channel — SEPARATE from the CRDT graph-sync channel.
+  const bus = createEventBus((json) => ingest(json, { broadcast: false }));
+
+  // Optional relay; reconnectable from the HUD. Starts from the saved URL (offline
+  // if none). On socket trouble the HUD shows "offline" and the world keeps working.
+  let relay = { publish() {}, close() {} };
+  function setRelayStatus(state) {
+    relayHud.textContent = state === "online" ? "relay ● online" : "relay ○ offline";
+  }
+  function connectRelay(url) {
+    relay.close();
+    relay = createRelay({
+      url,
+      onEvent: (json) => ingest(json, { broadcast: false }),
+      onStatus: setRelayStatus,
+    });
+  }
+
+  // Reaching a plateau signs a depth-1 traversal toward its position, recomputes,
+  // re-lights, and ships it — no reload (R-0010 AC2/AC3).
+  function signTraversal(domain, plateau) {
+    const { e1, e2, e3 } = plateau.position;
+    try {
+      ingest(identity.sign_traversal(domain, e1, e2, e3, TRAVERSAL_DEPTH, plateau.id));
+    } catch (err) {
+      console.error("[mp] sign_traversal failed:", err);
+    }
+  }
+
+  // R-0030 — sign a mastery event for the topic (self-tested upstream). NOT
+  // reputation-bearing; ingest refreshes the ✓ set + redraws. Idempotent (the
+  // mastered SET dedupes by plateau id).
+  function signMastery(plateau) {
+    try {
+      ingest(identity.sign_mastery(plateau.id));
+    } catch (err) {
+      console.error("[mp] sign_mastery failed:", err);
+    }
+  }
+
+  // ── Discovery + vouch (SPEC-0010 §2.3, R-0010 AC5/AC7) ──────────────────
+  function shortKey(pk) {
+    return pk && pk.length > 12 ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : pk || "?";
+  }
+  function labelForDomain(id) {
+    return DOMAINS.find((d) => d.id === id)?.label ?? "Uncharted";
+  }
+  function canonicalAxis(domain) {
+    const c = DOMAINS.find((d) => d.id === domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
+    return [c.e1, c.e2, c.e3];
+  }
+
+  // Endorse a discovered wizard in `domain`. The two endpoints are the domain's
+  // canonical grade-1 axis, so recompute rebuilds an even-grade rotor (the only
+  // public Bridge path) and `propagate` flows the voucher's EARNED reach to the
+  // vouched at trust_decay. With no earned reach it is a no-op — you cannot vouch
+  // what you have not earned, which is the Sybil grade-collapse (R-0010 AC5).
+  function vouchFor(domain, vouchedPubkey) {
+    const axis = canonicalAxis(domain);
+    try {
+      ingest(identity.sign_vouch(domain, vouchedPubkey, axis, axis));
+    } catch (err) {
+      console.error("[mp] sign_vouch failed:", err);
+      return;
+    }
+    renderDiscovery();
+  }
+
+  // Rank top traversers per faced domain from the VERIFIED log (client-side; the
+  // relay is never trusted for ordering). Each foreign wizard gets a vouch button.
+  function renderDiscovery() {
+    discovery.innerHTML = "";
+    if (!activePersona) return;
+    const domains = [...facedDomains()];
+    if (domains.length === 0) {
+      discovery.textContent = "Face a domain to discover its wizards.";
+      return;
+    }
+    const logJson = JSON.stringify(log.all());
+    for (const domain of domains) {
+      const section = document.createElement("div");
+      section.className = "discovery-domain";
+      const head = document.createElement("div");
+      head.className = "discovery-head";
+      head.textContent = `${labelForDomain(domain)} — top traversers`;
+      section.append(head);
+
+      let rows = [];
+      try {
+        rows = rank_wizards(logJson, domain, DISCOVERY_K);
+      } catch (err) {
+        console.error("[mp] rank_wizards failed:", err);
+      }
+      if (!rows || rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "discovery-empty";
+        empty.textContent = "No signed traversals yet.";
+        section.append(empty);
+      } else {
+        for (const { pubkey, reach } of rows) {
+          const row = document.createElement("div");
+          row.className = "discovery-row";
+          const who = pubkey === myPubkey ? "you" : shortKey(pubkey);
+          const label = document.createElement("span");
+          label.textContent = `${who} · reach ${reach.toFixed(2)}`;
+          row.append(label);
+          if (pubkey !== myPubkey) {
+            const vouchBtn = document.createElement("button");
+            vouchBtn.type = "button";
+            vouchBtn.textContent = "Vouch";
+            vouchBtn.addEventListener("click", () => vouchFor(domain, pubkey));
+            row.append(vouchBtn);
+          }
+          section.append(row);
+        }
+      }
+      discovery.append(section);
+    }
+  }
 
   // ── Persona creator (R-0006 AC1/AC2/AC4) ───────────────────────────────
-  // Choosing an archetype re-seeds the LOCAL reputation and re-lights the world
-  // with no reload. Nothing about the persona is ever written to the doc/channel.
+  // Choosing a persona ORIENTS the world (trailheads, camera, companion) and
+  // re-lights with no reload. Reputation is NOT touched — reach is earned by the
+  // key's signed history, independent of which lens is worn. Nothing about the
+  // persona is ever written to the doc/channel.
   function choosePersona(archetype) {
     activePersona = archetype;
-    localRep = seedReputation(archetype);
     creator.hidden = true;
     initCompanion(archetype); // embody the persona (R-0007 AC2)
+    // Stand at the first faced trailhead so peers see us immediately (R-0016 AC4).
+    // A persona facing no domain has no trailhead → myPlateau stays null and the
+    // wizard appears only after their first focus.
+    myPlateau = trailheadIds()[0] ?? null;
+    announcePresence();
+    renderDiscovery();
     draw();
   }
 
@@ -210,7 +541,7 @@ async function main() {
   // (R-0007 AC3). All GA ranking is done in the wasm core; JS only formats.
   function buildContextForTurn() {
     const graph = doc.to_graph();
-    const repJson = JSON.stringify(localRep);
+    const repJson = JSON.stringify(reputation);
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const reachableIds = new Set(graph.reachable_plateaus(repJson));
@@ -319,8 +650,9 @@ async function main() {
   // The "create your own" form (R-0009 AC1). Per domain: an enable toggle and three
   // axis sliders under HUMAN labels (Formal/Empirical/Creative) defaulting to the
   // domain's canonical axis — so the simplest path reproduces a preset, while
-  // re-aiming a slider authors a novel map. Sliders express DIRECTION only;
-  // `seedReputation` normalizes them, so there is no magnitude/rank control (AC1/AC5).
+  // re-aiming a slider authors a novel map. Sliders express DIRECTION only — they
+  // orient which domains' trailheads are offered; there is no magnitude/rank control
+  // (R-0009 AC1/AC5). Phase 8: rank is earned from signed traversals, not authored.
   function buildAuthorForm() {
     const form = document.createElement("div");
     form.className = "author";
@@ -331,7 +663,7 @@ async function main() {
     const nameIn = document.createElement("input");
     nameIn.type = "text";
     nameIn.id = "author-name";
-    nameIn.placeholder = "Your persona";
+    nameIn.placeholder = "Your career lens"; // user-facing copy (R-0019 AC1); the authorPersona DEFAULT name stays "Your persona"
     nameIn.value = authoredSeed?.name ?? "";
     nameField.append(nameIn);
 
@@ -394,7 +726,7 @@ async function main() {
     const hint = document.createElement("p");
     hint.className = "author-hint";
     hint.textContent =
-      "Sliders set direction only — which way the lens faces, never how strong it is. Face nothing and the world stays fogged until you explore.";
+      "Sliders set direction only — which way the lens faces, never how strong it is. It orients where you begin; every topic is open to explore.";
 
     const actions = document.createElement("div");
     actions.className = "author-actions";
@@ -430,11 +762,11 @@ async function main() {
   function buildCreator() {
     creator.innerHTML = "";
     const title = document.createElement("h2");
-    title.textContent = "Choose your persona";
+    title.textContent = "Choose your career lens";
     const sub = document.createElement("p");
     sub.className = "creator-sub";
     sub.textContent =
-      "Your persona is a lens: it orients you in the knowledge geometry and lights a different starting map.";
+      "Your career lens orients you in the knowledge world and lights where you start. Change it anytime.";
     creator.append(title, sub);
 
     const cards = document.createElement("div");
@@ -447,11 +779,11 @@ async function main() {
 
     const create = document.createElement("button");
     create.type = "button";
-    create.textContent = "Create your own";
+    create.textContent = "Build your own";
     create.addEventListener("click", () => {
       creator.innerHTML = "";
       const t = document.createElement("h2");
-      t.textContent = "Author your persona";
+      t.textContent = "Author your career lens";
       const s = document.createElement("p");
       s.className = "creator-sub";
       s.textContent = "Name your lens and aim it: enable a domain and set its direction.";
@@ -466,20 +798,86 @@ async function main() {
     creator.hidden = false;
   });
 
+  // ── Map navigation: pan + zoom (R-0024) ────────────────────────────────────
+  // Mutate the single VIEW camera; draw() recomputes points so hit-testing,
+  // presence, Travel, and the focus ring all follow for free. The canvas is
+  // 800×600 with no CSS resize, so canvas px == client px 1:1 (a responsive
+  // canvas would need to scale the anchor by canvas.width / rect.width).
+  const DRAG_THRESHOLD = 4; // px of travel before a press counts as a pan, not a click
+  let panning = false;
+  let moved = false; // a real drag happened → suppress the click-to-open (read at "click")
+  let panStart = { x: 0, y: 0, cx: 0, cy: 0 };
+  canvas.addEventListener("pointerdown", (e) => {
+    panning = true;
+    moved = false; // reset per press — the click guard reads this, NOT `panning`
+    panStart = { x: e.clientX, y: e.clientY, cx: VIEW.cx, cy: VIEW.cy };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture can throw for an inactive pointer id; panning still works */
+    }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!panning) return;
+    const dx = e.clientX - panStart.x;
+    const dy = e.clientY - panStart.y;
+    if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
+    if (moved) {
+      VIEW.cx = panStart.cx + dx;
+      VIEW.cy = panStart.cy + dy;
+      draw();
+    }
+  });
+  const endPan = (e) => {
+    panning = false; // NB: `moved` persists until the next pointerdown (the click guard needs it)
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* nothing captured — fine */
+    }
+  };
+  canvas.addEventListener("pointerup", endPan);
+  canvas.addEventListener("pointercancel", endPan);
+
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault(); // don't scroll the page
+      const rect = canvas.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      VIEW = zoomAt(VIEW, factor, e.clientX - rect.left, e.clientY - rect.top);
+      draw();
+    },
+    { passive: false },
+  );
+
+  const DEFAULT_VIEW = { ...VIEW };
+  document.getElementById("zoom-in").addEventListener("click", () => {
+    VIEW = zoomAt(VIEW, 1.3, canvas.width / 2, canvas.height / 2);
+    draw();
+  });
+  document.getElementById("zoom-out").addEventListener("click", () => {
+    VIEW = zoomAt(VIEW, 1 / 1.3, canvas.width / 2, canvas.height / 2);
+    draw();
+  });
+  document.getElementById("zoom-reset").addEventListener("click", () => {
+    VIEW = { ...DEFAULT_VIEW };
+    draw();
+  });
+
   canvas.addEventListener("click", (e) => {
+    if (moved) return; // a pan just happened — not a click (R-0024 AC2)
     if (!activePersona) return; // not interactive until a persona is chosen (AC1)
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
     const graph = doc.to_graph();
-    const reachable = new Set(graph.reachable_plateaus(JSON.stringify(localRep)));
-
-    // Hit-test the nearest LIT plateau within its disc.
+    // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
+    // (no reachability gate). Opening one is "studying" it.
     let hit = null;
     let best = RADIUS * RADIUS;
     for (const p of graph.plateaus()) {
-      if (!reachable.has(p.id)) continue;
       const pt = points.get(p.id);
       const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
       if (d <= best) {
@@ -488,49 +886,957 @@ async function main() {
       }
     }
     if (hit) {
-      // Local reputation only — NOT a graph edit, so it is never synced (AC5).
-      // Grow the plateau's OWN domain bucket (fallback: the persona's first domain,
-      // if it faces one — an authored persona may face nothing, R-0009 AC6).
+      // Focusing a plateau is the wizard's position — announce it to peers
+      // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
+      myPlateau = hit.id;
+      announcePresence();
+      // Opening = studying: sign a traversal toward the plateau (R-0010 AC2/AC3),
+      // growing the plateau's OWN domain bucket (fallback: the persona's first
+      // faced domain — an authored persona may face nothing, R-0009 AC6). The
+      // signed event — never any graph edit — feeds reputation (now demoted to
+      // rank/discovery; the map colours by progress, R-0033).
       const domain = DOMAIN_OF.get(hit.id) ?? activePersona.orient[0]?.domain;
-      if (domain) {
-        localRep = accumulate(localRep, domain, hit.position);
-        draw();
-      }
+      if (domain) signTraversal(domain, hit);
+      // Visiting a topic is reading it: open the read view (R-0020). Purely
+      // presentational — it does not edit the graph.
+      openPlateau(hit);
+      return;
+    }
+    // No disc hit → test bridges (R-0029). Every disc is now a hit candidate, so
+    // "cursor over a disc" ⇔ `hit` is set above — a disc already wins precedence
+    // over a bridge, and opening a bridge stays read-only.
+    const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
+    if (bid) {
+      const b = graph.bridges().find((x) => x.id === bid);
+      if (b) openBridge(b, graph);
     }
   });
 
-  // A synced graph edit: add a user-authored plateau (fresh random id) under the
-  // active persona's domain and a bridge from it, then pump to the other tab.
-  let added = 0;
-  document.getElementById("add").addEventListener("click", () => {
-    if (!activePersona) return;
-    // An authored persona may face nothing (orient: []); without a domain to file
-    // the new plateau under there is nothing to add, so no-op rather than throw
-    // (R-0009 AC6 — keep the world console-clean for an empty persona).
-    const domain = activePersona.orient[0]?.domain;
-    if (!domain) return;
-    added += 1;
-    const e1 = Math.random() * 1.2 - 0.1;
-    const e2 = Math.random() * 0.5;
-    const e3 = Math.random() * 1.2;
-    const id = doc.add_plateau(`Idea ${added}`, domain, e1, e2, e3);
-    DOMAIN_OF.set(id, domain);
-    doc.add_bridge(SEED_PLATEAUS[0].id, id, `link ${added}`);
-    sync.pump(); // broadcast the CRDT change
+  // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
+  // Render a plateau's Markdown body (typeset math via lazy vendored KaTeX) plus
+  // the resources anchored to it. Pure view over the DTO — no mutation. The body
+  // is rendered through markdown.js's injection-safe renderer before innerHTML.
+  const detail = document.getElementById("plateau-detail");
+  const detailName = document.getElementById("detail-name");
+  const detailBody = document.getElementById("detail-body");
+  const detailReply = document.getElementById("detail-reply");
+  const detailResources = document.getElementById("detail-resources");
+  const detailBridge = document.getElementById("detail-bridge");
+  const detailMastery = document.getElementById("detail-mastery");
+  // Prove it (R-0032): the AI-checked proof box is a STATIC SIBLING of
+  // #detail-mastery (so renderMastery's replaceChildren never wipes the draft);
+  // its nodes are queried once here and wired once below.
+  const detailProof = document.getElementById("detail-proof");
+  const proofPalette = document.getElementById("proof-palette");
+  const proofInput = document.getElementById("proof-input");
+  const proofPreview = document.getElementById("proof-preview");
+  const proofCheck = document.getElementById("proof-check");
+  const proofFeedback = document.getElementById("proof-feedback");
+  function hideProofBox() {
+    detailProof.hidden = true;
+    proofInput.value = "";
+    proofPreview.replaceChildren();
+    proofFeedback.textContent = "";
+  }
+  const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
+  let studyPlateau = null; // the plateau currently open in the Study view
+
+  function openPlateau(p) {
+    detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
+    studyPlateau = p;
+    detailName.textContent = p.name; // textContent — never trust the name as HTML
+    detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
+    typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
+    detailReply.hidden = true; // clear any prior plateau's study answer
+    detailReply.textContent = "";
+    hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
+    renderStudyResources();
+    renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
+    renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
+    detail.hidden = false;
+  }
+
+  // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
+  // "Mark as mastered" which runs the Quiz me self-test and reveals a confirm
+  // ("I can answer these") that signs the mastery event. Self-attested gate —
+  // nothing is signed without running the test and confirming.
+  function renderMastery(p) {
+    detailMastery.replaceChildren();
+    if (mastered.has(p.id)) {
+      const done = document.createElement("span");
+      done.className = "mastered-badge";
+      done.textContent = "✓ Mastered";
+      detailMastery.append(done);
+      return;
+    }
+    const markBtn = document.createElement("button");
+    markBtn.type = "button";
+    markBtn.className = "mastery-mark";
+    markBtn.textContent = "Mark as mastered";
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "mastery-confirm";
+    confirm.textContent = "✓ I can answer these — mark mastered";
+    confirm.hidden = true; // only after the self-test runs
+    markBtn.addEventListener("click", () => {
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz")); // run the recall self-test
+      confirm.hidden = false; // now the attestation is available
+    });
+    confirm.addEventListener("click", () => {
+      signMastery(p); // ingest → recomputeMastered → draw
+      renderMastery(p); // becomes "✓ Mastered"
+    });
+    detailMastery.append(markBtn, confirm);
+    // R-0032 — "Prove it (AI-checked)": only when a model is connected (offline
+    // has no judge, so the self-attest path above stands alone). Toggles the
+    // sibling #detail-proof box; opening a different topic hides + clears it.
+    if (modelConfig.kind !== "fake") {
+      const proveBtn = document.createElement("button");
+      proveBtn.type = "button";
+      proveBtn.className = "mastery-mark";
+      proveBtn.textContent = "Prove it (AI-checked)";
+      proveBtn.addEventListener("click", () => {
+        detailProof.hidden = !detailProof.hidden;
+        if (!detailProof.hidden) proofInput.focus();
+      });
+      detailMastery.append(proveBtn);
+    }
+  }
+
+  // A bridge is a CONNECTION, not a topic (R-0029): clicking it opens a read-only
+  // view of the concept, the two topics it joins (each opens its Study view), and
+  // the books that span both ends (R-0028). It signs NO traversal, announces NO
+  // presence, and makes NO graph edit — a bridge is not a reachable position.
+  function openBridge(b, graph) {
+    detail.dataset.mode = "bridge"; // CSS hides body/study/reply/resources/add
+    detailName.textContent = b.concept || "Connection";
+    const plats = graph.plateaus();
+    const byId = new Map(plats.map((p) => [p.id, p]));
+    detailBridge.replaceChildren();
+
+    const head = document.createElement("p");
+    head.className = "bridge-connects";
+    head.append(document.createTextNode("Connects: "));
+    for (const [i, endId] of [b.from, b.to].entries()) {
+      const p = byId.get(endId);
+      if (i > 0) head.append(document.createTextNode(" ↔ "));
+      if (!p) {
+        head.append(document.createTextNode("(unknown)"));
+        continue;
+      }
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "bridge-topic";
+      link.textContent = p.name; // textContent — inert
+      link.addEventListener("click", () => openPlateau(p));
+      head.append(link);
+    }
+    detailBridge.append(head);
+
+    const shared = bridgeResources({ resources: graph.resources(), fromId: b.from, toId: b.to });
+    const label = document.createElement("p");
+    label.className = "bridge-res-label";
+    label.textContent = shared.length ? "Books that span both:" : "No resources span both topics yet.";
+    detailBridge.append(label);
+    if (shared.length) {
+      const ul = document.createElement("ul");
+      ul.className = "res-list";
+      for (const r of shared) {
+        const li = document.createElement("li");
+        const kind = document.createElement("span");
+        kind.className = "res-kind";
+        kind.textContent = r.kind;
+        li.append(kind, document.createTextNode(" "));
+        const href = safeHref(r.uri);
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = r.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(r.title));
+        }
+        ul.append(li);
+      }
+      detailBridge.append(ul);
+    }
+    detail.hidden = false;
+  }
+
+  // The study answer shown INSIDE the detail drawer, where the buttons are: the
+  // global companion panel (still the transcript of record) sits behind this
+  // fixed drawer, so a study reply must surface here to be seen. textContent
+  // only — never innerHTML (no injection).
+  function showStudyReply(text) {
+    detailReply.textContent = text;
+    detailReply.hidden = false;
+  }
+
+  // Resources anchored to the open plateau, ranked best-first (R-0023): each row
+  // shows the weighted-vote count (rounded for display only — it is the R-0015
+  // weighted SUM, not an integer tally), a bedrock badge when Crystallized, and a
+  // ＋ stone button on the audited grow-only vote path. Reuses the safeHref
+  // chokepoint for the link, exactly as the old flat list did.
+  function renderStudyResources() {
+    if (!studyPlateau) return;
+    const g = doc.to_graph();
+    const allResources = g.resources(); // full set — to thread cross-cutting books (R-0028)
+    const allPlateaus = g.plateaus();
+    const rs = allResources.filter((r) => r.plateau_id === studyPlateau.id);
+    detailResources.replaceChildren();
+    if (rs.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "detail-empty";
+      empty.textContent = "No resources pinned here yet — add a book, link, or video below.";
+      detailResources.append(empty);
+      return;
+    }
+    const ul = document.createElement("ul");
+    ul.className = "res-list";
+    for (const r of rankResources(rs)) {
+      const li = document.createElement("li");
+      const crystallized = r.state === "Crystallized";
+
+      const kind = document.createElement("span");
+      kind.className = "res-kind";
+      kind.textContent = r.kind; // DTO enum string; textContent keeps it inert
+      li.append(kind, document.createTextNode(" "));
+
+      const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
+      if (href) {
+        const a = document.createElement("a");
+        a.href = href;
+        a.rel = "noopener noreferrer";
+        a.target = "_blank";
+        a.textContent = r.title;
+        li.append(a);
+      } else {
+        li.append(document.createTextNode(r.title));
+      }
+
+      const stones = document.createElement("span");
+      stones.className = crystallized ? "res-stones bedrock" : "res-stones";
+      stones.textContent = crystallized ? `◆ ${Math.round(r.vote_count)}` : `● ${Math.round(r.vote_count)}`;
+      stones.title = crystallized ? "crystallized — community-vouched" : "weighted stones";
+      li.append(stones);
+
+      const vote = document.createElement("button");
+      vote.type = "button";
+      vote.className = "res-stone-btn";
+      vote.textContent = "＋ stone";
+      vote.addEventListener("click", () => {
+        try {
+          doc.vote(r.id, myVoterId, STONE_WEIGHT); // audited grow-only path (R-0015)
+        } catch {
+          return; // a bad id never crashes the panel
+        }
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        renderStudyResources();
+      });
+      li.append(vote);
+
+      // "Also covers" (R-0028): other topics where the SAME book (URL) is pinned.
+      const also = crossLinks({
+        resources: allResources,
+        plateaus: allPlateaus,
+        uri: r.uri,
+        currentPlateauId: studyPlateau.id,
+      });
+      if (also.length) {
+        const line = document.createElement("div");
+        line.className = "res-also";
+        line.append(document.createTextNode("Also covers: "));
+        also.forEach((t, i) => {
+          if (i > 0) line.append(document.createTextNode(" · "));
+          const link = document.createElement("button");
+          link.type = "button";
+          link.className = "res-also-link";
+          link.textContent = t.count > 0 ? `${t.name} ●${Math.round(t.count)}` : t.name;
+          link.addEventListener("click", () => {
+            const target = allPlateaus.find((p) => p.id === t.id);
+            if (target) openPlateau(target);
+          });
+          line.append(link);
+        });
+        li.append(line);
+      }
+      ul.append(li);
+    }
+    detailResources.append(ul);
+  }
+
+  // Add a resource (book / link / video) to the open plateau, inline (R-0023 AC3).
+  const addTitle = document.getElementById("detail-add-title");
+  const addKind = document.getElementById("detail-add-kind");
+  const addUri = document.getElementById("detail-add-uri");
+  const addError = document.getElementById("detail-add-error");
+  for (const k of RESOURCE_KINDS) {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = k;
+    addKind.appendChild(o);
+  }
+  // R-0028 multi-pin: a collapsed checklist of OTHER plateaus, repopulated each
+  // time a plateau opens, so one add can pin the same link across several topics.
+  const alsoPinList = document.getElementById("detail-add-also-list");
+  function renderAlsoPin(currentId) {
+    alsoPinList.replaceChildren();
+    const others = doc
+      .to_graph()
+      .plateaus()
+      .filter((p) => p.id !== currentId)
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const p of others) {
+      const label = document.createElement("label");
+      label.className = "also-pin-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = p.id;
+      label.append(cb, document.createTextNode(" " + p.name)); // name via textNode — inert
+      alsoPinList.append(label);
+    }
+  }
+
+  document.getElementById("detail-add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!studyPlateau) return;
+    const spec = buildResource({
+      plateau: studyPlateau.id,
+      title: addTitle.value,
+      kind: addKind.value,
+      uri: addUri.value,
+    });
+    if (spec.error) {
+      addError.textContent = spec.error;
+      addError.hidden = false;
+      return;
+    }
+    addError.hidden = true;
+    doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri); // R-0014 binding
+    // Also pin the same link to each checked topic (best-effort, per-id — a stale
+    // id must not abort the rest or the pump/persist, parity with the stone path).
+    for (const cb of alsoPinList.querySelectorAll("input:checked")) {
+      try {
+        doc.add_resource(cb.value, spec.title, spec.kind, spec.uri);
+      } catch {
+        /* stale/unknown plateau id — skip this one */
+      }
+    }
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    renderStudyResources();
+    renderAlsoPin(studyPlateau.id); // reset the checklist (unchecked)
+    addTitle.value = "";
+    addUri.value = "";
+  });
+
+  // Study with the companion (R-0023 AC4): each action sends a prompt grounded in
+  // a PLATEAU-SCOPED context (this topic's body + its resources) through the same
+  // bring-your-own model turn the global companion uses. The plateau body —
+  // possibly imported/synced peer content — rides to the configured endpoint under
+  // the SAME trust boundary as R-0007 (the visitor's own endpoint, key in-browser).
+  function studyAction(action) {
+    if (!studyPlateau || !activePersona) return;
+    const rs = doc
+      .to_graph()
+      .resources()
+      .filter((r) => r.plateau_id === studyPlateau.id);
+    companion.hidden = false;
+    appendMessage("user", action.prompt);
+    // OFFLINE (no model): a real, local extractive digest of THIS plateau's notes
+    // + ranked resources instead of the echo (R-0026). Pure + synchronous.
+    if (modelConfig.kind === "fake") {
+      const reply = offlineDigest({ action: action.key, plateau: studyPlateau, resources: rs });
+      appendMessage("bot", reply);
+      showStudyReply(reply); // visible in the drawer, not just the occluded companion
+      history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+      return;
+    }
+    showStudyReply("…"); // feedback in the drawer while the model answers
+    const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        appendMessage("bot", reply);
+        showStudyReply(reply);
+        // Shares the global transcript by design — one companion, one history
+        // (R-0023): a plateau answer can context a later global turn, and vice-versa.
+        history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+      })
+      .catch((err) => {
+        appendMessage("error", `⚠ ${err.message}`); // graceful (R-0007 AC4)
+        showStudyReply(`⚠ ${err.message}`);
+      });
+  }
+  const studyButtons = document.getElementById("detail-study");
+  for (const a of STUDY_ACTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => studyAction(a));
+    studyButtons.append(btn);
+  }
+
+  // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
+  // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS
+  // verdict it signs the SAME mastery as the self-test (signMastery → ✓ + the
+  // community count). The model is a JUDGE, not a verifier (the note says so);
+  // the verdict parse is fail-safe. Wired once — the box is a static sibling, so
+  // a draft survives renderMastery's replaceChildren.
+  const PROOF_SYMBOLS = [
+    ["∀", "\\forall "], ["∃", "\\exists "], ["∈", "\\in "], ["≤", "\\le "],
+    ["≥", "\\ge "], ["⇒", "\\Rightarrow "], ["⇔", "\\iff "], ["√", "\\sqrt{}"],
+    ["∑", "\\sum"], ["∫", "\\int"], ["a/b", "\\frac{}{}"], ["lim", "\\lim_{}"],
+    ["$ $", "$$"],
+  ];
+  function insertAtCursor(el, text) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    const brace = text.indexOf("{}"); // park the caret inside the first {} if any
+    const caret = brace >= 0 ? start + brace + 1 : start + text.length;
+    el.selectionStart = el.selectionEnd = caret;
+    el.focus();
+    el.dispatchEvent(new Event("input")); // refresh the live preview
+  }
+  for (const [label, latex] of PROOF_SYMBOLS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => insertAtCursor(proofInput, latex));
+    proofPalette.append(b);
+  }
+  proofInput.addEventListener("input", () => {
+    // R-0020 SAFE path: same sanitiser as a plateau body — the learner's
+    // LaTeX/markdown is inert (no innerHTML injection), then KaTeX typesets it.
+    proofPreview.innerHTML = renderMarkdown(proofInput.value);
+    typesetMath(proofPreview);
+  });
+  proofCheck.addEventListener("click", () => {
+    if (!studyPlateau || !activePersona) return;
+    const proof = proofInput.value;
+    if (!proof.trim()) {
+      proofFeedback.textContent = "Write a proof or explanation first."; // signs nothing
+      return;
+    }
+    const p = studyPlateau;
+    const rs = doc
+      .to_graph()
+      .resources()
+      .filter((r) => r.plateau_id === p.id);
+    const grounding = buildPlateauStudyContext({ plateau: p, resources: rs });
+    // Empty history ([]) — grading is a stateless turn, not the chat transcript.
+    // Only the MODEL's reply reaches parseVerdict (the proof rides in the user
+    // message), so a learner can't self-grant by writing the verdict token.
+    const messages = assembleMessages(
+      voiceFor(activePersona),
+      grounding,
+      [],
+      buildProofGrading({ plateau: p, proof }),
+    );
+    proofFeedback.textContent = "Checking…";
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        const { pass, feedback } = parseVerdict(reply);
+        proofFeedback.textContent = feedback;
+        if (pass) {
+          signMastery(p); // the ONLY sign path — proof mastery == self-test mastery
+          renderMastery(p); // #detail-mastery becomes "✓ Mastered"
+        }
+      })
+      .catch((err) => {
+        proofFeedback.textContent = `⚠ ${err.message}`; // graceful, signs nothing
+      });
+  });
+
+  document.getElementById("detail-close").addEventListener("click", () => {
+    detail.hidden = true;
+  });
+
+  // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────
+  // The toggle button shows/hides the <details> panel; the form submit wires
+  // buildPlateau → WasmCrdtDoc.add_plateau → CRDT sync → draw.
+
+  // Populate the domain <select> from DOMAINS (human labels, no raw UUIDs shown).
+  const dpDomain = document.getElementById("dp-domain");
+  for (const d of DOMAINS) {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.label;
+    dpDomain.appendChild(opt);
+  }
+
+  // Toggle button shows/hides the collapsible panel.
+  const draftPanel = document.getElementById("draft-plateau");
+  document.getElementById("draft-plateau-toggle").addEventListener("click", () => {
+    draftPanel.hidden = !draftPanel.hidden;
+    if (!draftPanel.hidden) draftPanel.open = true;
+  });
+
+  document.getElementById("draft-plateau-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildPlateau({
+      name:   document.getElementById("dp-name").value,
+      domain: dpDomain.value,
+      e1: parseFloat(document.getElementById("dp-e1").value),
+      e2: parseFloat(document.getElementById("dp-e2").value),
+      e3: parseFloat(document.getElementById("dp-e3").value),
+      description: document.getElementById("dp-body").value, // Markdown body (R-0020), optional
+    });
+    const errEl = document.getElementById("dp-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    // Add to the CRDT doc and broadcast (AC2/AC3/AC4). The body rides the
+    // plateau's `description` field already serialized into the CRDT (R-0020).
+    const id = doc.add_plateau(spec.name, spec.domain, spec.e1, spec.e2, spec.e3, spec.description);
+    DOMAIN_OF.set(id, spec.domain); // register for traversal scoring
+    sync.pump(); // broadcast the CRDT change to other tabs
+    pumpPeer(); // …and to a connected P2P peer (R-0018), if any
+    persist(); // R-0012: snapshot to IndexedDB so the drafted plateau survives a reload
+    draw();
+    // Reset name + body fields; sliders stay at their last positions.
+    document.getElementById("dp-name").value = "";
+    document.getElementById("dp-body").value = "";
+  });
+
+  // ── Draft Bridge form (SPEC-0013 / R-0013) ──────────────────────────────────
+  // Connect two existing plateaus with a concept label. The rotor is computed in
+  // Rust by Bridge::between; JS passes only (from, to, concept).
+
+  const dbFrom = document.getElementById("db-from");
+  const dbTo = document.getElementById("db-to");
+
+  // Rebuild both endpoint selects from the CURRENT graph, so plateaus authored
+  // this session (or synced in) are selectable (AC1).
+  function refreshBridgeOptions() {
+    const ps = doc.to_graph().plateaus(); // [{ id, name, domain_id, position }]
+    for (const sel of [dbFrom, dbTo]) {
+      sel.replaceChildren(
+        ...ps.map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
+      );
+    }
+  }
+
+  const bridgePanel = document.getElementById("draft-bridge");
+  document.getElementById("draft-bridge-toggle").addEventListener("click", () => {
+    bridgePanel.hidden = !bridgePanel.hidden;
+    if (!bridgePanel.hidden) {
+      bridgePanel.open = true;
+      refreshBridgeOptions();
+    }
+  });
+
+  document.getElementById("draft-bridge-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildBridge({
+      from: dbFrom.value,
+      to: dbTo.value,
+      concept: document.getElementById("db-concept").value,
+    });
+    const errEl = document.getElementById("db-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // Rotor computed in Rust (AC5). Throws JsError on unknown endpoint/bad UUID.
+      doc.add_bridge(spec.from, spec.to, spec.concept);
+    } catch {
+      errEl.textContent = "Could not add bridge.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast to other tabs (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // the labelled line appears same frame (AC2)
+    document.getElementById("db-concept").value = "";
+  });
+
+  // ── Drop a Marker form (SPEC-0014 / R-0014) ─────────────────────────────────
+  // Anchor a note/resource to an existing plateau. State + vote_count are fixed
+  // in Rust (Resource::new); JS passes only (plateau, title, kind, uri).
+
+  const dmPlateau = document.getElementById("dm-plateau");
+  const dmTitle = document.getElementById("dm-title");
+  const dmKind = document.getElementById("dm-kind");
+  const dmUri = document.getElementById("dm-uri");
+
+  // The kind set never changes — populate #dm-kind once from RESOURCE_KINDS.
+  for (const k of RESOURCE_KINDS) {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = k;
+    dmKind.appendChild(o);
+  }
+
+  // Rebuild #dm-plateau from the CURRENT graph on open, so session-authored or
+  // synced-in plateaus are anchorable (AC1).
+  function refreshMarkerPlateaus() {
+    dmPlateau.replaceChildren(
+      ...doc.to_graph().plateaus().map((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.name;
+        return o;
+      }),
+    );
+  }
+
+  const markerPanel = document.getElementById("drop-marker");
+  document.getElementById("drop-marker-toggle").addEventListener("click", () => {
+    markerPanel.hidden = !markerPanel.hidden;
+    if (!markerPanel.hidden) {
+      markerPanel.open = true;
+      refreshMarkerPlateaus();
+    }
+  });
+
+  document.getElementById("drop-marker-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildResource({
+      plateau: dmPlateau.value,
+      title: dmTitle.value,
+      kind: dmKind.value,
+      uri: dmUri.value,
+    });
+    const errEl = document.getElementById("dm-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // State/vote fixed in Rust (AC5). Throws on unknown plateau/bad UUID.
+      doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri);
+    } catch {
+      errEl.textContent = "Could not add marker.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // the marker appears near its plateau same frame (AC2)
+    dmTitle.value = "";
+    dmUri.value = "";
+  });
+
+  // ── Place a Stone form (SPEC-0015 / R-0015) ─────────────────────────────────
+  // Vote on a marker; crossing CRYSTALLIZE_THRESHOLD flips it to Crystallized.
+  // The voter id is the CANONICAL wizard_id_of(pubkey) — the same id reputation
+  // and discovery use (never a parallel mapping). State is computed in to_graph,
+  // never set here.
+
+  const myVoterId = wizard_id_of(myPubkey);
+  const vsMarker = document.getElementById("vs-marker");
+  const vsWeight = document.getElementById("vs-weight");
+
+  // Rebuild the marker select from the current graph on open, showing each
+  // marker's running total toward the threshold.
+  function refreshVoteMarkers() {
+    const threshold = crystallize_threshold();
+    vsMarker.replaceChildren(
+      ...doc.to_graph().resources().map((r) => {
+        const o = document.createElement("option");
+        o.value = r.id;
+        o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
+        return o;
+      }),
+    );
+  }
+
+  const stonePanel = document.getElementById("place-stone");
+  document.getElementById("place-stone-toggle").addEventListener("click", () => {
+    stonePanel.hidden = !stonePanel.hidden;
+    if (!stonePanel.hidden) {
+      stonePanel.open = true;
+      refreshVoteMarkers();
+    }
+  });
+
+  document.getElementById("place-stone-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const spec = buildVote({ resource: vsMarker.value, weight: vsWeight.value });
+    const errEl = document.getElementById("vs-error");
+    if (spec.error) {
+      errEl.textContent = spec.error;
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      // Cast this wizard's grow-only weight; crystallization is derived in Rust.
+      doc.vote(spec.resource, myVoterId, spec.weight);
+    } catch {
+      errEl.textContent = "Could not place stone.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    sync.pump(); // broadcast the vote (AC4)
+    pumpPeer(); // …and to a connected P2P peer (R-0018)
+    persist(); // durable snapshot (AC4, R-0012)
+    draw(); // vote_count + crystallization re-derive in to_graph() (AC2/AC3)
+    refreshVoteMarkers(); // reflect the new total in the open select
+  });
+
+  // ── Connect a peer (SPEC-0018 / R-0018) ─────────────────────────────────────
+  // Manual copy-paste WebRTC signaling. Every handler try/catches so a bad blob
+  // or a failed connection is an inline error, never an uncaught throw (AC4).
+  const p2pOffer = document.getElementById("p2p-offer");
+  const p2pAnswer = document.getElementById("p2p-answer");
+  const p2pStatus = document.getElementById("p2p-status");
+  const p2pError = document.getElementById("p2p-error");
+  const peerPanel = document.getElementById("connect-peer");
+
+  document.getElementById("connect-peer-toggle").addEventListener("click", () => {
+    peerPanel.hidden = !peerPanel.hidden;
+    if (!peerPanel.hidden) peerPanel.open = true;
+  });
+
+  function p2pFail(msg) {
+    p2pError.textContent = msg;
+    p2pError.hidden = false;
+  }
+  function p2pOk() {
+    p2pError.hidden = true;
+  }
+  // On connect, reflect status; the pump (onOpen) catches the peer up automatically.
+  function watchPeerOpen() {
+    const tick = setInterval(() => {
+      if (peer && peer.isOpen()) {
+        p2pStatus.textContent = "connected — graphs are syncing peer-to-peer";
+        clearInterval(tick);
+      }
+    }, 500);
+  }
+
+  document.getElementById("p2p-create").addEventListener("click", async () => {
+    try {
+      p2pOk();
+      startPeer();
+      p2pOffer.value = await peer.createOffer();
+      p2pStatus.textContent = "invite created — send it to your peer, then paste their answer";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not create invite: ${e}`);
+    }
+  });
+  document.getElementById("p2p-accept").addEventListener("click", async () => {
+    try {
+      p2pOk();
+      startPeer();
+      p2pAnswer.value = await peer.acceptOffer(p2pOffer.value.trim());
+      p2pStatus.textContent = "answer ready — send it back to the inviter";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not accept invite: ${e}`);
+    }
+  });
+  document.getElementById("p2p-complete").addEventListener("click", async () => {
+    try {
+      if (!peer) throw new Error("create an invite first");
+      p2pOk();
+      await peer.acceptAnswer(p2pAnswer.value.trim());
+      p2pStatus.textContent = "completing handshake…";
+      watchPeerOpen();
+    } catch (e) {
+      p2pFail(`could not complete: ${e}`);
+    }
+  });
+
+  // Forget my history: clear the local event log so reputation falls back to
+  // nothing earned (only trailheads remain lit). Reach is recomputed from the log,
+  // so there is no separate fog to reset (R-0010 AC3).
+  document.getElementById("reset-fog").addEventListener("click", () => {
+    log.clear();
+    recompute();
+    recomputeProgress(); // progress lives in the log too — reset → every topic unexplored (R-0030/R-0033)
+    renderDiscovery();
+    if (studyPlateau) renderMastery(studyPlateau); // refresh the open drawer's ✓ state
     draw();
   });
 
-  // Reset the fog back to the active persona's starting orientation.
-  document.getElementById("reset-fog").addEventListener("click", () => {
-    if (!activePersona) return;
-    localRep = seedReputation(activePersona);
-    draw();
+  // ── Import a world (SPEC-0021 / R-0021) ─────────────────────────────────────
+  // Load an `mp-host import` save-blob (or any WasmCrdtDoc.save() blob) and MERGE
+  // it into the current world (CRDT union — adds, never replaces). On success,
+  // rebuild DOMAIN_OF so imported plateaus score on traversal, then broadcast +
+  // persist + redraw. A malformed blob is an inline error, never an uncaught throw.
+  const importStatus = document.getElementById("import-status");
+  const importFile = document.getElementById("import-file");
+  function importNote(msg, ok) {
+    importStatus.textContent = msg;
+    importStatus.style.color = ok ? "#9fd0b4" : "#ffb4a8";
+    importStatus.hidden = false;
+  }
+  document.getElementById("import-world").addEventListener("click", () => importFile.click());
+  importFile.addEventListener("change", async () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      doc.merge_bytes(bytes); // CRDT union; throws on a corrupt/non-Automerge blob
+      // Imported plateaus carry their own domain — register it for traversal scoring.
+      for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+      sync.pump(); // share the imported world with other tabs…
+      pumpPeer(); // …and a connected P2P peer (R-0018)
+      persist(); // durable snapshot (R-0012)
+      draw();
+      importNote(`imported "${file.name}" — explore the new islands`, true);
+    } catch (e) {
+      importNote(`could not import: ${e}`, false);
+    } finally {
+      importFile.value = ""; // allow re-importing the same file
+    }
   });
+
+  // ── Relay connect (SPEC-0010 §2.3, R-0010 AC7) ──────────────────────────
+  const relayInput = document.getElementById("relay-url");
+  relayInput.value = loadRelayUrl();
+  document.getElementById("relay-connect").addEventListener("click", () => {
+    const url = relayInput.value.trim();
+    saveRelayUrl(url); // local only — never synced
+    connectRelay(url);
+  });
+  document.getElementById("discover").addEventListener("click", renderDiscovery);
+
+  // Connect to the saved relay (offline if none) before the first draw.
+  connectRelay(loadRelayUrl());
+
+  // Best-effort flush on tab hide so an edit made inside the debounce window is
+  // not lost on close (closes the AC2/AC3 loss window; bfcache-safe event).
+  addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") snapshots.flush();
+  });
+
+  // ── Travel: focus the camera on a topic (SPEC-0019 / R-0019) ────────────────
+  // Pure wayfinding. Re-origins VIEW via centerOn and flashes a transient focus
+  // ring. Touches NOTHING reachable/synced/persisted — no reach, no CRDT, no
+  // event log — so it works for LIT or FOGGED topics alike (travel is camera
+  // focus, not reachability). The only state it mutates is the camera origin.
+  const travelSel = document.getElementById("travel-topic");
+  const travelPanel = document.getElementById("travel");
+  function refreshTravelTopics() {
+    // Rebuilt on open from the CURRENT graph, so topics authored/synced this
+    // session are travel-able (by name, like the bridge form).
+    travelSel.replaceChildren(
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
+    );
+  }
+  document.getElementById("travel-toggle").addEventListener("click", () => {
+    travelPanel.hidden = !travelPanel.hidden;
+    if (!travelPanel.hidden) {
+      travelPanel.open = true;
+      refreshTravelTopics();
+    }
+  });
+  let focusTimer = null;
+  document.getElementById("travel-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const p = doc
+      .to_graph()
+      .plateaus()
+      .find((x) => x.id === travelSel.value);
+    if (!p) return;
+    // Re-centre the camera so the chosen topic sits at the canvas centre.
+    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    VIEW.cx = cx;
+    VIEW.cy = cy;
+    focusedId = p.id; // transient highlight ring (render.js); cleared below
+    draw();
+    if (focusTimer) clearTimeout(focusTimer);
+    focusTimer = setTimeout(() => {
+      focusedId = null;
+      draw();
+    }, 1800);
+  });
+
+  // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
+  // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
+  // synced, never in the CRDT). First entry shows it; "Got it" marks it seen so
+  // returning visitors skip straight in; the toolbar "Tour" button replays it
+  // unconditionally. Content + the seen-gate are the pure tutorial.js module.
+  const tutorialEl = document.getElementById("tutorial");
+  const tutTitle = document.getElementById("tutorial-title");
+  const tutBody = document.getElementById("tutorial-body");
+  const tutDots = document.getElementById("tutorial-dots");
+  const tutBack = document.getElementById("tutorial-back");
+  const tutNext = document.getElementById("tutorial-next");
+  let tutStep = 0;
+  function renderTutorial() {
+    const step = TUTORIAL_STEPS[tutStep];
+    tutTitle.textContent = step.title;
+    tutBody.textContent = step.body;
+    tutBack.disabled = tutStep === 0;
+    tutNext.hidden = tutStep === TUTORIAL_STEPS.length - 1; // last step → only "Got it"
+    tutDots.replaceChildren(
+      ...TUTORIAL_STEPS.map((_, i) => {
+        const dot = document.createElement("span");
+        dot.className = i === tutStep ? "dot on" : "dot";
+        return dot;
+      }),
+    );
+  }
+  function showTutorial(i = 0) {
+    tutStep = i;
+    renderTutorial();
+    tutorialEl.hidden = false;
+  }
+  function dismissTutorial() {
+    tutorialEl.hidden = true;
+    markTutorialSeen(localStorage); // remember — returning visitors skip it (AC4)
+  }
+  tutBack.addEventListener("click", () => {
+    if (tutStep > 0) {
+      tutStep -= 1;
+      renderTutorial();
+    }
+  });
+  tutNext.addEventListener("click", () => {
+    if (tutStep < TUTORIAL_STEPS.length - 1) {
+      tutStep += 1;
+      renderTutorial();
+    }
+  });
+  document.getElementById("tutorial-gotit").addEventListener("click", dismissTutorial);
+  document.getElementById("tour").addEventListener("click", () => showTutorial(0)); // replay (AC4)
 
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.
   sync.pump();
   draw();
+
+  // First entry only (no "seen" flag): welcome the visitor BEFORE the lens
+  // picker — the overlay covers it and dismiss reveals it. Returning visitors
+  // skip straight in (AC4).
+  if (shouldShowTutorial(localStorage)) showTutorial(0);
 }
 
 main().catch((err) => {

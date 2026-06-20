@@ -23,7 +23,9 @@ pub struct CrdtStore {
 }
 
 impl CrdtStore {
-    /// Create a new store (errors if the file already exists per redb's rules).
+    /// Open the store at `path`, creating it if absent (redb's create-is-missing:
+    /// an existing valid store is opened, an absent/empty file is initialised; a
+    /// non-redb file errors). I.e. this is an open-or-create.
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, CrdtError> {
         let db = Database::create(path).map_err(store_err)?;
         Ok(Self { db })

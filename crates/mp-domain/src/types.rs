@@ -311,6 +311,35 @@ pub struct Resource {
     pub created_at: u64,
 }
 
+impl Resource {
+    /// A freshly contributed resource (a trail marker): `Floating`, zero votes,
+    /// unsigned. The id is engine-assigned. Attribution (`contributor` /
+    /// `signature`) is deferred — callers pass `Uuid::nil()` this phase
+    /// (R-0014 AC5). State and vote_count are fixed here so no caller can pick a
+    /// rank/state; crystallization is earned through voting (R-0015).
+    pub fn new(
+        plateau_id: PlateauId,
+        title: &str,
+        kind: ResourceKind,
+        uri: &str,
+        contributor: WizardId,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            plateau_id,
+            title: title.to_string(),
+            kind,
+            uri: uri.to_string(),
+            contributor,
+            signature: String::new(),
+            vote_count: 0.0,
+            state: ResourceState::Floating,
+            // Same non-authoritative stamp as PlateauNode::new (0 on wasm32).
+            created_at: now_unix(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceKind {
     Article,

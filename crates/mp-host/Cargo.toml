@@ -1,0 +1,31 @@
+[package]
+name = "mp-host"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "mp-host"
+path = "src/main.rs"
+
+[dependencies]
+# The CRDT sync core WITH its redb-backed storage (the workspace dep is
+# default-features = false for the wasm consumer; re-enable storage here — a
+# native binary that owns the durable CrdtStore). See SPEC-0017 §2.1.
+mp-crdt = { workspace = true, features = ["storage"] }
+mp-domain = { workspace = true }
+# v5 = deterministic, namespaced UUIDs for the importer (stable ids ⇒ idempotent
+# re-import, SPEC-0021). mp-identity already uses v5, so the workspace supports it.
+uuid = { workspace = true, features = ["v5"] }
+thiserror = { workspace = true } # ImportError (library error style, CLAUDE.md)
+
+[dev-dependencies]
+# Tests build a save-blob (CrdtDoc/PlateauNode) and use tempfile redb paths;
+# integration tests only see the crate's public API + dev-dependencies.
+tempfile = "3"
+mp-crdt = { workspace = true, features = ["storage"] }
+mp-domain = { workspace = true }
+# v5 = deterministic, namespaced UUIDs for the importer (stable ids ⇒ idempotent
+# re-import, SPEC-0021). mp-identity already uses v5, so the workspace supports it.
+uuid = { workspace = true, features = ["v5"] }

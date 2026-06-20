@@ -17,6 +17,9 @@
 
 export const MATH_DOMAIN = "11111111-1111-1111-1111-111111111111";
 export const MUSIC_DOMAIN = "22222222-2222-2222-2222-222222222222";
+// Must equal mp-host's import::PHYSICS_DOMAIN (the importer tags e2-dominant
+// notes with it, R-0021); both sides pin the literal in their tests (R-0022).
+export const PHYSICS_DOMAIN = "33333333-3333-3333-3333-333333333333";
 
 // grade-1 blade indices in [1, e1, e2, e12, e3, e13, e23, e123]
 const E1 = 1;
@@ -39,25 +42,32 @@ export const ARCHETYPES = [
     id: "geometer",
     name: "The Geometer",
     domainLabel: "Mathematics",
-    blurb: "Wakes facing Mathematics — arithmetic in reach, all else in fog.",
+    blurb: "Wakes facing Mathematics — begins at Arithmetic.",
     orient: [{ domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } }],
   },
   {
     id: "composer",
     name: "The Composer",
     domainLabel: "Music",
-    blurb: "Wakes facing Music — rhythm in reach, all else in fog.",
+    blurb: "Wakes facing Music — begins at Rhythm.",
     orient: [{ domain: MUSIC_DOMAIN, dir: { e1: 0, e2: 0, e3: 1 } }],
   },
   {
     id: "polymath",
     name: "The Polymath",
     domainLabel: "Mathematics × Music",
-    blurb: "A foothold in each domain — arithmetic and rhythm lit, the depths fogged.",
+    blurb: "A foothold in each domain — begins at Arithmetic and Rhythm.",
     orient: [
       { domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } },
       { domain: MUSIC_DOMAIN, dir: { e1: 0, e2: 0, e3: 1 } },
     ],
+  },
+  {
+    id: "physicist",
+    name: "The Physicist",
+    domainLabel: "Physics",
+    blurb: "Wakes facing Physics — begins at Motion.",
+    orient: [{ domain: PHYSICS_DOMAIN, dir: { e1: 0, e2: 1, e3: 0 } }],
   },
 ];
 
@@ -74,6 +84,7 @@ export const ARCHETYPES = [
 export const DOMAINS = [
   { id: MATH_DOMAIN, label: "Mathematics", canonical: { e1: 1, e2: 0, e3: 0 } },
   { id: MUSIC_DOMAIN, label: "Music", canonical: { e1: 0, e2: 0, e3: 1 } },
+  { id: PHYSICS_DOMAIN, label: "Physics", canonical: { e1: 0, e2: 1, e3: 0 } },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
@@ -91,9 +102,9 @@ function labelForDomain(domain) {
 
 // A one-line human blurb describing which way the lens faces. Pure, no GA.
 function describeOrientation(faced) {
-  if (faced.length === 0) return "Faces nothing yet — the world stays in fog until you orient.";
+  if (faced.length === 0) return "Faces nothing yet — orient toward a domain to set where you begin.";
   const labels = faced.map(({ domain }) => labelForDomain(domain));
-  return `Wakes facing ${labels.join(" and ")} — that neighbourhood lit, all else in fog.`;
+  return `Wakes facing ${labels.join(" and ")} — your starting orientation.`;
 }
 
 // Pure: { name, orient, tone } → an archetype-shaped persona. Drops any domain whose
@@ -120,6 +131,13 @@ export function authorPersona({ name, orient, tone } = {}) {
 /// in its grade-1 components. Deterministic (R-0006 AC6). An empty `orient` (or an
 /// all-zero direction) yields an empty / grade-1-zero reputation, which the engine
 /// sends to fog — the Sybil/fog property.
+///
+/// SPEC-0010 (Phase 8): this seed magnitude is NO LONGER wired into the live
+/// reputation — reach is recomputed from the verified signed-event log (events.js),
+/// and the persona's `orient` survives only as a UI/orientation hint (trailheads).
+/// The function is retained as the canonical, direction-only orientation→seed
+/// mapping that R-0009's authoring guarantees are proven against (persona.test.mjs /
+/// authored.test.mjs); it is not called from the live fog path.
 export function seedReputation(archetype) {
   const domain_reps = {};
   for (const { domain, dir } of archetype.orient ?? []) {

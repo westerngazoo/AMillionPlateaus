@@ -31,7 +31,9 @@ use std::collections::BTreeMap;
 use automerge::transaction::{CommitOptions, Transactable};
 use automerge::{ActorId, AutoCommit, ObjId, ObjType, ReadDoc, ScalarValue, Value, ROOT};
 
-use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};
+use mp_domain::{
+    Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceState, CRYSTALLIZE_THRESHOLD,
+};
 use uuid::Uuid;
 
 use crate::error::CrdtError;
@@ -100,8 +102,11 @@ impl CrdtDoc {
     /// decoded entity's GA invariants (network/disk data is untrusted).
     ///
     /// Plateaus are inserted before bridges so bridge endpoints resolve. A
-    /// resource's `vote_count` is recomputed from the authoritative `votes`
-    /// map — the serialized blob's value is non-authoritative (SPEC-0004 §2.1).
+    /// resource's `vote_count` **and** `state` are recomputed from the
+    /// authoritative `votes` map — the serialized blob's values are
+    /// non-authoritative (SPEC-0004 §2.1). Crystallization is therefore derived
+    /// on every projection, never trusted from a synced/persisted blob
+    /// (CLAUDE.md §6, R-0015 AC3).
     pub fn to_graph(&self) -> Result<KnowledgeGraph, CrdtError> {
         let mut graph = KnowledgeGraph::new();
 
@@ -118,6 +123,15 @@ impl CrdtDoc {
         for json in self.entries(RESOURCES)? {
             let mut r: Resource = serde_json::from_str(&json)?;
             r.vote_count = self.resource_vote(&r.id)?.weighted_sum();
+            // Crystallization is DERIVED from the votes, never stored
+            // authoritatively (CLAUDE.md §6, R-0015 AC3). The persisted `state`
+            // is only a placeholder; a blob that synced `Crystallized` with no
+            // votes is ignored and recomputed from the tally here.
+            r.state = if r.vote_count >= CRYSTALLIZE_THRESHOLD {
+                ResourceState::Crystallized
+            } else {
+                ResourceState::Floating
+            };
             graph.resources.insert(r.id, r);
         }
 
@@ -413,6 +427,47 @@ mod tests {
         assert_eq!(
             doc.resource_vote(&Uuid::new_v4()).expect("empty").voters(),
             0
+        );
+    }
+
+    #[test]
+    fn resource_state_is_derived_from_votes_not_the_blob() {
+        // R-0015 AC3: crystallization is computed from the votes tally in
+        // to_graph, never trusted from the stored/synced blob.
+        let mut doc = CrdtDoc::new().expect("new");
+
+        // A resource whose STORED state lies (Crystallized) but has zero votes.
+        let mut r = Resource::new(
+            Uuid::new_v4(),
+            "spectral theorem",
+            mp_domain::ResourceKind::Note,
+            "",
+            Uuid::nil(),
+        );
+        r.state = ResourceState::Crystallized; // the lie
+        let rid = r.id;
+        doc.add_resource(&r).expect("add");
+
+        // Projected with zero votes → Floating, regardless of the blob.
+        let g = doc.to_graph().expect("project");
+        assert!(
+            matches!(g.resources[&rid].state, ResourceState::Floating),
+            "zero votes must project as Floating even if the blob says Crystallized"
+        );
+
+        // Distinct wizards push the weighted sum to/over the threshold.
+        let per = CRYSTALLIZE_THRESHOLD / 2.0 + 1.0; // two voters clear it
+        doc.vote(rid, Uuid::new_v4(), per).expect("vote 1");
+        doc.vote(rid, Uuid::new_v4(), per).expect("vote 2");
+
+        let g = doc.to_graph().expect("project");
+        assert!(
+            g.resources[&rid].vote_count >= CRYSTALLIZE_THRESHOLD,
+            "weighted sum crosses the threshold"
+        );
+        assert!(
+            matches!(g.resources[&rid].state, ResourceState::Crystallized),
+            "crossing the threshold projects as Crystallized"
         );
     }
 

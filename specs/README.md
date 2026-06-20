@@ -44,3 +44,27 @@ field. The build order across requirements and specs is in
 | [SPEC-0007](0007-companion-graph-grounded.md) | Companion: provider-agnostic model client + GA-graph-grounded context | R-0007 | Implemented |
 | [SPEC-0008](0008-ga-graph-store-generalization.md) | Generalize `mp-graph` into a domain-agnostic geometric graph store (RFC-0001 Scope A) | R-0008 | Implemented |
 | [SPEC-0009](0009-visitor-authored-personas.md) | Visitor-authored personas: a pure `authorPersona` factory + authoring UI over the existing seed mapping | R-0009 | Implemented |
+| [SPEC-0010](0010-nostr-identity-signed-events.md) | Wizard identity: Nostr-signed events + rank recomputed from the verified log (relay + discovery) | R-0010 | Implemented |
+| [SPEC-0011](0011-plateau-authoring.md) | Plateau Authoring: Draft DB POC — pure factory + form replacing the add-plateau stub | R-0011 | Implemented |
+| [SPEC-0012](0012-browser-durable-graph.md) | Browser-durable graph: IndexedDB snapshot of the CRDT doc (save/load bindings + persistence module) | R-0012 | Implemented |
+| [SPEC-0013](0013-bridge-authoring.md) | Bridge Authoring: pure buildBridge factory + Draft Bridge form over the existing add_bridge binding | R-0013 | Implemented |
+| [SPEC-0014](0014-trail-markers.md) | Trail Markers: Resource::new + add_resource binding + ResourceDto/render + buildResource factory/form | R-0014 | Implemented |
+| [SPEC-0015](0015-vote-crystallize.md) | Vote → Crystallize: derive resource state from the votes tally in to_graph + place-a-stone form | R-0015 | Implemented |
+| [SPEC-0016](0016-presence.md) | Presence: ephemeral silhouettes over a separate BroadcastChannel (presence.js + render) | R-0016 | Implemented |
+| [SPEC-0017](0017-native-graph-host.md) | Native graph host: mp-host CLI (seed/stats/merge) over the redb CrdtStore | R-0017 | Implemented |
+| [SPEC-0018](0018-webrtc-p2p-sync.md) | WebRTC P2P sync: a data-channel transport for the CRDT pump (webrtc.js + manual signaling) | R-0018 | Implemented |
+| [SPEC-0019](0019-onboarding-wayfinding.md) | Onboarding & wayfinding: career-lens copy, pure `centerOn` travel, remembered first-run tutorial | R-0019 | Implemented |
+| [SPEC-0020](0020-plateau-content.md) | Plateau content: Markdown body + vendored-KaTeX typeset math + a read view | R-0020 | Implemented |
+| [SPEC-0021](0021-obsidian-import.md) | Obsidian vault importer: mp-host `import` (pure parse → GA position → blob) + browser "Import a world" | R-0021 | Implemented |
+| [SPEC-0022](0022-physicist-lens.md) | Physicist lens: PHYSICS domain row + archetype + Motion trailhead (seeds extracted to seeds.js) | R-0022 | Implemented |
+| [SPEC-0023](0023-study-view.md) | Study view: stone-ranked resources + inline add + plateau-scoped companion (pure study.js) | R-0023 | Implemented |
+| [SPEC-0024](0024-map-zoom-lod.md) | Map zoom/pan (cursor-anchored `zoomAt`) + label overlap-culling (`planLabels`) | R-0024 | Implemented |
+| [SPEC-0025](0025-vr-immersive-visualization.md) | VR/immersive: Godot client over the unchanged core (`GraphSource`, native GDExtension + web wasm, pure `place_node`/`plan_labels`) | R-0025 | Accepted |
+| [SPEC-0026](0026-offline-study-digest.md) | Offline study digest: pure `offline-digest.js` behind the study actions when no model is connected | R-0026 | Implemented |
+| [SPEC-0027](0027-seeded-example-resources.md) | Seeded example resources: fixed-id `seed_resource` + `SEED_RESOURCES` (Calculus/Algebra/Harmony) | R-0027 | Implemented |
+| [SPEC-0028](0028-cross-cutting-resources.md) | Cross-cutting resources: pure URL threading (`normalizeUrl`/`crossLinks`) + "Also covers" + multi-pin | R-0028 | Implemented |
+| [SPEC-0029](0029-clickable-bridges.md) | Clickable bridges: pure `pickBridge` hit-test + read-only connection view (`openBridge`) | R-0029 | Implemented |
+| [SPEC-0030](0030-topic-mastery.md) | Topic mastery: `KIND_MASTERY` signed event + pure `masteredTopics` + self-tested "Mark as mastered" + ✓ (recompute unchanged) | R-0030 | Implemented |
+| [SPEC-0031](0031-community-approved-topics.md) | Community-approved topics: pure `communityApproved` distinct-wizard count + bedrock overlay ring | R-0031 | Implemented |
+| [SPEC-0032](0032-ai-checked-proof-mastery.md) | Math mastery by AI-checked proof: pure `parseVerdict`/`buildProofGrading` + model-gated "Prove it" box wired to `signMastery` | R-0032 | Implemented |
+| [SPEC-0033](0033-browsable-progress-map.md) | Browsable progress map: ungate clicks + `visitedTopics` + progress palette (unexplored/studying/mastered) + covered trail | R-0033 | Implemented |

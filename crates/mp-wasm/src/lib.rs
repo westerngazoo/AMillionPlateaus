@@ -13,7 +13,7 @@ mod convert;
 mod error;
 
 use mp_crdt::{CrdtDoc, SyncSession};
-use mp_domain::{Bridge, KnowledgeGraph, PlateauNode};
+use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
@@ -120,6 +120,14 @@ impl WasmGraph {
         ))?)
     }
 
+    /// All resources (trail markers) as a JS array of `ResourceDto` (R-0014) —
+    /// for drawing markers anchored to their plateaus.
+    pub fn resources(&self) -> Result<JsValue, JsError> {
+        Ok(serde_wasm_bindgen::to_value(&convert::all_resource_dtos(
+            &self.inner,
+        ))?)
+    }
+
     /// R-0007 — top-`k` plateaus nearest the reputation's orientation, as a JS
     /// array of `NearestDto` (`{ id, name, score }`) ordered by descending
     /// projection score: the same GA projection the fog uses, exposed as a
@@ -171,6 +179,10 @@ impl WasmCrdtDoc {
 
     /// Add a plateau, returning the engine-assigned UUID string. Mirrors
     /// [`WasmGraph::add_plateau`] so the web app seeds either side identically.
+    /// `description` is the plateau's authored Markdown body (R-0020); it rides
+    /// the `description` field already serialized into the CRDT `plateaus` map,
+    /// so it syncs and persists like the rest of the node. An empty string is the
+    /// common case (no body) and is stored verbatim.
     pub fn add_plateau(
         &mut self,
         name: &str,
@@ -178,9 +190,10 @@ impl WasmCrdtDoc {
         e1: f32,
         e2: f32,
         e3: f32,
+        description: &str,
     ) -> Result<String, JsError> {
         let domain = Uuid::parse_str(domain_id)?;
-        let p = PlateauNode::new(name, domain, e1, e2, e3);
+        let p = PlateauNode::new(name, domain, e1, e2, e3).with_description(description);
         let id = p.id.to_string();
         self.inner.add_plateau(&p)?;
         Ok(id)
@@ -267,6 +280,66 @@ impl WasmCrdtDoc {
         Ok(())
     }
 
+    /// Anchor a resource (a trail marker) to an existing plateau, returning the
+    /// engine-assigned id. `kind` is a human label ("Note", "Article", …) parsed
+    /// to `ResourceKind` (unknown → Note). The marker starts `Floating` with zero
+    /// votes; `contributor` is nil (attribution deferred, R-0014 AC5). A missing
+    /// plateau anchor is a thrown `JsError` (mirrors `add_bridge`), so a marker
+    /// can never reference a non-existent plateau.
+    pub fn add_resource(
+        &mut self,
+        plateau_id: &str,
+        title: &str,
+        kind: &str,
+        uri: &str,
+    ) -> Result<String, JsError> {
+        let pid = Uuid::parse_str(plateau_id)?;
+        self.inner
+            .plateau(&pid)?
+            .ok_or_else(|| JsError::new("unknown plateau"))?;
+        let r = Resource::new(
+            pid,
+            title,
+            convert::parse_resource_kind(kind),
+            uri,
+            Uuid::nil(),
+        );
+        let id = r.id.to_string();
+        self.inner.add_resource(&r)?;
+        Ok(id)
+    }
+
+    /// Upsert a resource with a DETERMINISTIC id — the seed sibling of
+    /// `add_resource` (which mints a random id), mirroring `seed_plateau`. The
+    /// `resources` map is id-keyed, so re-seeding the same id overwrites the same
+    /// entry: reload/sync converge (R-0004) and never duplicate. Votes live in
+    /// the separate `votes` map keyed by this id and the count/state are derived
+    /// in `to_graph`, so re-seeding leaves any earned stones intact (R-0027 AC3).
+    pub fn seed_resource(
+        &mut self,
+        id: &str,
+        plateau_id: &str,
+        title: &str,
+        kind: &str,
+        uri: &str,
+    ) -> Result<(), JsError> {
+        let id = Uuid::parse_str(id)?;
+        let pid = Uuid::parse_str(plateau_id)?;
+        self.inner
+            .plateau(&pid)?
+            .ok_or_else(|| JsError::new("unknown plateau"))?;
+        let mut r = Resource::new(
+            pid,
+            title,
+            convert::parse_resource_kind(kind),
+            uri,
+            Uuid::nil(),
+        );
+        r.id = id; // deterministic seed id (same pattern as seed_plateau's `p.id = id`)
+        self.inner.add_resource(&r)?;
+        Ok(())
+    }
+
     /// Project this replica into a queryable [`WasmGraph`] (re-validating every
     /// decoded entity's GA invariants). This is how the fog-world renders the
     /// synced state.
@@ -308,6 +381,36 @@ impl WasmCrdtDoc {
         session.inner.receive_message(&mut self.inner, bytes)?;
         Ok(())
     }
+
+    /// Serialize the whole CRDT doc to bytes for durable storage (R-0012 AC1).
+    /// Delegates to the audited core; `&mut` because Automerge commits pending
+    /// ops before serializing. The web app persists these bytes to IndexedDB
+    /// (the browser analogue of the native redb `CrdtStore` — same save-blob,
+    /// different backing, since redb does not target wasm32).
+    pub fn save(&mut self) -> Vec<u8> {
+        self.inner.save()
+    }
+
+    /// Reconstruct a replica from bytes produced by [`WasmCrdtDoc::save`]
+    /// (R-0012 AC1). A corrupt or stale blob is a thrown JS `Error`, so the
+    /// caller can fall back to a fresh seed (R-0012 AC7, discard-and-reseed).
+    pub fn load(bytes: &[u8]) -> Result<WasmCrdtDoc, JsError> {
+        Ok(WasmCrdtDoc {
+            inner: CrdtDoc::load(bytes)?,
+        })
+    }
+
+    /// Merge a save-blob (e.g. `mp-host import`'s output, or any
+    /// [`WasmCrdtDoc::save`] bytes) INTO this replica — a CRDT **union**, not a
+    /// replace (R-0021 AC6, "Import a world"). Convergent + idempotent: re-merging
+    /// the same blob is a no-op (R-0004). A corrupt/non-Automerge blob is a thrown
+    /// JS `Error` via `CrdtDoc::load`, never a panic — so the caller shows an
+    /// inline error and the world keeps working.
+    pub fn merge_bytes(&mut self, bytes: &[u8]) -> Result<(), JsError> {
+        let mut incoming = CrdtDoc::load(bytes)?;
+        self.inner.merge(&mut incoming)?;
+        Ok(())
+    }
 }
 
 /// One peer's view of an ongoing sync with a single remote — a thin skin over
@@ -332,4 +435,167 @@ impl Default for WasmSyncSession {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ─── SPEC-0010 — wizard identity, signed events, recomputed rank ─────────────
+//
+// Thin skin over the pure `mp-identity` core: keygen/sign/verify and the
+// event-log → reputation recompute all live in audited Rust. JS only ferries
+// event JSON and renders. The secret key never leaves this process except via
+// `secret()` for LOCAL persistence; it is never synced, relayed, or logged.
+
+/// Current wall-clock seconds for stamping signed events. Browser `Date.now()`
+/// on wasm; `SystemTime` on the host (so `cargo test --workspace` needs no
+/// js-sys and the convert helpers stay pure).
+#[cfg(target_arch = "wasm32")]
+fn now_secs() -> u64 {
+    (js_sys::Date::now() / 1000.0) as u64
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn now_secs() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// A wizard's Nostr keypair, usable from JavaScript. Wraps an
+/// `mp_identity::Keypair`; the secret stays inside the wasm instance.
+#[wasm_bindgen]
+pub struct WasmIdentity {
+    inner: mp_identity::Keypair,
+}
+
+#[wasm_bindgen]
+impl WasmIdentity {
+    /// AC1 — mint a fresh BIP340 keypair from browser entropy.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> WasmIdentity {
+        WasmIdentity {
+            inner: mp_identity::Keypair::generate(),
+        }
+    }
+
+    /// AC1 — rebuild a keypair from a 32-byte secret hex (local persistence).
+    pub fn from_secret(hex: &str) -> Result<WasmIdentity, JsError> {
+        Ok(WasmIdentity {
+            inner: mp_identity::Keypair::from_secret_hex(hex)?,
+        })
+    }
+
+    /// The x-only public key hex — the stable wizard id (safe to display/share).
+    pub fn pubkey(&self) -> String {
+        self.inner.pubkey_hex()
+    }
+
+    /// The secret key hex. **LOCAL persistence only** — never sync, relay, or log.
+    pub fn secret(&self) -> String {
+        self.inner.secret_hex()
+    }
+
+    /// AC2/AC3 — sign a traversal event; returns the NostrEvent JSON.
+    pub fn sign_traversal(
+        &self,
+        domain: &str,
+        e1: f32,
+        e2: f32,
+        e3: f32,
+        depth: f32,
+        plateau: Option<String>,
+    ) -> Result<String, JsError> {
+        Ok(convert::sign_traversal_json(
+            &self.inner,
+            domain,
+            [e1, e2, e3],
+            depth,
+            plateau,
+            now_secs(),
+        )?)
+    }
+
+    /// AC2/AC5 — sign a vouch event for `vouched_pubkey`; returns NostrEvent JSON.
+    pub fn sign_vouch(
+        &self,
+        domain: &str,
+        vouched_pubkey: &str,
+        from: &[f32],
+        to: &[f32],
+    ) -> Result<String, JsError> {
+        Ok(convert::sign_vouch_json(
+            &self.inner,
+            domain,
+            vouched_pubkey,
+            from,
+            to,
+            now_secs(),
+        )?)
+    }
+
+    /// R-0030 — sign a mastery event for `plateau_id`; returns the NostrEvent
+    /// JSON. NOT reputation-bearing (recompute ignores `KIND_MASTERY`), so it
+    /// never changes reach — it just records a verifiable "I mastered this".
+    pub fn sign_mastery(&self, plateau_id: &str) -> Result<String, JsError> {
+        Ok(convert::sign_mastery_json(
+            &self.inner,
+            plateau_id,
+            now_secs(),
+        )?)
+    }
+}
+
+impl Default for WasmIdentity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// AC2 — verify an event's id self-consistency and BIP340 signature. Malformed
+/// JSON or a bad signature returns `false`; an unverified event is inert.
+#[wasm_bindgen]
+pub fn verify_event(event_json: &str) -> bool {
+    match serde_json::from_str::<mp_identity::NostrEvent>(event_json) {
+        Ok(ev) => mp_identity::verify(&ev),
+        Err(_) => false,
+    }
+}
+
+/// AC3/AC4 — recompute `pubkey`'s reputation from a JSON array of events,
+/// returning the `{domain_reps, synthesis}` JSON the fog queries consume. An
+/// absent/empty log reaches nothing (no free seed).
+#[wasm_bindgen]
+pub fn recompute_reputation(events_json: &str, pubkey: &str) -> Result<String, JsError> {
+    Ok(convert::recompute_reputation_json(events_json, pubkey)?)
+}
+
+/// AC7 — discovery: top-`k` traversers in `domain`, ranked by verified reach.
+/// Returns a JS array of `{ pubkey, reach }`.
+#[wasm_bindgen]
+pub fn rank_wizards(events_json: &str, domain: &str, k: usize) -> Result<JsValue, JsError> {
+    Ok(serde_wasm_bindgen::to_value(
+        &convert::rank_wizards_entries(events_json, domain, k)?,
+    )?)
+}
+
+/// R-0015 — the weighted-vote sum at which a resource crystallizes. Exposed so
+/// the web app shows "n / threshold" without hardcoding the constant.
+#[wasm_bindgen]
+pub fn crystallize_threshold() -> f32 {
+    mp_domain::CRYSTALLIZE_THRESHOLD
+}
+
+/// R-0030 — the mastery event kind. Exposed so the web app can pin its
+/// `MASTERY_KIND` constant to the Rust source (one source of truth).
+#[wasm_bindgen]
+pub fn mastery_kind() -> u32 {
+    mp_identity::KIND_MASTERY
+}
+
+/// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
+/// mapping reputation and discovery use (`mp_identity::wizard_id_of`). Exposed so
+/// a vote is keyed by the wizard's real identity, not a parallel/truncated id —
+/// the only sanctioned pubkey→WizardId path for the web app (R-0015 AC6).
+#[wasm_bindgen]
+pub fn wizard_id_of(pubkey: &str) -> String {
+    mp_identity::wizard_id_of(pubkey).to_string()
 }

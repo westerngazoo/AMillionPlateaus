@@ -1,0 +1,33 @@
+[package]
+name = "mp-identity"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# BIP340 Schnorr over secp256k1 — the Nostr event-signing scheme. Pure Rust and
+# wasm-friendly. This is NOT a graph-geometry math library: CLAUDE.md §1 governs
+# garust as the only *geometry* math layer; cryptographic signatures are
+# orthogonal and never touch positions/rotors/reputation multivectors.
+k256 = { version = "0.13", features = ["schnorr"] }
+sha2 = "0.10"
+hex = "0.4"
+getrandom = "0.2"
+
+# Drive the UNCHANGED audited reputation engine over the verified event log.
+# Dependency direction stays inward: mp-identity → mp-reputation → mp-domain →
+# garust. mp-crdt depends on NEITHER mp-reputation NOR mp-identity (§7).
+mp-domain = { workspace = true }
+mp-reputation = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+# v5 (namespaced, deterministic) derives a stable WizardId from a pubkey so the
+# existing WizardReputation type stays keyed by Uuid (SPEC-0010 §2.1).
+uuid = { workspace = true, features = ["v5"] }
+thiserror = { workspace = true }
+
+# Browser entropy for keygen + BIP340 aux randomness when compiled to wasm32.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }

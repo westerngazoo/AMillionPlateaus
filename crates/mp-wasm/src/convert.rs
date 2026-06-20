@@ -14,10 +14,15 @@ use std::collections::HashMap;
 
 use mp_crdt::ResourceVote;
 use mp_domain::ga::Mv;
-use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, WizardReputation};
+use mp_domain::{
+    Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceKind, ResourceState, WizardReputation,
+};
+use mp_identity::{
+    Keypair, Mastery, NostrEvent, Traversal, Vouch, KIND_MASTERY, KIND_TRAVERSAL, KIND_VOUCH,
+};
 use uuid::Uuid;
 
-use crate::error::{QueryError, ReputationParseError};
+use crate::error::{EventError, QueryError, ReputationParseError};
 
 /// Wire shape of `wizard_rep_json` (SPEC-0003 §Reputation DTO, R-0003 AC5):
 /// `{ "domain_reps": { "<uuid>": [f32; 8], .. }, "synthesis": [f32; 8] }`,
@@ -63,12 +68,16 @@ pub struct PositionDto {
     pub e3: f32,
 }
 
-/// JS-facing view of a plateau (AC2).
+/// JS-facing view of a plateau (AC2). `domain_id` (R-0012 AC5) lets the web app
+/// rebuild its id→domain map from a restored doc, so an authored plateau scores
+/// reputation under its own domain after a reload — additive value marshalling,
+/// no GA.
 #[derive(serde::Serialize)]
 pub struct PlateauDto {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub domain_id: String,
     pub position: PositionDto,
 }
 
@@ -93,10 +102,58 @@ pub fn bridge_dto(b: &Bridge) -> BridgeDto {
     }
 }
 
+/// JS-facing view of a resource / trail marker (R-0014). `kind` and `state` are
+/// unit enums, so serde emits each as its variant-name string ("Note",
+/// "Floating") — the web app reads them directly. The rotor/GA and vote tally
+/// stay in Rust; this is value marshalling only.
+#[derive(serde::Serialize)]
+pub struct ResourceDto {
+    pub id: String,
+    pub plateau_id: String,
+    pub title: String,
+    pub kind: ResourceKind,
+    pub uri: String,
+    pub state: ResourceState,
+    pub vote_count: f32,
+}
+
+/// Map a `Resource` to its JS DTO.
+pub fn resource_dto(r: &Resource) -> ResourceDto {
+    ResourceDto {
+        id: r.id.to_string(),
+        plateau_id: r.plateau_id.to_string(),
+        title: r.title.clone(),
+        kind: r.kind.clone(),
+        uri: r.uri.clone(),
+        state: r.state.clone(),
+        vote_count: r.vote_count,
+    }
+}
+
+/// Parse a `ResourceKind` from the human label the web app sends. An unknown or
+/// blank label falls back to `Note` (R-0014 AC3) — the enum stays authoritative
+/// in Rust; JS never couples to it.
+pub fn parse_resource_kind(s: &str) -> ResourceKind {
+    match s {
+        "Article" => ResourceKind::Article,
+        "Video" => ResourceKind::Video,
+        "Interactive" => ResourceKind::Interactive,
+        "Paper" => ResourceKind::Paper,
+        "Tool" => ResourceKind::Tool,
+        _ => ResourceKind::Note,
+    }
+}
+
 /// Every plateau in the graph as JS DTOs — the render layer needs the full set
 /// (both lit and fogged), which `reachable_plateaus` (lit only) cannot give.
 pub fn all_plateau_dtos(g: &KnowledgeGraph) -> Vec<PlateauDto> {
     g.plateaus().map(plateau_dto).collect()
+}
+
+/// Every resource (trail marker) in the graph as JS DTOs — anchored to its
+/// plateau, rendered as a marker near it (R-0014).
+pub fn all_resource_dtos(g: &KnowledgeGraph) -> Vec<ResourceDto> {
+    g.resources.values().map(resource_dto).collect()
 }
 
 /// Every bridge in the graph as JS DTOs (for drawing labelled edges).
@@ -111,6 +168,7 @@ pub fn plateau_dto(p: &PlateauNode) -> PlateauDto {
         id: p.id.to_string(),
         name: p.name.clone(),
         description: p.description.clone(),
+        domain_id: p.domain_id.to_string(),
         position: PositionDto {
             e1: c[1],
             e2: c[2],
@@ -196,6 +254,147 @@ pub fn is_reachable_by_id(
         .ok_or_else(|| QueryError::UnknownPlateau(plateau_id.to_string()))?;
     let rep = parse_reputation(json)?;
     Ok(g.is_reachable(plateau, &rep))
+}
+
+// ─── SPEC-0010 — signed events → reputation marshalling ──────
+//
+// All branching/marshalling lives here (host-testable); `lib.rs` only sources
+// the wall-clock timestamp and wraps these in `#[wasm_bindgen]`. No GA or crypto
+// is performed inline: signing/verification/recompute are delegated to the
+// audited `mp-identity` core, which drives the unchanged reputation engine.
+
+/// Emit-side mirror of `ReputationDto`: the exact `{domain_reps, synthesis}`
+/// wire shape `parse_reputation` consumes, so recompute output round-trips into
+/// `reachable_plateaus`/`nearest_plateaus` unchanged.
+#[derive(serde::Serialize)]
+struct ReputationOut {
+    domain_reps: HashMap<String, [f32; 8]>,
+    synthesis: [f32; 8],
+}
+
+/// Serialize a `WizardReputation` into reputation wire JSON. Pure
+/// value-marshalling — reads `coeffs` and stringifies the domain-id keys; no GA.
+pub fn serialize_reputation(rep: &WizardReputation) -> Result<String, EventError> {
+    let domain_reps = rep
+        .domain_reps
+        .iter()
+        .map(|(id, mv)| (id.to_string(), mv.coeffs))
+        .collect();
+    let out = ReputationOut {
+        domain_reps,
+        synthesis: rep.synthesis.coeffs,
+    };
+    Ok(serde_json::to_string(&out)?)
+}
+
+/// SPEC-0010 AC3/AC4 — recompute a single wizard's reputation from a JSON array
+/// of events, returning the `{domain_reps, synthesis}` JSON the fog queries
+/// already consume. A pubkey absent from the verified log yields an **empty**
+/// reputation (reaches nothing — no free seed).
+pub fn recompute_reputation_json(events_json: &str, pubkey: &str) -> Result<String, EventError> {
+    let events: Vec<NostrEvent> = serde_json::from_str(events_json)?;
+    let reps = mp_identity::recompute(&events);
+    let empty;
+    let rep = match reps.get(pubkey) {
+        Some(r) => r,
+        None => {
+            empty = WizardReputation::new(mp_identity::wizard_id_of(pubkey));
+            &empty
+        }
+    };
+    serialize_reputation(rep)
+}
+
+/// One discovery row: a wizard and the reach their verified traversal history
+/// earns in the queried domain.
+#[derive(serde::Serialize)]
+pub struct RankEntryDto {
+    pub pubkey: String,
+    pub reach: f32,
+}
+
+/// SPEC-0010 AC7 — top-`k` traversers in `domain`, ranked from verified events.
+pub fn rank_wizards_entries(
+    events_json: &str,
+    domain: &str,
+    k: usize,
+) -> Result<Vec<RankEntryDto>, EventError> {
+    let events: Vec<NostrEvent> = serde_json::from_str(events_json)?;
+    let domain_id = Uuid::parse_str(domain)?;
+    Ok(mp_identity::rank_by_domain(&events, domain_id, k)
+        .into_iter()
+        .map(|(pubkey, reach)| RankEntryDto { pubkey, reach })
+        .collect())
+}
+
+/// SPEC-0010 AC2 — sign a traversal event, returning its NostrEvent JSON. The
+/// content is self-contained (`{domain, e1,e2,e3, depth, plateau?}`).
+pub fn sign_traversal_json(
+    kp: &Keypair,
+    domain: &str,
+    position: [f32; 3],
+    depth: f32,
+    plateau: Option<String>,
+    created_at: u64,
+) -> Result<String, EventError> {
+    let domain_id = Uuid::parse_str(domain)?;
+    let plateau_id = plateau.map(|p| Uuid::parse_str(&p)).transpose()?;
+    let content = serde_json::to_string(&Traversal {
+        domain: domain_id,
+        e1: position[0],
+        e2: position[1],
+        e3: position[2],
+        depth,
+        plateau: plateau_id,
+    })?;
+    let tags = vec![vec!["d".to_string(), domain.to_string()]];
+    let event = mp_identity::sign(kp, KIND_TRAVERSAL, tags, &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
+}
+
+/// R-0030 — sign a mastery event ("I have studied & self-tested this topic"),
+/// returning its NostrEvent JSON. Mirrors `sign_traversal_json` but is NOT
+/// reputation-bearing: `recompute` ignores `KIND_MASTERY`, so it never changes
+/// the GA multivector. Content is self-contained (`{plateau}`).
+pub fn sign_mastery_json(
+    kp: &Keypair,
+    plateau_id: &str,
+    created_at: u64,
+) -> Result<String, EventError> {
+    let plateau = Uuid::parse_str(plateau_id)?;
+    let content = serde_json::to_string(&Mastery { plateau })?;
+    let event = mp_identity::sign(kp, KIND_MASTERY, vec![], &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
+}
+
+/// SPEC-0010 AC2/AC5 — sign a vouch event for `vouched_pubkey`, returning its
+/// NostrEvent JSON. `from`/`to` are the grade-1 endpoints the recompute rebuilds
+/// the even-grade bridge rotor from (the only public Bridge path).
+pub fn sign_vouch_json(
+    kp: &Keypair,
+    domain: &str,
+    vouched_pubkey: &str,
+    from: &[f32],
+    to: &[f32],
+    created_at: u64,
+) -> Result<String, EventError> {
+    let domain_id = Uuid::parse_str(domain)?;
+    let triple = |s: &[f32]| {
+        [
+            s.first().copied().unwrap_or(0.0),
+            s.get(1).copied().unwrap_or(0.0),
+            s.get(2).copied().unwrap_or(0.0),
+        ]
+    };
+    let content = serde_json::to_string(&Vouch {
+        domain: domain_id,
+        vouched: vouched_pubkey.to_string(),
+        from: triple(from),
+        to: triple(to),
+    })?;
+    let tags = vec![vec!["d".to_string(), domain.to_string()]];
+    let event = mp_identity::sign(kp, KIND_VOUCH, tags, &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
 }
 
 #[cfg(test)]
@@ -411,6 +610,123 @@ mod tests {
         assert!(matches!(
             is_reachable_by_id(&g, &a_id.to_string(), "{ broken"),
             Err(QueryError::Reputation(ReputationParseError::Json(_)))
+        ));
+    }
+
+    // ── SPEC-0010 — signed-event marshalling (host-testable) ─────
+
+    #[test]
+    fn serialize_reputation_round_trips_into_parse_reputation() {
+        // A recompute output must decode back through the SAME path the fog
+        // queries use, so reachability is untouched by the seed→earned switch.
+        let domain = Uuid::new_v4();
+        let mut rep = WizardReputation::new(Uuid::nil());
+        rep.domain_reps.insert(domain, ga::vector(0.9, 0.1, 0.0));
+
+        let json = serialize_reputation(&rep).expect("serialize");
+        let back = parse_reputation(&json).expect("parse round-trip");
+
+        let got = back.domain_reps.get(&domain).expect("domain present");
+        for (x, y) in got
+            .coeffs
+            .iter()
+            .zip(ga::vector(0.9, 0.1, 0.0).coeffs.iter())
+        {
+            assert!((x - y).abs() < ga::EPSILON);
+        }
+    }
+
+    #[test]
+    fn recompute_reputation_json_empty_for_unknown_pubkey() {
+        // No events ⇒ the queried pubkey reaches nothing (no free seed), but the
+        // JSON is still well-formed and parses to an empty reputation.
+        let json = recompute_reputation_json("[]", &"a".repeat(64)).expect("recompute");
+        let rep = parse_reputation(&json).expect("parse");
+        assert!(rep.domain_reps.is_empty());
+        assert_eq!(ga::dominant_grade(&rep.synthesis), 0);
+    }
+
+    #[test]
+    fn sign_traversal_then_recompute_lights_a_domain() {
+        // End-to-end through the wasm seam (sans wasm): sign → verify → recompute
+        // → the same {domain_reps,synthesis} JSON the fog consumes, grade-1 reach.
+        let kp = Keypair::generate();
+        let domain = Uuid::new_v4();
+        let event_json =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 1)
+                .expect("sign");
+        assert!(crate::verify_event(&event_json), "signed event verifies");
+
+        let log = format!("[{event_json}]");
+        let rep_json = recompute_reputation_json(&log, &kp.pubkey_hex()).expect("recompute");
+        let rep = parse_reputation(&rep_json).expect("parse");
+
+        let mv = rep.domain_reps.get(&domain).expect("domain lit");
+        assert_eq!(ga::dominant_grade(mv), 1);
+    }
+
+    #[test]
+    fn rank_wizards_entries_orders_by_reach() {
+        let domain = Uuid::new_v4();
+        let deep = Keypair::generate();
+        let shallow = Keypair::generate();
+        let e1 =
+            sign_traversal_json(&deep, &domain.to_string(), [1.0, 0.0, 0.0], 5.0, None, 1).unwrap();
+        let e2 = sign_traversal_json(&shallow, &domain.to_string(), [1.0, 0.0, 0.0], 1.0, None, 2)
+            .unwrap();
+        let log = format!("[{e1},{e2}]");
+
+        let ranked = rank_wizards_entries(&log, &domain.to_string(), 10).expect("rank");
+        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked[0].pubkey, deep.pubkey_hex());
+        assert!(ranked[0].reach > ranked[1].reach);
+    }
+
+    #[test]
+    fn mastery_signs_verifies_and_leaves_reputation_untouched() {
+        // R-0030 AC2/AC4/AC6: a mastery event is a real signed event (verifies,
+        // kind 30080, content {plateau}), but `recompute` ignores KIND_MASTERY,
+        // so reputation is byte-identical with vs. without it — even over a log
+        // that includes a vouch (recompute's order-sensitive phase).
+        let kp = Keypair::generate();
+        let other = Keypair::generate();
+        let domain = Uuid::new_v4();
+        let plateau = Uuid::new_v4();
+
+        let trav =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 1).unwrap();
+        let vouch = sign_vouch_json(
+            &kp,
+            &domain.to_string(),
+            &other.pubkey_hex(),
+            &[1.0, 0.0, 0.0],
+            &[0.0, 0.0, 1.0],
+            2,
+        )
+        .unwrap();
+        let mastery = sign_mastery_json(&kp, &plateau.to_string(), 3).unwrap();
+
+        // The mastery event is well-formed, verifiable, kind 30080, content {plateau}.
+        assert!(crate::verify_event(&mastery), "mastery verifies");
+        assert_eq!(crate::mastery_kind(), KIND_MASTERY);
+        let ev: NostrEvent = serde_json::from_str(&mastery).unwrap();
+        assert_eq!(ev.kind, KIND_MASTERY);
+        let m: Mastery = serde_json::from_str(&ev.content).unwrap();
+        assert_eq!(m.plateau, plateau);
+
+        // Reputation identical with vs. without the mastery event in the log.
+        let without = format!("[{trav},{vouch}]");
+        let with = format!("[{trav},{vouch},{mastery}]");
+        let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
+        let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
+        assert_eq!(rep_without, rep_with, "mastery must not change reputation");
+    }
+
+    #[test]
+    fn recompute_reputation_json_rejects_malformed_log() {
+        assert!(matches!(
+            recompute_reputation_json("{ not an array", &"a".repeat(64)),
+            Err(EventError::Json(_))
         ));
     }
 }
