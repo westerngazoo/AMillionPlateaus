@@ -339,6 +339,7 @@ version = "0.1.0"
 dependencies = [
  "garust-core",
  "garust-geo",
+ "garust-physics",
 ]
 
 [[package]]
@@ -350,6 +351,14 @@ name = "garust-geo"
 version = "0.1.0"
 dependencies = [
  "garust-core",
+]
+
+[[package]]
+name = "garust-physics"
+version = "0.1.0"
+dependencies = [
+ "garust-core",
+ "garust-geo",
 ]
 
 [[package]]
