@@ -269,3 +269,16 @@ Maps to R-0025 AC + its §3.1 test handles:
   protected core (incl. `mp-identity`). Plus minors: `compute_fit` split out as a
   pure `Fit`-returning fn, `project_to_rect` given its own test handle,
   `PlateauDto.description` added for AC5. **Status → Accepted.**
+- 2026-06-21 **Slice 1 (Track A foundation)** implemented in `apps/godot/` — the
+  GPU-free, binding-agnostic base, headless-verified with the installed Godot 4.6
+  (`godot --headless --script test/run_tests.gd`, exit 0, 20 checks): pure
+  `place_node`/`compute_fit` (the AC1 placement math, axes x=e1/y=e3/z=e2),
+  `plan_labels` (the AC3 `planLabels` port) + `project_to_rect` (the camera-dependent
+  surface, matrix-modelled), the `GraphSource` interface + a fixture, and a flat-3D
+  `World3D` scene that places plateaus/bridges and emission-lights the reachable set
+  (AC2 lighting, from the source's set — no recompute). **Additive only** — only
+  `apps/godot/` touched; no core/`apps/web`/Cargo change (AC6 diff-gate holds); no Rust
+  this slice. **Deferred to later slices:** the native `crates/mp-godot` GDExtension +
+  web `mp-wasm` binding (real data + the §3.1 parity test → AC2/AC7), the OpenXR rig +
+  teleport/travel (Track B → AC4), worldspace study (AC5), the native sync transport
+  (Track D → AC7). R-0025 stays **Accepted** (not yet Met) until those land.
