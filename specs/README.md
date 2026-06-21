@@ -69,3 +69,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0032](0032-ai-checked-proof-mastery.md) | Math mastery by AI-checked proof: pure `parseVerdict`/`buildProofGrading` + model-gated "Prove it" box wired to `signMastery` | R-0032 | Implemented |
 | [SPEC-0033](0033-browsable-progress-map.md) | Browsable progress map: ungate clicks + `visitedTopics` + progress palette (unexplored/studying/mastered) + covered trail | R-0033 | Implemented |
 | [SPEC-0034](0034-cas-checked-answers.md) | CAS-checked answers: self-contained equivalence engine (seeded sampling + numeric-derivative) + drill generator + author `solve` blocks, gating `signMastery` (model-free) | R-0034 | Implemented |
+| [SPEC-0035](0035-trusted-master-weighting.md) | Trusted-master weighting: weighted `communityApproved` (summed domain reach ≥ bar) via injected `rank_wizards` reach; Sybils grade-collapse to ~0 | R-0035 | Implemented |

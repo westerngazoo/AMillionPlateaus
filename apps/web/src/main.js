@@ -218,18 +218,63 @@ async function main() {
   function recompute() {
     reputation = log.reputation();
   }
+  // Trusted-master weighting (R-0035): community approval sums each master's EARNED
+  // REACH (grade-1 reputation magnitude in the topic's domain) and clears a bar — so
+  // a vouch-ring Sybil (grade-0, reach ≈ 0) cannot manufacture approval. The bar is a
+  // reach magnitude, POC-calibrated (a single on-axis traversal earns reach ≈ 1).
+  const APPROVAL_REACH = 2.5;
+  const MASTER_K = 256; // rank_wizards top-K — above any plausible per-domain master count this phase
+
+  // Per-domain { pubkey → reach } for the masters in the verified corpus, read from
+  // the EXISTING GA reputation via rank_wizards (one call per mastery-bearing domain).
+  // NOTE: re-derives reputation per domain (the same recompute the fog path pays) —
+  // fine for the POC log size, not a cheap call.
+  function reachWeights(events) {
+    const logJson = JSON.stringify(events);
+    const domains = new Set();
+    for (const e of events) {
+      if (e?.kind !== MASTERY_KIND) continue;
+      try {
+        const plateau = JSON.parse(e.content)?.plateau;
+        const d = plateau && DOMAIN_OF.get(plateau);
+        if (d) domains.add(d);
+      } catch {
+        /* malformed — skip */
+      }
+    }
+    const byDomain = new Map(); // domainId → Map<pubkey, reach>
+    for (const domain of domains) {
+      try {
+        const rows = rank_wizards(logJson, domain, MASTER_K); // [{ pubkey, reach }]
+        byDomain.set(domain, new Map(rows.map((r) => [r.pubkey, r.reach])));
+      } catch (err) {
+        console.error("[mp] rank_wizards (weighting) failed:", err);
+      }
+    }
+    return byDomain;
+  }
+  // The R-0035 weighted approval set: distinct masters' summed domain reach ≥ bar.
+  function approvedTopics() {
+    const byDomain = reachWeights(log.all());
+    return communityApproved(log.all(), {
+      bar: APPROVAL_REACH,
+      domainOf: (plateau) => DOMAIN_OF.get(plateau),
+      weightOf: (pk, domain) => byDomain.get(domain)?.get(pk) ?? 0,
+    });
+  }
+
   // Progress derived from the SAME verified log (R-0030 mastered, R-0033 visited),
   // refreshed alongside reputation. Both are completion layers, NOT reach: a topic
   // is "studying" once visited, "mastered" once quizzed.
   let mastered = masteredTopics(log.all(), myPubkey);
   let visited = visitedTopics(log.all(), myPubkey);
-  // Community-approved (R-0031): topics ≥N distinct wizards have mastered, counted
-  // over the SAME verified corpus (own + discovered) — pubkey-agnostic, off the CRDT.
-  let community = communityApproved(log.all());
+  // Community-approved (R-0031), now WEIGHTED by master reach (R-0035): over the SAME
+  // verified corpus (own + discovered) — pubkey-agnostic, off the CRDT.
+  let community = approvedTopics();
   function recomputeProgress() {
     mastered = masteredTopics(log.all(), myPubkey);
     visited = visitedTopics(log.all(), myPubkey);
-    community = communityApproved(log.all());
+    community = approvedTopics();
   }
   // Pin the JS MASTERY_KIND to the Rust source (one source of truth, R-0030 AC6).
   console.assert(

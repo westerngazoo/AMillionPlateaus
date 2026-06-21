@@ -57,20 +57,25 @@ export function visitedTopics(events = [], pubkey) {
   return out;
 }
 
-// ── Community approval (R-0031 / SPEC-0031) ────────────────────────────────────
-// A topic the crowd has mastered. Counted from the SAME verified corpus
-// (own + discovered mastery events) — never the CRDT. Pubkey-AGNOSTIC, unlike
-// masteredTopics. Raw distinct-pubkey count this phase (Sybil-resistant weighting
-// by the master's reputation is a future Rust-side refinement, R-0031 §4).
+// ── Community approval (R-0031 / SPEC-0031, weighted by R-0035 / SPEC-0035) ─────
+// A topic the crowd has mastered. Derived from the SAME verified corpus (own +
+// discovered mastery events) — never the CRDT. Pubkey-AGNOSTIC, unlike
+// masteredTopics. R-0035 weights each distinct master by their EARNED REACH (the
+// grade-1 magnitude of their GA reputation in the topic's domain): a topic is
+// approved when the summed reach clears a bar, so a vouch-ring Sybil (grade-0,
+// reach ≈ 0) cannot manufacture approval by minting keys. The reach source is
+// INJECTED (this module stays pure/wasm-free); the default unit weight + count
+// bar reproduce R-0031's head-count.
 
-// Distinct wizards a topic needs before it's community-approved (canonical).
-// A wizard COUNT (R-0015's crystallize threshold is a Rust vote-weight sum; this
-// has no GA semantics, so it lives in JS).
+// The DEFAULT bar when weights are unit (head-count) — a wizard COUNT (R-0015's
+// crystallize threshold is a Rust vote-weight sum; this has no GA semantics, so
+// it lives in JS). The app passes a calibrated REACH bar instead (R-0035).
 export const COMMUNITY_THRESHOLD = 3;
 
-/** plateauId → number of DISTINCT pubkeys with a (verified) mastery event for it. */
-export function masteryCounts(events = []) {
-  const byTopic = new Map(); // plateauId → Set<pubkey>
+/** plateauId → Set<pubkey> of (verified) masters. The shared dedup: a topic
+ *  mastered twice by one wizard counts that wizard once. Pure. */
+function mastersByTopic(events = []) {
+  const byTopic = new Map();
   for (const e of events) {
     if (!e || e.kind !== MASTERY_KIND) continue;
     try {
@@ -83,14 +88,38 @@ export function masteryCounts(events = []) {
       /* malformed content — skip */
     }
   }
+  return byTopic;
+}
+
+/** plateauId → number of DISTINCT pubkeys with a (verified) mastery event for it.
+ *  Unchanged R-0031 surface — kept for the "N mastered" display. */
+export function masteryCounts(events = []) {
   const counts = new Map();
-  for (const [plateau, who] of byTopic) counts.set(plateau, who.size);
+  for (const [plateau, who] of mastersByTopic(events)) counts.set(plateau, who.size);
   return counts;
 }
 
-/** Topics with ≥ `threshold` distinct masters — community-approved. Deterministic. */
-export function communityApproved(events = [], threshold = COMMUNITY_THRESHOLD) {
+/**
+ * Community-approved topics, WEIGHTED by each master's earned reach (R-0035). For
+ * each topic, sum `weightOf(pubkey, domainOf(topic))` over its DISTINCT masters and
+ * approve when the sum ≥ `bar`. Pure + deterministic — the reach source is INJECTED:
+ *   - `weightOf(pubkey, domainId) → number`  a master's grade-1 reach in that domain (default 1)
+ *   - `domainOf(plateauId) → domainId`        the topic's domain (default undefined)
+ * A weight that is absent / NaN / ≤ 0 contributes 0 — a Sybil or unknown master
+ * never adds AND never subtracts (approval is monotonic in real reach). The
+ * defaults (unit weight, `bar = COMMUNITY_THRESHOLD`) reproduce R-0031's head-count.
+ */
+export function communityApproved(events = [], opts = {}) {
+  const { bar = COMMUNITY_THRESHOLD, weightOf = () => 1, domainOf = () => undefined } = opts;
   const out = new Set();
-  for (const [plateau, n] of masteryCounts(events)) if (n >= threshold) out.add(plateau);
+  for (const [plateau, who] of mastersByTopic(events)) {
+    const domain = domainOf(plateau);
+    let sum = 0;
+    for (const pk of who) {
+      const w = weightOf(pk, domain);
+      if (Number.isFinite(w) && w > 0) sum += w; // clamp: absent/NaN/≤0 ⇒ 0
+    }
+    if (sum >= bar) out.add(plateau);
+  }
   return out;
 }
