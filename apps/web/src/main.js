@@ -53,6 +53,15 @@ import {
   buildProofGrading,
   parseVerdict,
 } from "./study.js";
+import {
+  checkEquivalence,
+  generateDrill,
+  drillsFor,
+  parseChallenges,
+  stripChallenges,
+  parseExpr,
+  toTeX,
+} from "./cas.js";
 import { offlineDigest } from "./offline-digest.js";
 import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
 import { buildBridge } from "./bridge.js";
@@ -938,6 +947,27 @@ async function main() {
     proofPreview.replaceChildren();
     proofFeedback.textContent = "";
   }
+  // Solve it (R-0034): the CAS-checked answer box — also a STATIC SIBLING of
+  // #detail-mastery (survives replaceChildren); nodes queried once, wired below.
+  const detailSolve = document.getElementById("detail-solve");
+  const solvePrompt = document.getElementById("solve-prompt");
+  const solvePalette = document.getElementById("solve-palette");
+  const solveNewBtn = document.getElementById("solve-new");
+  const solveInput = document.getElementById("solve-input");
+  const solvePreview = document.getElementById("solve-preview");
+  const solveCheck = document.getElementById("solve-check");
+  const solveFeedback = document.getElementById("solve-feedback");
+  let solveCurrent = null; // the active problem { prompt, reference, variable, check }
+  let solveNext = null; // () → the next problem for the open plateau (challenges then drills)
+  function hideSolveBox() {
+    detailSolve.hidden = true;
+    solveInput.value = "";
+    solvePreview.replaceChildren();
+    solveFeedback.textContent = "";
+    solvePrompt.replaceChildren();
+    solveCurrent = null;
+    solveNext = null;
+  }
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
 
@@ -945,11 +975,14 @@ async function main() {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
     studyPlateau = p;
     detailName.textContent = p.name; // textContent — never trust the name as HTML
-    detailBody.innerHTML = renderMarkdown(p.description || "_No description yet._");
+    // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
+    // otherwise show the raw prompt:/answer: lines (and leak the answer).
+    detailBody.innerHTML = renderMarkdown(stripChallenges(p.description || "") || "_No description yet._");
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
     hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
+    hideSolveBox(); // R-0034: same — clear+hide any prior solve problem
     renderStudyResources();
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
@@ -1000,6 +1033,21 @@ async function main() {
         if (!detailProof.hidden) proofInput.focus();
       });
       detailMastery.append(proveBtn);
+    }
+    // R-0034 — "Solve it (CAS-checked)": shown when the topic is QUANTITATIVE
+    // (offers generated drills or an author ```solve challenge). NOT model-gated —
+    // the check is local + deterministic (the rigorous OFFLINE rung).
+    const quantitative = drillsFor(p).length > 0 || parseChallenges(p.description || "").length > 0;
+    if (quantitative) {
+      const solveBtn = document.createElement("button");
+      solveBtn.type = "button";
+      solveBtn.className = "mastery-mark";
+      solveBtn.textContent = "Solve it (CAS-checked)";
+      solveBtn.addEventListener("click", () => {
+        if (detailSolve.hidden) openSolve(p);
+        else hideSolveBox();
+      });
+      detailMastery.append(solveBtn);
     }
   }
 
@@ -1260,7 +1308,9 @@ async function main() {
       return;
     }
     showStudyReply("…"); // feedback in the drawer while the model answers
-    const grounding = buildPlateauStudyContext({ plateau: studyPlateau, resources: rs });
+    // R-0034: strip any author ```solve answer from the grounding so it never rides to the model.
+    const groundPlateau = { name: studyPlateau.name, description: stripChallenges(studyPlateau.description || "") };
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
     const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
       .then((reply) => {
@@ -1331,7 +1381,8 @@ async function main() {
       .to_graph()
       .resources()
       .filter((r) => r.plateau_id === p.id);
-    const grounding = buildPlateauStudyContext({ plateau: p, resources: rs });
+    const groundPlateau = { name: p.name, description: stripChallenges(p.description || "") }; // R-0034: no leaked answer
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
     // Empty history ([]) — grading is a stateless turn, not the chat transcript.
     // Only the MODEL's reply reaches parseVerdict (the proof rides in the user
     // message), so a learner can't self-grant by writing the verdict token.
@@ -1354,6 +1405,108 @@ async function main() {
       .catch((err) => {
         proofFeedback.textContent = `⚠ ${err.message}`; // graceful, signs nothing
       });
+  });
+
+  // ── Solve it (R-0034 / SPEC-0034): the CAS-checked answer box ───────────────
+  // A problem (author ```solve challenge first, then generated drills), a plain-
+  // math answer input + palette + live KaTeX preview, and a Check that runs the
+  // LOCAL, deterministic equivalence engine (no model). Correct → signMastery
+  // (the same ✓). Wired once — the box is a static sibling.
+  const SOLVE_SYMBOLS = [
+    ["x", "x"], ["^", "^"], ["( )", "()"], ["/", "/"], ["·", "*"],
+    ["√", "sqrt()"], ["π", "pi"], ["sin", "sin()"], ["cos", "cos()"], ["ln", "ln()"],
+  ];
+  function solveInsert(text) {
+    const el = solveInput;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    const paren = text.indexOf("()"); // park the caret inside the first () if any
+    const caret = paren >= 0 ? start + paren + 1 : start + text.length;
+    el.selectionStart = el.selectionEnd = caret;
+    el.focus();
+    el.dispatchEvent(new Event("input")); // refresh the live preview
+  }
+  for (const [label, ins] of SOLVE_SYMBOLS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => solveInsert(ins));
+    solvePalette.append(b);
+  }
+  function renderSolveProblem() {
+    if (!solveCurrent) return;
+    solvePrompt.innerHTML = renderMarkdown(solveCurrent.prompt || "Solve:"); // app/author markdown — safe sanitiser
+    typesetMath(solvePrompt);
+  }
+  // Build the problem provider for plateau `p`: authored challenges first, then
+  // generated drills (cycling the topic's operations with an incrementing seed).
+  function openSolve(p) {
+    const challenges = parseChallenges(p.description || "");
+    const ops = drillsFor(p);
+    let idx = 0;
+    solveNext = () => {
+      if (idx < challenges.length) {
+        const c = challenges[idx++];
+        return { prompt: c.prompt, reference: c.answer, variable: c.variable, check: c.check };
+      }
+      if (ops.length === 0) {
+        const c = challenges[idx++ % challenges.length]; // only authored — cycle them
+        return { prompt: c.prompt, reference: c.answer, variable: c.variable, check: c.check };
+      }
+      const op = ops[(idx - challenges.length) % ops.length];
+      return generateDrill({ operation: op, seed: idx++ }); // pure given the seed
+    };
+    solveNewBtn.hidden = !(ops.length > 0 || challenges.length > 1); // hide if a single fixed problem
+    solveCurrent = solveNext();
+    solveInput.value = "";
+    solvePreview.replaceChildren();
+    solveFeedback.textContent = "";
+    renderSolveProblem();
+    detailSolve.hidden = false;
+    solveInput.focus();
+  }
+  solveInput.addEventListener("input", () => {
+    // Live preview via toTeX(parseExpr(...)) — a parsed bounded AST, rendered by
+    // KaTeX (trust:false). Parse failure ⇒ textContent of the raw input (never
+    // innerHTML of learner text).
+    const src = solveInput.value;
+    try {
+      const tex = toTeX(parseExpr(src, solveCurrent?.variable || "x"));
+      const span = document.createElement("span");
+      span.className = "mp-math";
+      span.setAttribute("data-tex", tex);
+      span.textContent = tex; // fallback if KaTeX is unavailable
+      solvePreview.replaceChildren(span);
+      typesetMath(solvePreview);
+    } catch {
+      solvePreview.textContent = src; // inert — never innerHTML
+    }
+  });
+  solveNewBtn.addEventListener("click", () => {
+    if (!solveNext) return;
+    solveCurrent = solveNext();
+    solveInput.value = "";
+    solvePreview.replaceChildren();
+    solveFeedback.textContent = "";
+    renderSolveProblem();
+    solveInput.focus();
+  });
+  solveCheck.addEventListener("click", () => {
+    if (!solveCurrent || !studyPlateau) return;
+    const ans = solveInput.value;
+    if (!ans.trim()) {
+      solveFeedback.textContent = "Enter an answer first."; // signs nothing
+      return;
+    }
+    // LOCAL deterministic check (no model). Conservative — a wrong/unparseable
+    // answer signs nothing.
+    const { equivalent, reason } = checkEquivalence(ans, solveCurrent.reference, solveCurrent.check);
+    solveFeedback.textContent = equivalent ? "✓ Correct — verified equivalent to the answer." : reason;
+    if (equivalent) {
+      signMastery(studyPlateau); // the ONLY sign path — same mastery as self-test / proof
+      renderMastery(studyPlateau); // #detail-mastery becomes "✓ Mastered"
+    }
   });
 
   document.getElementById("detail-close").addEventListener("click", () => {
