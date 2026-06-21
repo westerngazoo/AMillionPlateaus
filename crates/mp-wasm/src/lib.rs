@@ -542,6 +542,20 @@ impl WasmIdentity {
             now_secs(),
         )?)
     }
+
+    /// R-0036 — sign a proof/solution artifact event for `plateau_id` (`kind` =
+    /// "proof" | "solution", `body` the text). Returns the NostrEvent JSON. NOT
+    /// reputation-bearing (recompute ignores `KIND_PROOF`); it records a verifiable,
+    /// shareable artifact. `body` is capped at sign time.
+    pub fn sign_proof(&self, plateau_id: &str, kind: &str, body: &str) -> Result<String, JsError> {
+        Ok(convert::sign_proof_json(
+            &self.inner,
+            plateau_id,
+            kind,
+            body,
+            now_secs(),
+        )?)
+    }
 }
 
 impl Default for WasmIdentity {
@@ -589,6 +603,13 @@ pub fn crystallize_threshold() -> f32 {
 #[wasm_bindgen]
 pub fn mastery_kind() -> u32 {
     mp_identity::KIND_MASTERY
+}
+
+/// R-0036 — the proof/solution artifact event kind. Exposed so the web app can pin
+/// its `PROOF_KIND` constant to the Rust source (one source of truth).
+#[wasm_bindgen]
+pub fn proof_kind() -> u32 {
+    mp_identity::KIND_PROOF
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`

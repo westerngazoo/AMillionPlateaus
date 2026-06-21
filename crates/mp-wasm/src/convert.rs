@@ -18,7 +18,8 @@ use mp_domain::{
     Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceKind, ResourceState, WizardReputation,
 };
 use mp_identity::{
-    Keypair, Mastery, NostrEvent, Traversal, Vouch, KIND_MASTERY, KIND_TRAVERSAL, KIND_VOUCH,
+    Keypair, Mastery, NostrEvent, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PROOF,
+    KIND_TRAVERSAL, KIND_VOUCH,
 };
 use uuid::Uuid;
 
@@ -364,6 +365,41 @@ pub fn sign_mastery_json(
     let plateau = Uuid::parse_str(plateau_id)?;
     let content = serde_json::to_string(&Mastery { plateau })?;
     let event = mp_identity::sign(kp, KIND_MASTERY, vec![], &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
+}
+
+/// Max proof body bytes embedded in a published event (R-0036) — bounds how much a
+/// single proof can bloat the gossiped log; longer bodies are truncated at sign time.
+const PROOF_BODY_CAP: usize = 8192;
+
+/// R-0036 — sign a proof/solution artifact event (a shareable completion artifact),
+/// returning its NostrEvent JSON. Like `sign_mastery_json` it is NOT
+/// reputation-bearing: `recompute` ignores `KIND_PROOF`, so a published proof never
+/// changes the GA multivector. `body` is capped at `PROOF_BODY_CAP` bytes.
+pub fn sign_proof_json(
+    kp: &Keypair,
+    plateau_id: &str,
+    kind: &str,
+    body: &str,
+    created_at: u64,
+) -> Result<String, EventError> {
+    let plateau = Uuid::parse_str(plateau_id)?;
+    let body = if body.len() > PROOF_BODY_CAP {
+        // truncate on a char boundary at or below the cap (never split a UTF-8 codepoint)
+        let mut end = PROOF_BODY_CAP;
+        while end > 0 && !body.is_char_boundary(end) {
+            end -= 1;
+        }
+        body[..end].to_string()
+    } else {
+        body.to_string()
+    };
+    let content = serde_json::to_string(&Proof {
+        plateau,
+        kind: kind.to_string(),
+        body,
+    })?;
+    let event = mp_identity::sign(kp, KIND_PROOF, vec![], &content, created_at)?;
     Ok(serde_json::to_string(&event)?)
 }
 
@@ -720,6 +756,62 @@ mod tests {
         let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
         let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
         assert_eq!(rep_without, rep_with, "mastery must not change reputation");
+    }
+
+    #[test]
+    fn proof_signs_verifies_and_leaves_reputation_untouched() {
+        // R-0036 AC2/AC4: a published proof is a real signed event (verifies, kind
+        // 30081, content {plateau,kind,body}), but `recompute` ignores KIND_PROOF, so
+        // reputation is byte-identical with vs. without it — over a log that includes a
+        // traversal AND a vouch (recompute's order-sensitive phase).
+        let kp = Keypair::generate();
+        let other = Keypair::generate();
+        let domain = Uuid::new_v4();
+        let plateau = Uuid::new_v4();
+
+        let trav =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 1).unwrap();
+        let vouch = sign_vouch_json(
+            &kp,
+            &domain.to_string(),
+            &other.pubkey_hex(),
+            &[1.0, 0.0, 0.0],
+            &[0.0, 0.0, 1.0],
+            2,
+        )
+        .unwrap();
+        let proof =
+            sign_proof_json(&kp, &plateau.to_string(), "proof", "By induction, QED.", 3).unwrap();
+
+        // Well-formed, verifiable, kind 30081, content {plateau, kind, body}.
+        assert!(crate::verify_event(&proof), "proof verifies");
+        assert_eq!(crate::proof_kind(), KIND_PROOF);
+        let ev: NostrEvent = serde_json::from_str(&proof).unwrap();
+        assert_eq!(ev.kind, KIND_PROOF);
+        let p: Proof = serde_json::from_str(&ev.content).unwrap();
+        assert_eq!(p.plateau, plateau);
+        assert_eq!(p.kind, "proof");
+        assert_eq!(p.body, "By induction, QED.");
+
+        // Reputation byte-identical with vs. without the proof event in the log.
+        let without = format!("[{trav},{vouch}]");
+        let with = format!("[{trav},{vouch},{proof}]");
+        let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
+        let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
+        assert_eq!(rep_without, rep_with, "proof must not change reputation");
+    }
+
+    #[test]
+    fn proof_body_is_capped() {
+        // R-0036: an over-long body is truncated at sign time so it can't bloat the log.
+        let kp = Keypair::generate();
+        let plateau = Uuid::new_v4();
+        let huge = "x".repeat(20_000);
+        let proof = sign_proof_json(&kp, &plateau.to_string(), "solution", &huge, 1).unwrap();
+        let ev: NostrEvent = serde_json::from_str(&proof).unwrap();
+        let p: Proof = serde_json::from_str(&ev.content).unwrap();
+        assert!(p.body.len() <= 8192, "body capped at 8 KB");
+        assert!(crate::verify_event(&proof), "capped proof still verifies");
     }
 
     #[test]
