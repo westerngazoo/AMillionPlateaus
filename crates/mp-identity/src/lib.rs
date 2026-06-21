@@ -26,7 +26,8 @@ mod verify;
 
 pub use error::IdError;
 pub use event::{
-    sign, Mastery, NostrEvent, Traversal, Vouch, KIND_MASTERY, KIND_TRAVERSAL, KIND_VOUCH,
+    sign, Mastery, NostrEvent, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PROOF, KIND_TRAVERSAL,
+    KIND_VOUCH,
 };
 pub use keys::Keypair;
 pub use recompute::{rank_by_domain, recompute, wizard_id_of};

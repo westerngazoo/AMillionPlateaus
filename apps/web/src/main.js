@@ -18,6 +18,7 @@ import init, {
   crystallize_threshold,
   wizard_id_of,
   mastery_kind,
+  proof_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
@@ -64,6 +65,7 @@ import {
 } from "./cas.js";
 import { offlineDigest } from "./offline-digest.js";
 import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
+import { publishedProofs, PROOF_KIND } from "./proofs.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -280,6 +282,11 @@ async function main() {
   console.assert(
     mastery_kind() === MASTERY_KIND,
     `MASTERY_KIND ${MASTERY_KIND} ≠ Rust mastery_kind() ${mastery_kind()}`,
+  );
+  // Pin the JS PROOF_KIND to the Rust source (R-0036 AC5).
+  console.assert(
+    proof_kind() === PROOF_KIND,
+    `PROOF_KIND ${PROOF_KIND} ≠ Rust proof_kind() ${proof_kind()}`,
   );
 
   // The persona is the page's local lens. Null until the visitor chooses one; the
@@ -1013,6 +1020,83 @@ async function main() {
     solveCurrent = null;
     solveNext = null;
   }
+  // Persist & share (R-0036): the proofs panel (static sibling in the drawer).
+  // Local-keep by default (mp.proofs, PRIVATE), opt-in publish signs a KIND_PROOF
+  // event onto the verified log. Saving NEVER touches the log; publishing is a
+  // distinct, explicit act (and a gossiped signed event can't be unpublished).
+  const detailProofs = document.getElementById("detail-proofs");
+  const PROOFS_KEY = "mp.proofs";
+  function loadProofs() {
+    try {
+      return JSON.parse(localStorage.getItem(PROOFS_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+  function saveProof(plateauId, kind, body) {
+    if (!body || !body.trim()) return;
+    const all = loadProofs();
+    all[plateauId] = { kind, body }; // latest-wins per topic; PRIVATE — never on the log
+    try {
+      localStorage.setItem(PROOFS_KEY, JSON.stringify(all));
+    } catch {
+      /* quota — ignore */
+    }
+  }
+  function publishProof(plateauId) {
+    const entry = loadProofs()[plateauId];
+    if (!entry) return;
+    try {
+      ingest(identity.sign_proof(plateauId, entry.kind, entry.body)); // signs + rides the log (R-0010)
+      if (studyPlateau) renderProofs(studyPlateau);
+    } catch (err) {
+      console.error("[mp] sign_proof failed:", err);
+    }
+  }
+  // The proofs view: your saved (private) artifact + everyone's published ones.
+  // Untrusted text → body via the R-0020 safe renderer; attribution via textContent.
+  function renderProofs(p) {
+    detailProofs.replaceChildren();
+    const kindLabel = (k) => (k === "solution" ? "solution" : "proof");
+    const local = loadProofs()[p.id];
+    if (local) {
+      const head = document.createElement("div");
+      head.className = "proofs-head";
+      head.textContent = `Your saved ${kindLabel(local.kind)} (private)`;
+      const body = document.createElement("div");
+      body.className = "proofs-body";
+      body.innerHTML = renderMarkdown(local.body); // SAFE sanitiser — learner text inert
+      typesetMath(body);
+      const pub = document.createElement("button");
+      pub.type = "button";
+      pub.className = "proofs-publish";
+      pub.textContent = "Publish to the shared log";
+      pub.addEventListener("click", () => publishProof(p.id));
+      const note = document.createElement("div");
+      note.className = "proofs-note";
+      note.textContent = "Publishing signs this to the shared log — it can't be unpublished.";
+      detailProofs.append(head, body, pub, note);
+    }
+    const published = publishedProofs(log.all(), p.id);
+    if (published.length) {
+      const head = document.createElement("div");
+      head.className = "proofs-head";
+      head.textContent = "Published proofs";
+      detailProofs.append(head);
+      for (const pr of published) {
+        const who = document.createElement("div");
+        who.className = "proofs-who";
+        // textContent — pubkey/kind are peer-derived (never innerHTML)
+        who.textContent = `${pr.pubkey === myPubkey ? "you" : shortKey(pr.pubkey)} · ${kindLabel(pr.kind)}`;
+        const body = document.createElement("div");
+        body.className = "proofs-body";
+        body.innerHTML = renderMarkdown(pr.body); // SAFE sanitiser — untrusted peer text inert
+        typesetMath(body);
+        detailProofs.append(who, body);
+      }
+    }
+  }
+
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
 
@@ -1030,6 +1114,7 @@ async function main() {
     hideSolveBox(); // R-0034: same — clear+hide any prior solve problem
     renderStudyResources();
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
+    renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
     detail.hidden = false;
   }
@@ -1444,7 +1529,9 @@ async function main() {
         proofFeedback.textContent = feedback;
         if (pass) {
           signMastery(p); // the ONLY sign path — proof mastery == self-test mastery
+          saveProof(p.id, "proof", proof); // R-0036 — keep it locally (private)
           renderMastery(p); // #detail-mastery becomes "✓ Mastered"
+          renderProofs(p); // R-0036 — show the saved proof + Publish
         }
       })
       .catch((err) => {
@@ -1550,7 +1637,9 @@ async function main() {
     solveFeedback.textContent = equivalent ? "✓ Correct — verified equivalent to the answer." : reason;
     if (equivalent) {
       signMastery(studyPlateau); // the ONLY sign path — same mastery as self-test / proof
+      saveProof(studyPlateau.id, "solution", ans); // R-0036 — keep it locally (private)
       renderMastery(studyPlateau); // #detail-mastery becomes "✓ Mastered"
+      renderProofs(studyPlateau); // R-0036 — show the saved solution + Publish
     }
   });
 

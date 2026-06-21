@@ -289,6 +289,7 @@
       #plateau-detail[data-mode="bridge"] #detail-mastery,
       #plateau-detail[data-mode="bridge"] #detail-proof,
       #plateau-detail[data-mode="bridge"] #detail-solve,
+      #plateau-detail[data-mode="bridge"] #detail-proofs,
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -359,6 +360,21 @@
       .solve-new { border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6; }
       .solve-new[hidden] { display: none; }
       .solve-feedback { font-size: 13px; color: #cdd9e6; white-space: pre-wrap; }
+      /* Persist & share (R-0036): your saved proof/solution + published ones. */
+      .detail-proofs { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+      .detail-proofs:empty { display: none; }
+      .proofs-head { font-size: 12px; font-weight: 600; color: #8aa0b4; text-transform: uppercase; letter-spacing: 0.04em; }
+      .proofs-body {
+        font-size: 13px; color: #cdd9e6; padding: 6px 8px;
+        background: #11181f; border: 1px solid #1f2937; border-radius: 6px;
+      }
+      .proofs-who { font-size: 12px; color: #9fd0ff; margin-top: 4px; }
+      .proofs-publish {
+        align-self: flex-start; font-size: 12px; padding: 5px 12px; border-radius: 6px;
+        cursor: pointer; border: 1px solid #1d6e56; background: #14463a; color: #d6f5ea;
+      }
+      .proofs-publish:hover { background: #195441; }
+      .proofs-note { font-size: 11px; color: #8aa0b4; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -734,6 +750,11 @@
         </div>
         <div id="solve-feedback" class="solve-feedback"><!-- result, by main.js --></div>
       </div>
+
+      <!-- Persist & share (R-0036): your saved proof/solution (private) + a Publish
+           control, and everyone's published proofs for this topic. Filled by main.js;
+           empty (and hidden) until you've earned a proof/solution here. -->
+      <div id="detail-proofs" class="detail-proofs"><!-- saved + published proofs, by main.js --></div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>

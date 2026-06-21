@@ -21,6 +21,11 @@ pub const KIND_VOUCH: u32 = 30079;
 /// completion claim, NOT reputation — `recompute` ignores it, so it never
 /// changes the GA multivector (it sums only traversal/vouch).
 pub const KIND_MASTERY: u32 = 30080;
+/// Proof/solution artifact kind (R-0036): a shareable completion artifact (a
+/// written proof, R-0032, or a CAS-checked solution, R-0034). Like
+/// `KIND_MASTERY` it is NOT reputation — `recompute` ignores it (it sums only
+/// traversal/vouch), so a published proof never changes reach.
+pub const KIND_PROOF: u32 = 30081;
 
 /// A Nostr event (NIP-01 shape).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +77,17 @@ pub struct Vouch {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mastery {
     pub plateau: Uuid,
+}
+
+/// Proof content payload (R-0036) — a shareable completion artifact: the topic,
+/// the artifact `kind` ("proof" | "solution"), and the `body` text. Self-contained
+/// and **not read by [`crate::recompute`]** (an artifact, not reputation): the only
+/// consumers are the client's local store and the derived "published proofs" view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proof {
+    pub plateau: Uuid,
+    pub kind: String,
+    pub body: String,
 }
 
 /// The canonical serialization whose SHA-256 is the event id (NIP-01):
