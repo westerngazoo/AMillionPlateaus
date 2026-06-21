@@ -1,0 +1,18 @@
+; A Million Plateaus — immersive (R-0025 / SPEC-0025).
+; A Godot 4 client that is a PURE CONSUMER of the unchanged GA/CRDT core: it
+; places plateaus at their {e1,e2,e3} positions and does NO GA. Slice 1 ships the
+; pure place/label functions, the GraphSource interface, and a fixture-backed
+; flat-3D scene; the native mp-godot GDExtension, the web mp-wasm binding, and the
+; OpenXR rig are later slices.
+
+config_version=5
+
+[application]
+
+config/name="A Million Plateaus — immersive"
+run/main_scene="res://scenes/World3D.tscn"
+config/features=PackedStringArray("4.4")
+
+[debug]
+
+gdscript/warnings/untyped_declaration=0
