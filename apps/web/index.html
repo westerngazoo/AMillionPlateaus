@@ -288,6 +288,7 @@
       #plateau-detail[data-mode="bridge"] #detail-resources,
       #plateau-detail[data-mode="bridge"] #detail-mastery,
       #plateau-detail[data-mode="bridge"] #detail-proof,
+      #plateau-detail[data-mode="bridge"] #detail-solve,
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -326,6 +327,38 @@
       }
       .proof-check:hover { background: #195441; }
       .proof-feedback { font-size: 13px; color: #cdd9e6; white-space: pre-wrap; }
+      /* Solve it (R-0034): the CAS-checked answer box — same look as the proof box,
+         also a static sibling of #detail-mastery. */
+      .detail-solve { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+      .detail-solve[hidden] { display: none; }
+      .solve-note { font-size: 12px; color: #8aa0b4; }
+      .solve-prompt { font-size: 14px; color: #e6eef6; }
+      .solve-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+      .solve-palette button {
+        font-size: 12px; padding: 3px 7px; border-radius: 5px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .solve-palette button:hover { background: #283546; }
+      #solve-input {
+        width: 100%; box-sizing: border-box; min-height: 44px; resize: vertical;
+        background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px;
+        padding: 8px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .solve-preview {
+        min-height: 20px; font-size: 13px; color: #cdd9e6; padding: 6px 8px;
+        background: #11181f; border: 1px solid #1f2937; border-radius: 6px;
+      }
+      .solve-preview:empty::before { content: "preview"; color: #5a6b7d; }
+      .solve-actions { display: flex; gap: 6px; }
+      .solve-check, .solve-new {
+        font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+      }
+      .solve-check { border: 1px solid #1d6e56; background: #14463a; color: #d6f5ea; }
+      .solve-check:hover { background: #195441; }
+      .solve-new { border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6; }
+      .solve-new[hidden] { display: none; }
+      .solve-feedback { font-size: 13px; color: #cdd9e6; white-space: pre-wrap; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -681,6 +714,25 @@
         <div id="proof-preview" class="proof-preview"><!-- live KaTeX preview, by main.js --></div>
         <button id="proof-check" class="proof-check" type="button">Check my proof</button>
         <div id="proof-feedback" class="proof-feedback"><!-- model feedback, by main.js --></div>
+      </div>
+
+      <!-- Solve it (R-0034): the CAS-checked answer path, shown on quantitative
+           topics (offline — no model needed). A STATIC SIBLING of #detail-mastery
+           (not a child) so renderMastery's replaceChildren never wipes it. -->
+      <div id="detail-solve" class="detail-solve" hidden>
+        <p class="solve-note">
+          Checked by computer algebra — your answer is verified equivalent to the correct
+          one by numeric checking (a strong check, not a step-by-step proof).
+        </p>
+        <div id="solve-prompt" class="solve-prompt"><!-- the problem, by main.js --></div>
+        <div id="solve-palette" class="solve-palette"><!-- symbol buttons, by main.js --></div>
+        <textarea id="solve-input" placeholder="Your answer, in plain math, e.g. 3*x^2 + 2 or sqrt(x)."></textarea>
+        <div id="solve-preview" class="solve-preview"><!-- live KaTeX preview, by main.js --></div>
+        <div class="solve-actions">
+          <button id="solve-check" class="solve-check" type="button">Check my answer</button>
+          <button id="solve-new" class="solve-new" type="button">New problem</button>
+        </div>
+        <div id="solve-feedback" class="solve-feedback"><!-- result, by main.js --></div>
       </div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>

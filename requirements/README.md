@@ -66,3 +66,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0031](0031-community-approved-topics.md) | Community-approved topics: a topic the crowd has mastered | POC — Knowledge content | Met |
 | [R-0032](0032-ai-checked-proof-mastery.md) | Math mastery by AI-checked proof: write a proof, the model judges it | POC — Knowledge content | Met |
 | [R-0033](0033-browsable-progress-map.md) | Browsable progress map: explore freely, color by progress, trace your trail | POC — Navigation | Met |
+| [R-0034](0034-cas-checked-answers.md) | CAS-checked answers: solve it, the machine verifies it (deterministic, offline) | POC — Knowledge content | Met |
