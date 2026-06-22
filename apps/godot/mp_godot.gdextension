@@ -1,0 +1,16 @@
+; GDExtension config for the native binding (R-0025 / SPEC-0025). The library is the
+; mp-godot cdylib, built from source and placed in bin/ (a gitignored build artifact):
+;   cargo build -p mp-godot --features gdext
+;   cp target/debug/libmp_godot.{dylib,so} apps/godot/bin/   # per platform
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = 4.3
+reloadable = true
+
+[libraries]
+macos.debug = "res://bin/libmp_godot.dylib"
+macos.release = "res://bin/libmp_godot.dylib"
+linux.debug = "res://bin/libmp_godot.so"
+linux.release = "res://bin/libmp_godot.so"
+windows.debug = "res://bin/mp_godot.dll"
+windows.release = "res://bin/mp_godot.dll"

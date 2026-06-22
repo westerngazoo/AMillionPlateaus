@@ -282,3 +282,21 @@ Maps to R-0025 AC + its §3.1 test handles:
   web `mp-wasm` binding (real data + the §3.1 parity test → AC2/AC7), the OpenXR rig +
   teleport/travel (Track B → AC4), worldspace study (AC5), the native sync transport
   (Track D → AC7). R-0025 stays **Accepted** (not yet Met) until those land.
+- 2026-06-21 **Slice 2 (Track A — the native `mp-godot` GDExtension)** — the data gate.
+  New `crates/mp-godot/` (godot-rust / gdext 0.5): owns a `mp_crdt::CrdtDoc` and answers
+  the SAME DTO JSON shapes `mp-wasm` does, **re-derived from `mp-domain`** (never a
+  `mp-wasm` dep — §2.2 decision). Deps = `mp-domain`+`mp-crdt`+`mp-identity` (the exact
+  inward set `mp-wasm` uses). The engine-free `GraphData` (plateaus/bridges/resources JSON
+  + load) is host-tested (4 tests incl. the **shape-parity** test — the DTO keys match the
+  documented contract); the `#[gdextension]` wrapper is **feature-gated** (`--features
+  gdext`) so `cargo test --workspace` stays green without pulling the engine crate. Added
+  the `apps/godot/mp_godot.gdextension` config + `graph_source_native.gd` adapter
+  (DTO JSON → the flat interface shape) and extended the headless runner: the adapter
+  JSON-mapping is contract-tested, and a **live-extension smoke** (built cdylib loaded into
+  Godot 4.6.3) confirms `GraphSourceNative` instantiates and an empty native world → empty
+  arrays. **Additive** — only `crates/mp-godot/`, `apps/godot/`, and the root Cargo
+  workspace-member line (AC6 gate holds); the cdylib + `.godot/`/`.uid` are gitignored build
+  artifacts. **Still deferred:** native `reachable`/vote/sign + cross-binding byte-parity vs
+  `mp-wasm` on a populated doc (AC2/AC7), the web `mp-wasm` JS-interop binding, the OpenXR
+  rig (Track B → AC4), worldspace study (AC5), native sync transport (Track D → AC7).
+  R-0025 stays **Accepted**.

@@ -1,0 +1,31 @@
+[package]
+name = "mp-godot"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "GDExtension binding: the immersive Godot client's native GraphSource over the unchanged GA/CRDT core (R-0025 / SPEC-0025)."
+
+[lib]
+# cdylib = the GDExtension Godot loads; rlib = host unit tests (parity, no engine).
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The EXACT inward edge set mp-wasm uses for the read path — re-derive the DTO
+# shapes from mp-domain; never depend on mp-wasm (a binding→binding edge). Reputation
+# + signing flow through mp-identity (which drives mp-reputation transitively).
+mp-domain = { workspace = true }
+mp-crdt = { workspace = true, default-features = false }
+mp-identity = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+# The gdext binding (godot-rust). OPTIONAL + feature-gated so `cargo test --workspace`
+# stays green WITHOUT pulling the engine crate; the GDExtension cdylib is built with
+#   cargo build -p mp-godot --features gdext
+godot = { version = "0.5", optional = true }
+
+[features]
+default = []
+gdext = ["dep:godot"]
