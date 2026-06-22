@@ -103,18 +103,26 @@ func _test_project_to_rect() -> void:
 func _test_scene_smoke() -> void:
 	print("scene smoke:")
 	var world = WorldS.new()
+	# REGRESSION GUARD: a rebuild must clear only the graph nodes, NEVER a sibling
+	# Camera3D/light (freeing those blanked the view — the black-screen bug).
+	var cam := Camera3D.new()
+	cam.name = "Camera3D"
+	world.add_child(cam)
 	world.build(FixtureS.new())
-	# 4 plateaus + 2 bridges
-	_check(world.get_child_count() == 6, "scene instantiates a node per plateau + bridge")
+	_check(is_instance_valid(cam) and not cam.is_queued_for_deletion(), "build() preserves the sibling Camera3D (no black screen)")
+	# plateaus/bridges live under the "Graph" container: 4 plateaus + 2 bridges
+	var graph := world.get_node_or_null("Graph")
+	_check(graph != null and graph.get_child_count() == 6, "graph container holds a node per plateau + bridge")
 	_check(world.positions_by_id.size() == 4, "every plateau got a world position")
-	var calc := world.get_node_or_null("Plateau_calc")
+	var calc := graph.get_node_or_null("Plateau_calc")
 	_check(calc != null, "plateau nodes are named by id")
 	# the reachable set lights nodes via emission (AC2): calc lit, motion fogged
 	var calc_mesh := calc.get_child(0) as MeshInstance3D
 	_check(calc_mesh.material_override.emission_enabled, "a reachable plateau is emission-lit")
-	var motion := world.get_node_or_null("Plateau_motion")
+	var motion := graph.get_node_or_null("Plateau_motion")
 	var motion_mesh := motion.get_child(0) as MeshInstance3D
 	_check(not motion_mesh.material_override.emission_enabled, "a fogged plateau is not lit")
+	_check(world.get_node_or_null("WorldEnvironment") != null, "a flat-3D environment is added")
 	world.free()
 
 # ── native adapter: DTO JSON → interface shape (contract, no extension needed) ───
