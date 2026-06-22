@@ -25,9 +25,16 @@ func _ready() -> void:
 
 ## Build (or rebuild) the scene from `src`. `rep_json` is handed to the source's
 ## reachable() — the same reputation JSON the 2D app uses; opaque here.
+## Plateaus/bridges go under a dedicated "Graph" child so a rebuild clears ONLY them
+## — never the sibling Camera3D / lights / XR rig (freeing those blanked the view).
 func build(src, rep_json: String = "") -> void:
 	source = src
-	for c in get_children():
+	var graph := get_node_or_null("Graph")
+	if graph == null:
+		graph = Node3D.new()
+		graph.name = "Graph"
+		add_child(graph)
+	for c in graph.get_children():
 		c.queue_free()
 	positions_by_id.clear()
 
@@ -40,11 +47,39 @@ func build(src, rep_json: String = "") -> void:
 	for p in plats:
 		var world_pos: Vector3 = PlaceNodeS.place_node(p.e1, p.e2, p.e3, fit)
 		positions_by_id[p.id] = world_pos
-		add_child(_make_plateau(p, world_pos, lit.has(p.id)))
+		graph.add_child(_make_plateau(p, world_pos, lit.has(p.id)))
 
 	for b in src.bridges():
 		if positions_by_id.has(b.from) and positions_by_id.has(b.to):
-			add_child(_make_bridge(b, positions_by_id[b.from], positions_by_id[b.to]))
+			graph.add_child(_make_bridge(b, positions_by_id[b.from], positions_by_id[b.to]))
+
+	_ensure_environment()
+	_frame_camera()
+
+## A dark-navy background + ambient fill so fogged plateaus read against the void
+## (matching the 2D map's palette). Added once; flat-3D only (XR uses passthrough/none).
+func _ensure_environment() -> void:
+	if get_node_or_null("WorldEnvironment") != null:
+		return
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.06, 0.08, 0.11)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.45, 0.55, 0.7)
+	env.ambient_light_energy = 0.6
+	var we := WorldEnvironment.new()
+	we.name = "WorldEnvironment"
+	we.environment = env
+	add_child(we)
+
+## Frame the (origin-centred, ~span-wide) cluster: pull the Camera3D back along +Z,
+## a little above, looking at the origin — the 3D "zoom to extent" (R-0024 analogue).
+func _frame_camera() -> void:
+	var cam := get_node_or_null("Camera3D") as Camera3D
+	if cam == null:
+		return
+	cam.position = Vector3(0.0, 5.0, 16.0)
+	cam.look_at(Vector3.ZERO, Vector3.UP)
 
 func _make_plateau(p: Dictionary, world_pos: Vector3, is_lit: bool) -> Node3D:
 	var root := Node3D.new()
@@ -54,14 +89,15 @@ func _make_plateau(p: Dictionary, world_pos: Vector3, is_lit: bool) -> Node3D:
 
 	var mesh := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.4
-	sphere.height = 0.8
+	sphere.radius = 0.7
+	sphere.height = 1.4
 	mesh.mesh = sphere
 	var mat := StandardMaterial3D.new()
 	# Lit/fogged is an emission toggle driven by the core's reachable set (AC2).
 	mat.albedo_color = LIT if is_lit else FOGGED
 	mat.emission_enabled = is_lit
 	mat.emission = LIT
+	mat.emission_energy_multiplier = 1.6
 	mesh.material_override = mat
 	root.add_child(mesh)
 

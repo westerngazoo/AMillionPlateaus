@@ -300,3 +300,15 @@ Maps to R-0025 AC + its §3.1 test handles:
   `mp-wasm` on a populated doc (AC2/AC7), the web `mp-wasm` JS-interop binding, the OpenXR
   rig (Track B → AC4), worldspace study (AC5), native sync transport (Track D → AC7).
   R-0025 stays **Accepted**.
+- 2026-06-21 **Slice 2.1 (flat-3D fix + navigation)** — visual check found the scene
+  rendered **black**: `world.build()` cleared *all* children, freeing the scene's
+  `Camera3D`/light. Fixed: plateaus/bridges now build under a dedicated **`Graph`**
+  child, so a rebuild clears only them (a regression-guard test asserts a sibling
+  `Camera3D` survives `build()`); added a dark-navy `WorldEnvironment` + ambient and a
+  camera "zoom-to-extent" framing, and enlarged the plateau spheres/emission. Added a
+  **flat-3D free-fly camera** (`fly_camera.gd`: right-drag look · WASD move · E/Q
+  up/down · wheel dolly · Shift sprint) + an on-screen controls hint, so the no-headset
+  view (AC6) is navigable. This is the desktop fallback, **not** the VR locomotion
+  (teleport/travel-to-plateau — Track B/C → AC4, still deferred). Verified: headless
+  suite green (incl. the new guard) + the scene runs in Godot 4.6.3 (gdext API
+  v4.6.stable). Additive — only `apps/godot/`.

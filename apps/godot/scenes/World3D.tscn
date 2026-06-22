@@ -1,12 +1,21 @@
-[gd_scene load_steps=2 format=3 uid="uid://b0mp0world3d025"]
+[gd_scene load_steps=3 format=3 uid="uid://b0mp0world3d025"]
 
 [ext_resource type="Script" path="res://src/world.gd" id="1_world"]
+[ext_resource type="Script" path="res://src/fly_camera.gd" id="2_flycam"]
 
 [node name="World3D" type="Node3D"]
 script = ExtResource("1_world")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 16)
+script = ExtResource("2_flycam")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.7071, 0.7071, 0, -0.7071, 0.7071, 0, 10, 0)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Controls" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+text = "Right-drag: look   ·   WASD: move   ·   E / Q: up / down   ·   wheel: zoom   ·   Shift: faster"
