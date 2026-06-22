@@ -20,6 +20,10 @@ func is_available() -> bool:
 func load_bytes(bytes: PackedByteArray) -> bool:
 	return _native.load_bytes(bytes) if _native != null else false
 
+## DEMO: ask the native core to seed a small real world (until the sync transport lands).
+func seed_demo() -> bool:
+	return _native.seed_demo() if _native != null else false
+
 func plateaus() -> Array:
 	return parse_plateaus(_native.plateaus_json()) if _native != null else []
 

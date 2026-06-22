@@ -312,3 +312,17 @@ Maps to R-0025 AC + its §3.1 test handles:
   (teleport/travel-to-plateau — Track B/C → AC4, still deferred). Verified: headless
   suite green (incl. the new guard) + the scene runs in Godot 4.6.3 (gdext API
   v4.6.stable). Additive — only `apps/godot/`.
+- 2026-06-21 **Slice 3 (native-sourced scene)** — the flat-3D scene now renders REAL
+  data through the native binding. `world.gd` prefers `GraphSourceNativeAdapter` (the
+  mp-godot GDExtension) when the cdylib is loaded, falling back to the in-memory fixture
+  otherwise. Added `GraphData::seed_demo()` (a clearly-labelled DEMO seed that builds a
+  small real world — 7 topics across Math/Physics/Music + 6 bridges — *through the core*
+  `PlateauNode`/`Bridge`/`add_plateau`, until the sync transport (Track D) lands; the
+  production path is `load` from a saved/synced doc), exposed via a `#[func] seed_demo`.
+  Verified: host tests 5/5 (incl. seed → 7 plateaus, real Uuids); the headless live smoke
+  drives the full path (seed_demo → 7 plateaus / 6 bridges via the core → flattened
+  interface shape); the scene runs in Godot 4.6.3 rendering the native-sourced cluster.
+  Additive — only `crates/mp-godot/` + `apps/godot/`. **Still deferred:** native
+  `reachable`/fog + vote/sign, cross-binding byte-parity vs `mp-wasm`, the OpenXR rig
+  (Track B → AC4), worldspace study (AC5), the real sync transport (Track D → AC7).
+  R-0025 stays **Accepted**.

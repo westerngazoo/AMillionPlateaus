@@ -33,6 +33,41 @@ impl GraphData {
         Self { doc }
     }
 
+    /// Seed a small REAL world through the core (PlateauNode/Bridge → CrdtDoc) so the
+    /// flat-3D scene can render native-sourced data while the sync transport (Track D)
+    /// is still deferred — a DEMO helper, not production authoring (the real path is
+    /// `load` from a saved/synced doc). A few topics across Math / Physics / Music.
+    pub fn seed_demo(&mut self) -> Result<(), CrdtError> {
+        use mp_domain::{Bridge, PlateauNode};
+        use uuid::Uuid;
+        let math = Uuid::new_v4();
+        let phys = Uuid::new_v4();
+        let music = Uuid::new_v4();
+        let mk = |name: &str, dom: Uuid, e1: f32, e2: f32, e3: f32| PlateauNode::new(name, dom, e1, e2, e3);
+        let calc = mk("Calculus", math, 0.95, 0.10, 0.05);
+        let alg = mk("Algebra", math, 0.85, 0.12, 0.10);
+        let geom = mk("Geometry", math, 0.78, 0.22, 0.32);
+        let motion = mk("Motion", phys, 0.45, 0.85, 0.08);
+        let waves = mk("Waves", phys, 0.30, 0.80, 0.42);
+        let harmony = mk("Harmony", music, 0.10, 0.12, 0.92);
+        let rhythm = mk("Rhythm", music, 0.06, 0.32, 0.84);
+        for p in [&calc, &alg, &geom, &motion, &waves, &harmony, &rhythm] {
+            self.doc.add_plateau(p)?;
+        }
+        let nil = Uuid::nil();
+        for b in [
+            Bridge::between(&alg, &calc, "functions", nil),
+            Bridge::between(&calc, &geom, "coordinates", nil),
+            Bridge::between(&calc, &motion, "equations of motion", nil),
+            Bridge::between(&motion, &waves, "oscillation", nil),
+            Bridge::between(&waves, &harmony, "frequency", nil),
+            Bridge::between(&harmony, &rhythm, "meter", nil),
+        ] {
+            self.doc.add_bridge(&b)?;
+        }
+        Ok(())
+    }
+
     /// Every plateau as a DTO-JSON array (same shape as `mp-wasm`'s `plateaus`).
     pub fn plateaus_json(&self) -> String {
         match self.doc.to_graph() {
@@ -132,6 +167,19 @@ mod tests {
         let data = GraphData::load(&bytes).expect("load");
         let plats: serde_json::Value = serde_json::from_str(&data.plateaus_json()).expect("json");
         assert_eq!(plats.as_array().expect("array").len(), 2);
+    }
+
+    #[test]
+    fn seed_demo_populates_a_real_native_world() {
+        let mut data = GraphData::new().expect("new");
+        data.seed_demo().expect("seed");
+        let plats: serde_json::Value = serde_json::from_str(&data.plateaus_json()).expect("json");
+        assert_eq!(plats.as_array().expect("array").len(), 7);
+        let bridges: serde_json::Value = serde_json::from_str(&data.bridges_json()).expect("json");
+        assert_eq!(bridges.as_array().expect("array").len(), 6);
+        // real ids (Uuids), not the GDScript stand-in strings
+        let id = plats[0]["id"].as_str().expect("id");
+        assert!(uuid::Uuid::parse_str(id).is_ok(), "native ids are real Uuids");
     }
 
     #[test]
