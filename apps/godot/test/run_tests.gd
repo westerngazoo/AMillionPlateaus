@@ -149,3 +149,8 @@ func _test_native_extension_live() -> void:
 	_check(adapter.is_available(), "GraphSourceNative instantiates")
 	# a fresh native source = empty world → empty interface arrays
 	_check(adapter.plateaus() == [] and adapter.bridges() == [], "empty native world → empty arrays")
+	# seed a real world through the core → the interface sees native-sourced plateaus
+	adapter.seed_demo()
+	var plats := adapter.plateaus()
+	_check(plats.size() == 7 and adapter.bridges().size() == 6, "seed_demo → 7 plateaus, 6 bridges via the native core")
+	_check(plats[0].has("e1") and plats[0].has("name"), "native plateaus arrive in the flattened interface shape")

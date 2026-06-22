@@ -13,6 +13,7 @@ const FOGGED := Color(0.18, 0.24, 0.31)
 # `--headless --script` mode, which lacks the editor's global class-name cache.
 const PlaceNodeS := preload("res://src/place_node.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
+const NativeAdapterS := preload("res://src/graph_source_native.gd")
 
 var source # a GraphSource (untyped to avoid class-cache reliance at load)
 var positions_by_id: Dictionary = {} # plateau id -> Vector3 (world)
@@ -20,7 +21,16 @@ var positions_by_id: Dictionary = {} # plateau id -> Vector3 (world)
 ## Run as the main scene → build the flat-3D demo from the fixture (Slice 1: the
 ## native/web bindings are later slices). Tests call build() directly and skip this.
 func _ready() -> void:
-	if source == null:
+	if source != null:
+		return
+	# Prefer the NATIVE source (real data through the mp-godot GDExtension + core) when
+	# the cdylib is loaded; seed a demo world until the sync transport (Track D) lands.
+	# Fall back to the in-memory fixture when the extension isn't built/loaded.
+	var native = NativeAdapterS.new()
+	if native.is_available():
+		native.seed_demo()
+		build(native)
+	else:
 		build(FixtureS.new())
 
 ## Build (or rebuild) the scene from `src`. `rep_json` is handed to the source's

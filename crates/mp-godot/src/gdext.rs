@@ -42,6 +42,15 @@ impl GraphSourceNative {
         }
     }
 
+    /// DEMO: seed a small real world through the core (until the sync transport lands).
+    #[func]
+    fn seed_demo(&mut self) -> bool {
+        match self.data.as_mut() {
+            Some(d) => d.seed_demo().is_ok(),
+            None => false,
+        }
+    }
+
     #[func]
     fn plateaus_json(&self) -> GString {
         let s = self.data.as_ref().map(|d| d.plateaus_json()).unwrap_or_else(|| "[]".to_string());
