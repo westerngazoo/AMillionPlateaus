@@ -9,6 +9,7 @@ const PlaceNodeS := preload("res://src/place_node.gd")
 const LabelPlanS := preload("res://src/label_plan.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const WorldS := preload("res://src/world.gd")
+const NativeS := preload("res://src/graph_source_native.gd")
 
 var _failures := 0
 
@@ -18,6 +19,8 @@ func _init() -> void:
 	_test_plan_labels()
 	_test_project_to_rect()
 	_test_scene_smoke()
+	_test_native_adapter_parse()
+	_test_native_extension_live()
 	if _failures == 0:
 		print("✔ ALL TESTS PASSED")
 	else:
@@ -113,3 +116,28 @@ func _test_scene_smoke() -> void:
 	var motion_mesh := motion.get_child(0) as MeshInstance3D
 	_check(not motion_mesh.material_override.emission_enabled, "a fogged plateau is not lit")
 	world.free()
+
+# ── native adapter: DTO JSON → interface shape (contract, no extension needed) ───
+func _test_native_adapter_parse() -> void:
+	print("native adapter (JSON→interface):")
+	# the SHAPE mp-godot's plateaus_json() emits (nested position) → flattened interface
+	var dto := '[{"id":"calc","name":"Calculus","description":"d","domain_id":"m","position":{"e1":0.95,"e2":0.1,"e3":0.05}}]'
+	var out := NativeS.parse_plateaus(dto)
+	_check(out.size() == 1, "parses one plateau")
+	var p = out[0]
+	_check(p.id == "calc" and p.name == "Calculus", "id/name carried")
+	_check(absf(p.e1 - 0.95) < 1e-5 and absf(p.e3 - 0.05) < 1e-5, "position flattened to e1/e2/e3")
+	_check(NativeS.parse_plateaus("not json") == [], "bad JSON → []")
+	var br := NativeS.parse_bridges('[{"id":"b","from":"calc","to":"geo","concept":"coords"}]')
+	_check(br.size() == 1 and br[0].concept == "coords", "bridges parsed")
+
+# ── live GDExtension (skipped if the cdylib isn't built/placed) ───────────────────
+func _test_native_extension_live() -> void:
+	print("native GDExtension (live):")
+	if not ClassDB.class_exists("GraphSourceNative"):
+		print("  • SKIP: mp-godot GDExtension not loaded (build with --features gdext + copy to bin/)")
+		return
+	var adapter = NativeS.new()
+	_check(adapter.is_available(), "GraphSourceNative instantiates")
+	# a fresh native source = empty world → empty interface arrays
+	_check(adapter.plateaus() == [] and adapter.bridges() == [], "empty native world → empty arrays")

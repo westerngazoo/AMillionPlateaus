@@ -2,3 +2,11 @@
 .godot/
 /export_presets.cfg
 *.import
+
+# native GDExtension cdylib (build artifact: cargo build -p mp-godot --features gdext)
+bin/*.dylib
+bin/*.so
+bin/*.dll
+
+# Godot 4.4+ generated UID sidecars (regenerated on import; project loads by path).
+*.uid
