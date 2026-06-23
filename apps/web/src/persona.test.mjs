@@ -8,10 +8,16 @@ import {
   ARCHETYPES,
   DOMAINS,
   seedReputation,
+  authorPersona,
+  authorDomain,
+  domainIdFor,
+  SUGGESTED_DOMAINS,
   MATH_DOMAIN,
   MUSIC_DOMAIN,
   PHYSICS_DOMAIN,
 } from "./persona.js";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const byId = (id) => ARCHETYPES.find((a) => a.id === id);
 
@@ -76,4 +82,59 @@ test("every shipped archetype has a name, a domain label and a one-line blurb", 
     assert.ok(a.domainLabel.length > 0);
     assert.ok(a.blurb.length > 0);
   }
+});
+
+// ── Author-your-own domains (SPEC-0038 / R-0038) ───────────────────────────
+
+test("authorDomain builds {id,label,canonical} from a name + Formal/Empirical/Creative", () => {
+  const d = authorDomain({ name: "AI", e1: 0.7, e2: 0.6, e3: 0.1 });
+  assert.equal(d.label, "AI");
+  assert.deepEqual(d.canonical, { e1: 0.7, e2: 0.6, e3: 0.1 });
+  assert.match(d.id, UUID_RE); // a Rust Uuid::parse_str accepts this (signed traversal validates, AC3)
+});
+
+test("domainIdFor is stable + normalized (dedup): same name → same id (AC3)", () => {
+  assert.equal(domainIdFor("AI"), domainIdFor("ai"));
+  assert.equal(domainIdFor("AI"), domainIdFor("  AI  "));
+  assert.equal(authorDomain({ name: "FPGA" }).id, authorDomain({ name: "fpga" }).id);
+});
+
+test("authorDomain is direction-only — sliders clamp to [0,1], no magnitude field (AC2)", () => {
+  const d = authorDomain({ name: "X", e1: 5, e2: -3, e3: Number.NaN });
+  assert.deepEqual(d.canonical, { e1: 1, e2: 0, e3: 0 }); // clamped; NaN → 0
+  assert.deepEqual(Object.keys(d).sort(), ["canonical", "id", "label"]); // no score/rank/magnitude
+});
+
+test("authorDomain rejects a blank name", () => {
+  assert.equal(authorDomain({ name: "   " }), null);
+  assert.equal(authorDomain({}), null);
+  assert.equal(authorDomain(), null);
+});
+
+test("domainIdFor: distinct + near-identical short names get distinct ids (~128-bit lanes, finding #2)", () => {
+  // Distinct AFTER normalization (lowercase/trim) — "ai"≡"AI" would dedup by design, so
+  // the near-identical probes here (x/y/z, ab/ba, ia) don't collide with the suggested set.
+  const names = ["x", "y", "z", "ab", "ba", "ia", ...SUGGESTED_DOMAINS.map((s) => s.name)];
+  const ids = names.map(domainIdFor);
+  assert.equal(new Set(ids).size, ids.length, "no id collisions");
+  for (const id of ids) assert.match(id, UUID_RE);
+});
+
+test("authorPersona resolves an AUTHORED domain's label via the resolver — not 'Uncharted' (finding #1/AC4)", () => {
+  const ai = authorDomain({ name: "AI", e1: 0.7, e2: 0.6 });
+  const resolve = (id) => (id === ai.id ? ai.label : undefined);
+  const p = authorPersona({ name: "Me", orient: [{ domain: ai.id, dir: { e1: 1, e2: 0, e3: 0 } }] }, resolve);
+  assert.equal(p.domainLabel, "AI");
+  assert.ok(p.blurb.includes("AI"));
+  assert.ok(!p.domainLabel.includes("Uncharted") && !p.blurb.includes("Uncharted"));
+});
+
+test("authorPersona with NO resolver is byte-identical to the pre-0038 output", () => {
+  const seed = { name: "Geo", orient: [{ domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } }], tone: "" };
+  const p = authorPersona(seed); // no second arg → static DOMAINS only
+  assert.equal(p.domainLabel, "Mathematics"); // built-in still resolves
+  assert.equal(p.blurb, "Wakes facing Mathematics — your starting orientation.");
+  // an UNKNOWN domain with no resolver still degrades to "Uncharted" exactly as before
+  const u = authorPersona({ orient: [{ domain: "deadbeef-0000-0000-0000-000000000000", dir: { e1: 1 } }] });
+  assert.equal(u.domainLabel, "Uncharted");
 });

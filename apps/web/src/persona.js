@@ -96,14 +96,17 @@ export const AXES = [
   { key: "e3", label: "Creative" },
 ];
 
-function labelForDomain(domain) {
-  return DOMAINS.find((d) => d.id === domain)?.label ?? "Uncharted";
+// `resolve` is an OPTIONAL label resolver (SPEC-0038): with it, custom/authored domains
+// (whose ids are not in the static DOMAINS) resolve to their label instead of "Uncharted".
+// Omitted → byte-identical to the pre-0038 behaviour (static DOMAINS only).
+function labelForDomain(domain, resolve) {
+  return (resolve && resolve(domain)) || DOMAINS.find((d) => d.id === domain)?.label || "Uncharted";
 }
 
 // A one-line human blurb describing which way the lens faces. Pure, no GA.
-function describeOrientation(faced) {
+function describeOrientation(faced, resolve) {
   if (faced.length === 0) return "Faces nothing yet — orient toward a domain to set where you begin.";
-  const labels = faced.map(({ domain }) => labelForDomain(domain));
+  const labels = faced.map(({ domain }) => labelForDomain(domain, resolve));
   return `Wakes facing ${labels.join(" and ")} — your starting orientation.`;
 }
 
@@ -112,20 +115,82 @@ function describeOrientation(faced) {
 // from the faced domains, and composes an optional companion voice from the tone.
 // Deterministic (R-0009 AC6). Exposes ONLY direction — there is no magnitude/score/
 // rank input anywhere in the shape (CLAUDE.md §4, R-0009 AC1/AC5).
-export function authorPersona({ name, orient, tone } = {}) {
+//
+// `resolveLabel` (SPEC-0038, optional): a `(domainId) => label | undefined` hook so a
+// persona facing an AUTHORED domain shows its name (not "Uncharted") on the card, the
+// companion intro, and the grounding context (all read `domainLabel`/`blurb`). Omitting
+// it preserves the exact prior output.
+export function authorPersona({ name, orient, tone } = {}, resolveLabel) {
   const faced = (orient ?? []).filter(
     ({ dir }) => Math.hypot(dir?.e1 ?? 0, dir?.e2 ?? 0, dir?.e3 ?? 0) > 0,
   );
-  const labels = faced.map(({ domain }) => labelForDomain(domain));
+  const labels = faced.map(({ domain }) => labelForDomain(domain, resolveLabel));
   return {
     id: "authored", // not a key in VOICES → voice falls back gracefully (AC3)
     name: (name ?? "").trim() || "Your persona",
     domainLabel: labels.join(" × ") || "Uncharted",
-    blurb: describeOrientation(faced),
+    blurb: describeOrientation(faced, resolveLabel),
     orient: faced,
     voice: tone?.trim() ? `Speak as ${tone.trim()}.` : undefined,
   };
 }
+
+// ── Author-your-own domains (SPEC-0038 / R-0038) ───────────────────────────
+//
+// A domain is just a named grade-1 DIRECTION `{ id, label, canonical }`, and the engine
+// projects reputation/fog onto ANY canonical (not only a basis axis) — so "more lenses"
+// is pure authoring, no garust/core change. main.js merges authored domains into the
+// live DOMAINS set; these are the only additions the pure layer needs.
+
+// Deterministic uuid-format id from a domain name. Pure (no crypto/random): the same name
+// → the same domain across sessions AND users (dedup + future cross-user alignment), and
+// Rust's `Uuid::parse_str` accepts the 8-4-4-4-12 lowercase hex it emits — which is what
+// lets a signed traversal in an authored domain validate. Four INDEPENDENT 32-bit lanes
+// (distinct golden-ratio seeds + an avalanche finalizer) give ~128-bit spread, so short or
+// near-identical names don't collide on the high bits.
+export function domainIdFor(name) {
+  const s = String(name ?? "").trim().toLowerCase();
+  const lane = (salt) => {
+    let h = (0x811c9dc5 ^ Math.imul(salt + 1, 0x9e3779b9)) >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    h ^= h >>> 13;
+    h = Math.imul(h, 0x5bd1e995);
+    h ^= h >>> 15;
+    return (h >>> 0).toString(16).padStart(8, "0");
+  };
+  const x = lane(0) + lane(1) + lane(2) + lane(3);
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+}
+
+const clamp01 = (n) => {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+};
+
+// Pure: a named lens + a Formal/Empirical/Creative direction → a domain `{ id, label,
+// canonical }`. Direction only, NEVER a magnitude (CLAUDE.md §4): the raw 0..1 canonical
+// is safe because the live fog reads recomputed log-reputation (normalized), not this
+// vector, and the only live canonical consumer (`canonicalAxis → vouchFor`) builds a
+// unit-normalized rotor where the scale divides out. Blank name → null (rejected).
+export function authorDomain({ name, e1, e2, e3 } = {}) {
+  const label = String(name ?? "").trim();
+  if (!label) return null;
+  return { id: domainIdFor(label), label, canonical: { e1: clamp01(e1), e2: clamp01(e2), e3: clamp01(e3) } };
+}
+
+// Suggested lenses for the add-lens datalist — grounded BLENDS of the three axes (not new
+// axes). Choosing one pre-fills the sliders; it is then authored via `authorDomain`, so its
+// id is name-derived like any other (these are hints, not a separate registry).
+export const SUGGESTED_DOMAINS = [
+  { name: "Computation", canonical: { e1: 0.85, e2: 0.45, e3: 0.0 } },
+  { name: "Engineering", canonical: { e1: 0.45, e2: 0.85, e3: 0.1 } },
+  { name: "AI", canonical: { e1: 0.7, e2: 0.6, e3: 0.1 } },
+  { name: "Electromagnetism", canonical: { e1: 0.55, e2: 0.8, e3: 0.0 } },
+  { name: "FPGA / Hardware", canonical: { e1: 0.5, e2: 0.8, e3: 0.0 } },
+];
 
 /// Pure: archetype → reputation JSON. Each oriented domain gets `SEED · unit(dir)`
 /// in its grade-1 components. Deterministic (R-0006 AC6). An empty `orient` (or an
