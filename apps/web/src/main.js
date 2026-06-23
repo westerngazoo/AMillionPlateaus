@@ -71,6 +71,7 @@ import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
 import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
+import { pinch } from "./gestures.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
 // The companion's model configuration is a LOCAL lens, persisted only in this
@@ -859,54 +860,99 @@ async function main() {
     creator.hidden = false;
   });
 
-  // ── Map navigation: pan + zoom (R-0024) ────────────────────────────────────
-  // Mutate the single VIEW camera; draw() recomputes points so hit-testing,
-  // presence, Travel, and the focus ring all follow for free. The canvas is
-  // 800×600 with no CSS resize, so canvas px == client px 1:1 (a responsive
-  // canvas would need to scale the anchor by canvas.width / rect.width).
+  // ── Map navigation: pan + zoom (R-0024 desktop · R-0037 touch) ─────────────
+  // Mutate the single VIEW camera; draw() recomputes points so hit-testing, presence,
+  // Travel, and the focus ring all follow. The canvas backing is 800×600 but is now
+  // CSS-responsive (R-0037 — it fills the width on a phone), so client px ≠ canvas px:
+  // ALL pointer maths goes through clientToCanvas. On desktop rect.width == 800 ⇒ the
+  // scale is 1, so behaviour is byte-identical to before.
+  function clientToCanvas(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - r.left) * (canvas.width / r.width),
+      y: (clientY - r.top) * (canvas.height / r.height),
+    };
+  }
   const DRAG_THRESHOLD = 4; // px of travel before a press counts as a pan, not a click
-  let panning = false;
   let moved = false; // a real drag happened → suppress the click-to-open (read at "click")
-  let panStart = { x: 0, y: 0, cx: 0, cy: 0 };
+  const pointers = new Map(); // pointerId → {x,y} in CANVAS px (active touches / mouse)
+  let panStart = null; // { x, y, cx, cy } in canvas space — one-pointer pan origin
+  let pinchPrev = null; // last two-pointer frame {a,b} — pinch-zoom
+
+  const twoPointerFrame = () => {
+    const [a, b] = [...pointers.values()];
+    return { a, b };
+  };
+  const seatPan = () => {
+    // (re)seat the one-pointer pan origin from the sole remaining pointer + current VIEW
+    const [p] = [...pointers.values()];
+    panStart = { x: p.x, y: p.y, cx: VIEW.cx, cy: VIEW.cy };
+  };
+
   canvas.addEventListener("pointerdown", (e) => {
-    panning = true;
-    moved = false; // reset per press — the click guard reads this, NOT `panning`
-    panStart = { x: e.clientX, y: e.clientY, cx: VIEW.cx, cy: VIEW.cy };
+    pointers.set(e.pointerId, clientToCanvas(e.clientX, e.clientY));
+    moved = false; // reset per press — the click guard reads this
     try {
       canvas.setPointerCapture(e.pointerId);
     } catch {
-      /* capture can throw for an inactive pointer id; panning still works */
+      /* inactive pointer id; pan still works */
+    }
+    if (pointers.size >= 2) {
+      pinchPrev = twoPointerFrame(); // enter pinch mode
+      panStart = null;
+    } else {
+      seatPan();
+      pinchPrev = null;
     }
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!panning) return;
-    const dx = e.clientX - panStart.x;
-    const dy = e.clientY - panStart.y;
-    if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
-    if (moved) {
-      VIEW.cx = panStart.cx + dx;
-      VIEW.cy = panStart.cy + dy;
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, clientToCanvas(e.clientX, e.clientY));
+    if (pointers.size >= 2 && pinchPrev) {
+      const cur = twoPointerFrame();
+      const g = pinch(pinchPrev, cur);
+      VIEW = zoomAt(VIEW, g.factor, g.cx, g.cy);
+      pinchPrev = cur;
+      moved = true; // a pinch is never a tap
       draw();
+    } else if (pointers.size === 1 && panStart) {
+      const c = pointers.get(e.pointerId);
+      const dx = c.x - panStart.x;
+      const dy = c.y - panStart.y;
+      if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
+      if (moved) {
+        VIEW.cx = panStart.cx + dx;
+        VIEW.cy = panStart.cy + dy;
+        draw();
+      }
     }
   });
-  const endPan = (e) => {
-    panning = false; // NB: `moved` persists until the next pointerdown (the click guard needs it)
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
     try {
       canvas.releasePointerCapture(e.pointerId);
     } catch {
       /* nothing captured — fine */
     }
+    // NB: `moved` persists until the next pointerdown (the click guard needs it).
+    if (pointers.size === 1) {
+      seatPan(); // 2→1: re-seat pan from the remaining finger — no jump
+      pinchPrev = null;
+    } else if (pointers.size === 0) {
+      panStart = null;
+      pinchPrev = null;
+    }
   };
-  canvas.addEventListener("pointerup", endPan);
-  canvas.addEventListener("pointercancel", endPan);
+  canvas.addEventListener("pointerup", endPointer);
+  canvas.addEventListener("pointercancel", endPointer);
 
   canvas.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault(); // don't scroll the page
-      const rect = canvas.getBoundingClientRect();
+      const c = clientToCanvas(e.clientX, e.clientY);
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      VIEW = zoomAt(VIEW, factor, e.clientX - rect.left, e.clientY - rect.top);
+      VIEW = zoomAt(VIEW, factor, c.x, c.y);
       draw();
     },
     { passive: false },
@@ -927,11 +973,9 @@ async function main() {
   });
 
   canvas.addEventListener("click", (e) => {
-    if (moved) return; // a pan just happened — not a click (R-0024 AC2)
+    if (moved) return; // a pan/pinch just happened — not a click (R-0024 AC2)
     if (!activePersona) return; // not interactive until a persona is chosen (AC1)
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
     // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
