@@ -31,6 +31,8 @@ import { createEventBus } from "./eventbus.js";
 import {
   ARCHETYPES,
   authorPersona,
+  authorDomain,
+  SUGGESTED_DOMAINS,
   DOMAINS,
   AXES,
   MATH_DOMAIN,
@@ -111,6 +113,54 @@ function loadAuthored() {
 function saveAuthored(seed) {
   localStorage.setItem(AUTHORED_KEY, JSON.stringify(seed)); // local only — never on the wire
 }
+
+// Author-your-own domains (SPEC-0038 / R-0038). A domain is a named grade-1 DIRECTION;
+// the engine projects onto any canonical, so these are pure local additions to the
+// faceable `DOMAINS` set — never synced, never in the CRDT. `allDomains()` is the single
+// merge consulted wherever the built-in three are (label, canonical, creator, plateau
+// select). Authored domains carry a name-derived UUID id so a signed traversal validates.
+const DOMAINS_KEY = "mp.domains";
+function loadCustomDomains() {
+  try {
+    const raw = localStorage.getItem(DOMAINS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    // Drop any malformed entry so a corrupt blob can't poison canonicalAxis (finding #6).
+    return arr.filter(
+      (d) =>
+        d &&
+        typeof d.id === "string" &&
+        typeof d.label === "string" &&
+        d.canonical &&
+        ["e1", "e2", "e3"].every((k) => Number.isFinite(d.canonical[k])),
+    );
+  } catch {
+    return [];
+  }
+}
+let customDomains = loadCustomDomains();
+function saveCustomDomains() {
+  localStorage.setItem(DOMAINS_KEY, JSON.stringify(customDomains)); // local only
+}
+// The live faceable set: the built-in three + the visitor's authored domains.
+const allDomains = () => [...DOMAINS, ...customDomains];
+// A label resolver over `allDomains()` for authorPersona (so a persona facing an authored
+// domain shows its name, not "Uncharted", on the card/companion intro/grounding).
+const domainLabelOf = (id) => allDomains().find((d) => d.id === id)?.label;
+// authorPersona with custom-domain label resolution wired in (used at both call sites).
+const buildAuthored = (seed) => authorPersona(seed, domainLabelOf);
+// Add or re-aim an authored domain (dedup by id — re-authoring a name updates its canonical).
+function addCustomDomain(d) {
+  if (!d) return;
+  if (DOMAINS.some((b) => b.id === d.id)) return; // never shadow a built-in
+  customDomains = customDomains.some((c) => c.id === d.id)
+    ? customDomains.map((c) => (c.id === d.id ? d : c))
+    : [...customDomains, d];
+  saveCustomDomains();
+}
+// Wired by the world-init to repopulate the draft-plateau domain <select> (no-op until then).
+let refreshDomainSelect = () => {};
 
 // The relay endpoint is a LOCAL setting (like the model config). Empty ⇒ offline,
 // and the world stays fully playable from the local event log (R-0010 AC7).
@@ -474,10 +524,10 @@ async function main() {
     return pk && pk.length > 12 ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : pk || "?";
   }
   function labelForDomain(id) {
-    return DOMAINS.find((d) => d.id === id)?.label ?? "Uncharted";
+    return allDomains().find((d) => d.id === id)?.label ?? "Uncharted"; // incl. authored (R-0038)
   }
   function canonicalAxis(domain) {
-    const c = DOMAINS.find((d) => d.id === domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
+    const c = allDomains().find((d) => d.id === domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
     return [c.e1, c.e2, c.e3];
   }
 
@@ -731,7 +781,7 @@ async function main() {
 
     // Pre-fill from the last authored seed (if any), else the canonical defaults.
     const facedBy = new Map((authoredSeed?.orient ?? []).map((o) => [o.domain, o.dir]));
-    const domainControls = DOMAINS.map((d) => {
+    const domainControls = allDomains().map((d) => {
       const dir = facedBy.get(d.id);
       const block = document.createElement("div");
       block.className = "author-domain";
@@ -775,6 +825,93 @@ async function main() {
       return { domain: d.id, toggle, sliders, block };
     });
 
+    // Capture the half-built persona from the live controls (so authoring a new lens
+    // doesn't lose the in-progress name/orientation/tone). Same shape buildAuthorForm
+    // restores from. Reused by the "Enter" handler too.
+    const captureSeed = () => ({
+      name: nameIn.value,
+      tone: toneIn.value,
+      orient: domainControls
+        .filter((c) => c.toggle.checked)
+        .map((c) => ({
+          domain: c.domain,
+          dir: {
+            e1: Number(c.sliders.e1.value),
+            e2: Number(c.sliders.e2.value),
+            e3: Number(c.sliders.e3.value),
+          },
+        })),
+    });
+
+    // ── "Add a lens" sub-form (SPEC-0038 / R-0038) ─────────────────────────
+    // Name a domain + set its Formal/Empirical/Creative DIRECTION (never a magnitude). On
+    // add it's persisted (mp.domains), the draft-plateau select is refreshed, and the form
+    // re-renders with the new lens as a faceable block (toggled on, pre-aimed). A suggested
+    // name pre-fills the sliders from its grounded blend.
+    const addLens = document.createElement("div");
+    addLens.className = "author-domain add-lens";
+    const addHead = document.createElement("div");
+    addHead.className = "author-domain-head";
+    addHead.innerHTML = `<span class="author-domain-name">+ Add a lens</span>`;
+    const lensName = document.createElement("input");
+    lensName.type = "text";
+    lensName.setAttribute("list", "domain-suggestions");
+    lensName.placeholder = "Name a lens — e.g. AI, Electromagnetism, FPGA";
+    lensName.className = "add-lens-name";
+    const lensAxesEl = document.createElement("div");
+    lensAxesEl.className = "author-axes";
+    const lensDefault = { e1: 0.6, e2: 0.5, e3: 0.0 }; // a grounded Formal+Empirical default
+    const lensSliders = {};
+    for (const axis of AXES) {
+      const row = document.createElement("div");
+      row.className = "axis-row";
+      const al = document.createElement("label");
+      al.textContent = axis.label;
+      const range = document.createElement("input");
+      range.type = "range";
+      range.min = "0";
+      range.max = "1";
+      range.step = "0.01";
+      range.value = String(lensDefault[axis.key]);
+      lensSliders[axis.key] = range;
+      row.append(al, range);
+      lensAxesEl.append(row);
+    }
+    // Picking a suggested name pre-fills the sliders from its canonical blend.
+    lensName.addEventListener("input", () => {
+      const hit = SUGGESTED_DOMAINS.find(
+        (s) => s.name.toLowerCase() === lensName.value.trim().toLowerCase(),
+      );
+      if (hit) for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
+    });
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Add lens";
+    addBtn.className = "add-lens-btn";
+    addBtn.addEventListener("click", () => {
+      const d = authorDomain({
+        name: lensName.value,
+        e1: lensSliders.e1.value,
+        e2: lensSliders.e2.value,
+        e3: lensSliders.e3.value,
+      });
+      if (!d) return; // blank name → no-op
+      addCustomDomain(d);
+      refreshDomainSelect(); // selectable in Draft-a-plateau without a reload (AC4)
+      // Re-render with the new lens faced by default, preserving the in-progress persona.
+      const seed = captureSeed();
+      seed.orient = [
+        ...seed.orient.filter((o) => o.domain !== d.id),
+        { domain: d.id, dir: { ...d.canonical } },
+      ];
+      authoredSeed = seed;
+      form.replaceWith(buildAuthorForm());
+    });
+    const addActions = document.createElement("div");
+    addActions.className = "author-actions";
+    addActions.append(addBtn);
+    addLens.append(addHead, lensName, lensAxesEl, addActions);
+
     const toneField = document.createElement("div");
     toneField.className = "author-field";
     toneField.innerHTML = `<label for="author-tone">Companion tone (optional)</label>`;
@@ -800,24 +937,21 @@ async function main() {
     enter.type = "button";
     enter.textContent = "Enter the world";
     enter.addEventListener("click", () => {
-      const orient = domainControls
-        .filter((c) => c.toggle.checked)
-        .map((c) => ({
-          domain: c.domain,
-          dir: {
-            e1: Number(c.sliders.e1.value),
-            e2: Number(c.sliders.e2.value),
-            e3: Number(c.sliders.e3.value),
-          },
-        }));
-      const seed = { name: nameIn.value, orient, tone: toneIn.value };
+      const seed = captureSeed();
       authoredSeed = seed;
       saveAuthored(seed); // local only — never synced (AC5)
-      choosePersona(authorPersona(seed));
+      choosePersona(buildAuthored(seed)); // resolver wired → authored-domain labels (R-0038)
     });
     actions.append(back, enter);
 
-    form.append(nameField, ...domainControls.map((c) => c.block), toneField, hint, actions);
+    form.append(
+      nameField,
+      ...domainControls.map((c) => c.block),
+      addLens,
+      toneField,
+      hint,
+      actions,
+    );
     return form;
   }
 
@@ -836,7 +970,7 @@ async function main() {
     for (const a of ARCHETYPES) cards.append(personaCard(a));
     // Surface a restored authored persona as an extra selectable card (§2.5),
     // rebuilt through the same pure factory so it seeds identically (AC2).
-    if (authoredSeed) cards.append(personaCard(authorPersona(authoredSeed)));
+    if (authoredSeed) cards.append(personaCard(buildAuthored(authoredSeed)));
     creator.append(cards);
 
     const create = document.createElement("button");
@@ -1695,13 +1829,31 @@ async function main() {
   // The toggle button shows/hides the <details> panel; the form submit wires
   // buildPlateau → WasmCrdtDoc.add_plateau → CRDT sync → draw.
 
-  // Populate the domain <select> from DOMAINS (human labels, no raw UUIDs shown).
+  // Populate the domain <select> from allDomains() — built-ins + authored (R-0038), human
+  // labels, no raw UUIDs shown. Clears first so re-populating after an add-lens doesn't
+  // duplicate the built-ins (architect finding #5).
   const dpDomain = document.getElementById("dp-domain");
-  for (const d of DOMAINS) {
-    const opt = document.createElement("option");
-    opt.value = d.id;
-    opt.textContent = d.label;
-    dpDomain.appendChild(opt);
+  function populateDomainSelect() {
+    dpDomain.replaceChildren();
+    for (const d of allDomains()) {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.label;
+      dpDomain.appendChild(opt);
+    }
+  }
+  populateDomainSelect();
+  // Let the creator (a different scope) refresh the select when a lens is authored.
+  refreshDomainSelect = populateDomainSelect;
+
+  // Single-source the "Add a lens" suggestions (SPEC-0038) from SUGGESTED_DOMAINS.
+  const lensSuggestions = document.getElementById("domain-suggestions");
+  if (lensSuggestions) {
+    for (const s of SUGGESTED_DOMAINS) {
+      const opt = document.createElement("option");
+      opt.value = s.name;
+      lensSuggestions.appendChild(opt);
+    }
   }
 
   // Toggle button shows/hides the collapsible panel.
