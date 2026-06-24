@@ -69,3 +69,5 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0034](0034-cas-checked-answers.md) | CAS-checked answers: solve it, the machine verifies it (deterministic, offline) | POC — Knowledge content | Met |
 | [R-0035](0035-trusted-master-weighting.md) | Trusted-master weighting: community approval by earned domain reach, not a head-count | POC — Knowledge content | Met |
 | [R-0036](0036-persist-share-mastery.md) | Persist & share a proof/solution: keep it locally, publish it deliberately | POC — Knowledge content | Met |
+| [R-0037](0037-mobile-web.md) | Mobile web: the fog-world works on a phone (responsive + touch) | POC — Reach | Met |
+| [R-0038](0038-author-your-own-domain.md) | Author your own domain: more lenses than Math/Physics/Music (name + place a custom lens) | POC — Knowledge content | Met |
