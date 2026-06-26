@@ -73,3 +73,4 @@ field. The build order across requirements and specs is in
 | [SPEC-0036](0036-persist-share-mastery.md) | Persist & share: durable local `mp.proofs` store + opt-in `KIND_PROOF` signed publish (recompute ignores it); pure `publishedProofs` | R-0036 | Implemented |
 | [SPEC-0037](0037-mobile-web.md) | Mobile web: responsive `@media` (bottom-sheet drawer, wrapping HUD) + touch pan/pinch (pure `pinch` reducer + `touch-action:none`) | R-0037 | Implemented |
 | [SPEC-0038](0038-author-your-own-domain.md) | Author your own domain: pure `authorDomain` (name-derived uuid) + `SUGGESTED_DOMAINS` + `allDomains()` merge + creator "Add a lens"; a custom lens is any grade-1 direction (no core change) | R-0038 | Implemented |
+| [SPEC-0039](0039-learning-paths.md) | Learning paths: Rust-core `Path` + signed `KIND_PATH` (30082, recompute ignores it), local-keep + opt-in publish (mirrors R-0036), grounded on the domain meet (RFC-0002 §2.5, deferred to Phase 1) | R-0039 | Draft |
