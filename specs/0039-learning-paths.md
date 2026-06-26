@@ -29,12 +29,19 @@ pub struct Path {
     pub title: String,
     pub goal: String,
     pub steps: Vec<PlateauId>,   // ordered; deduped; non-empty to publish
-    pub domains: Vec<DomainId>,  // the domains the steps span (derived from the graph)
 }
 ```
 Constructor validates: non-empty `title`, `steps` deduped preserving order. `steps` reference
 plateaus by id (the path does not embed positions — it is resolved against the live graph,
 like a `Mastery` references a plateau). Pure helpers: `reorder`, `insert`, `remove`.
+
+**The spanned `domains` is NOT on the core `Path`** (architect finding #2): each plateau
+already carries its own `domain_id`, so the domain set is a *derived projection* of live graph
+state — baking it into the pure `Path` would make it a graph-validated invariant the pure type
+can't uphold (and would tempt slice 5 to widen the core). Instead it is computed **at the
+binding seam** — a `path_domains(&graph, &path) -> Vec<DomainId>` helper (like `convert.rs`
+resolves names from the graph) — and carried only on `PathDoc`/`PathDto` (§2.2/§2.3). The core
+`Path` stays pure and graph-free.
 
 ### 2.2 Signed event (`crates/mp-identity`, mirrors `Proof`)
 
@@ -51,8 +58,13 @@ pub struct PathDoc {
     pub domains: Vec<Uuid>,
 }
 ```
-`recompute` is **unchanged** — it already sums only `KIND_TRAVERSAL` + `KIND_VOUCH`, so
-`KIND_PATH` is ignored by construction (assert with a regression test, as proofs/mastery do).
+`recompute` is **unchanged** — it already sums only `KIND_TRAVERSAL` + `KIND_VOUCH` (verified:
+`recompute.rs` matches kinds by equality, never exclusion), so `KIND_PATH` is ignored by
+construction (assert with a byte-identical regression test over a log containing a vouch, as
+`proof_signs_verifies_and_leaves_reputation_untouched` does). The `domains` field is filled by
+`path_domains(&graph, &path)` at sign time (§2.1). Also export `path_kind() -> u32` from wasm
+and pin it with `console.assert(path_kind() === PATH_KIND)`, mirroring `proof_kind()` — keeps
+the constant single-sourced.
 
 ### 2.3 Bindings (`crates/mp-wasm` + `crates/mp-godot`)
 
@@ -66,7 +78,8 @@ pub struct PathDoc {
 
 - **Pure module `paths.js`**: `PATH_KIND = 30082`; `buildPath({title, goal, steps})` factory
   (validate, dedup); `publishedPaths(events)` (latest-per-signer, malformed-skip, sorted) —
-  the `publishedProofs` shape.
+  the `publishedProofs` shape. Path `title`/`goal` are peer-authored free text → render via
+  **`textContent`** (the safe attribution path), never the markdown-body renderer.
 - **Local store** `mp.paths` (durable, like `mp.proofs`): create/edit/reorder locally;
   survives reload.
 - **Follow**: render the path's steps over the map in order (highlight + connecting line);
@@ -116,9 +129,14 @@ a no-reach Sybil contributes ~0 (grade-collapse preserved). No new reputation pa
 4. **Publish + trust, web (after 3):** opt-in `KIND_PATH` publish, `publishedPaths`, reach
    weighting (R-0035).
 5. **Grounding (after Phase 1 #14–#16 + slice 1):** §2.5 — meet-based shared islands + reuse.
-6. **Godot parity (after 2):** render a path + follow in the Godot client.
+6. **Godot parity (after 2):** render a path + follow in the Godot client. **Sub-task
+   (architect note):** mp-godot today consumes only the CRDT graph blob and has no
+   signed-event-log ingestion (no proof/mastery DTO exists there either) — slice 6 must add
+   an event-log source to the Godot client before a `PathDto` can be fed.
 
-Slices 1–4 + 6 are **unblocked** by Phase 1; only slice 5 waits on #14–#16.
+Slices 1–4 + 6 are **unblocked** by Phase 1; only slice 5 (grounding) waits on #14–#16.
+Slice 1 (`Path` + `KIND_PATH` + recompute-ignores test) is architect-approved to start now,
+in parallel with Phase 1 — no rework risk (the core schema carries no plane/meet dependency).
 
 ## 5. Non-goals (from R-0039 §4)
 
@@ -139,6 +157,12 @@ history UI beyond re-publish, no auto-curation, no completion credential.
 
 ## Changelog
 
+- 2026-06-24 architect review of the **non-gated core**: **APPROVE** — slice 1 (`Path` +
+  `KIND_PATH` + recompute-ignores test) is safe to start now, in parallel with Phase 1, no
+  rework risk; the §2.5 deferral line is correct. Folded the required edit (keep `domains` off
+  the pure `Path`; derive at the binding seam via `path_domains`) + advisories (`path_kind()`
+  export + pin; `title`/`goal` via `textContent`; slice-6 needs Godot event-log ingestion).
+  Core sections now ready to implement; overall status stays **Draft** until §2.5 + full
+  architect review once the Phase-1 API exists.
 - 2026-06-24 drafted (partial). Non-gated core fully specified (mirrors R-0036); §2.5
-  grounding deferred to RFC-0002 Phase 1 (#14–#16). Not accepted — pending architect review +
-  the Phase-1 API. Slices 1–4/6 are buildable now; slice 5 waits on #14–#16.
+  grounding deferred to RFC-0002 Phase 1 (#14–#16). Slices 1–4/6 buildable now; slice 5 waits.
