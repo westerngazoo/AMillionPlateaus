@@ -19,13 +19,17 @@ pub struct GraphData {
 impl GraphData {
     /// An empty world (a fresh CRDT doc).
     pub fn new() -> Result<Self, CrdtError> {
-        Ok(Self { doc: CrdtDoc::new()? })
+        Ok(Self {
+            doc: CrdtDoc::new()?,
+        })
     }
 
     /// Load a world from a saved/synced CRDT byte blob (the same bytes `save()`
     /// produces and the web app persists / merges — R-0012/R-0018).
     pub fn load(bytes: &[u8]) -> Result<Self, CrdtError> {
-        Ok(Self { doc: CrdtDoc::load(bytes)? })
+        Ok(Self {
+            doc: CrdtDoc::load(bytes)?,
+        })
     }
 
     /// Wrap an existing doc (used by tests + the native host).
@@ -43,7 +47,9 @@ impl GraphData {
         let math = Uuid::new_v4();
         let phys = Uuid::new_v4();
         let music = Uuid::new_v4();
-        let mk = |name: &str, dom: Uuid, e1: f32, e2: f32, e3: f32| PlateauNode::new(name, dom, e1, e2, e3);
+        let mk = |name: &str, dom: Uuid, e1: f32, e2: f32, e3: f32| {
+            PlateauNode::new(name, dom, e1, e2, e3)
+        };
         let calc = mk("Calculus", math, 0.95, 0.10, 0.05);
         let alg = mk("Algebra", math, 0.85, 0.12, 0.10);
         let geom = mk("Geometry", math, 0.78, 0.22, 0.32);
@@ -89,8 +95,10 @@ impl GraphData {
     /// Every resource (trail marker) as a DTO-JSON array.
     pub fn resources_json(&self) -> String {
         match self.doc.to_graph() {
-            Ok(g) => serde_json::to_string(&g.resources.values().map(resource_dto).collect::<Vec<_>>())
-                .unwrap_or_else(|_| "[]".to_string()),
+            Ok(g) => {
+                serde_json::to_string(&g.resources.values().map(resource_dto).collect::<Vec<_>>())
+                    .unwrap_or_else(|_| "[]".to_string())
+            }
             Err(_) => "[]".to_string(),
         }
     }
@@ -111,7 +119,13 @@ mod tests {
         doc.add_plateau(&geom).expect("add geom");
         let bridge = Bridge::between(&calc, &geom, "coordinates", Uuid::nil());
         doc.add_bridge(&bridge).expect("add bridge");
-        let res = Resource::new(calc.id, "Spivak — Calculus", ResourceKind::Article, "https://x.test", Uuid::nil());
+        let res = Resource::new(
+            calc.id,
+            "Spivak — Calculus",
+            ResourceKind::Article,
+            "https://x.test",
+            Uuid::nil(),
+        );
         doc.add_resource(&res).expect("add resource");
         doc
     }
@@ -179,7 +193,10 @@ mod tests {
         assert_eq!(bridges.as_array().expect("array").len(), 6);
         // real ids (Uuids), not the GDScript stand-in strings
         let id = plats[0]["id"].as_str().expect("id");
-        assert!(uuid::Uuid::parse_str(id).is_ok(), "native ids are real Uuids");
+        assert!(
+            uuid::Uuid::parse_str(id).is_ok(),
+            "native ids are real Uuids"
+        );
     }
 
     #[test]

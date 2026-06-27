@@ -24,7 +24,10 @@ struct GraphSourceNative {
 #[godot_api]
 impl IRefCounted for GraphSourceNative {
     fn init(base: Base<RefCounted>) -> Self {
-        Self { data: GraphData::new().ok(), base }
+        Self {
+            data: GraphData::new().ok(),
+            base,
+        }
     }
 }
 
@@ -53,19 +56,31 @@ impl GraphSourceNative {
 
     #[func]
     fn plateaus_json(&self) -> GString {
-        let s = self.data.as_ref().map(|d| d.plateaus_json()).unwrap_or_else(|| "[]".to_string());
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.plateaus_json())
+            .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
 
     #[func]
     fn bridges_json(&self) -> GString {
-        let s = self.data.as_ref().map(|d| d.bridges_json()).unwrap_or_else(|| "[]".to_string());
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.bridges_json())
+            .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
 
     #[func]
     fn resources_json(&self) -> GString {
-        let s = self.data.as_ref().map(|d| d.resources_json()).unwrap_or_else(|| "[]".to_string());
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.resources_json())
+            .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
 }
