@@ -100,6 +100,21 @@ pub fn sandwich(rotor: &Mv, v: &Mv) -> Mv {
     *rotor * *v * reverse(rotor)
 }
 
+/// Outer (wedge) product a ∧ b — the subspace JOIN. v lies in plane B iff v ∧ B = 0.
+pub fn wedge(a: &Mv, b: &Mv) -> Mv {
+    a.wedge(b)
+}
+
+/// Regressive product a ∨ b — the subspace MEET (line where two planes intersect).
+pub fn meet(a: &Mv, b: &Mv) -> Mv {
+    a.regressive(b)
+}
+
+/// Metric-independent dual (right complement). A plane is the dual of its normal vector.
+pub fn dual(m: &Mv) -> Mv {
+    m.right_complement()
+}
+
 /// serde glue for `Mv`, used via `#[serde(with = "crate::ga::serde_mv")]`.
 /// garust's `Multivector` has a public `[f32; DIM]` coefficient array; we
 /// persist exactly that.
@@ -162,6 +177,61 @@ mod tests {
         for (a, b) in v.coeffs.iter().zip(out.coeffs.iter()) {
             assert!((a - b).abs() < EPSILON);
         }
+    }
+
+    #[test]
+    fn wedge_properties() {
+        let e1 = vector(1.0, 0.0, 0.0);
+        let e2 = vector(0.0, 1.0, 0.0);
+        let e3 = vector(0.0, 0.0, 1.0);
+
+        let e12 = wedge(&e1, &e2);
+        assert!(e12.coeffs[3].abs() > EPSILON); // e12 is at index 3
+
+        let w1 = wedge(&e1, &e12);
+        assert!(grade_magnitude(&w1, 3) < EPSILON);
+
+        let w2 = wedge(&e3, &e12);
+        assert!(grade_magnitude(&w2, 3) > EPSILON);
+    }
+
+    #[test]
+    fn meet_properties() {
+        let e1 = vector(1.0, 0.0, 0.0);
+        let e2 = vector(0.0, 1.0, 0.0);
+        let e3 = vector(0.0, 0.0, 1.0);
+
+        let p1 = wedge(&e1, &e2);
+        let p2 = wedge(&e2, &e3);
+
+        let m = meet(&p1, &p2);
+        assert_eq!(dominant_grade(&m), 1);
+        assert!(m.coeffs[2].abs() > EPSILON); // e2 dominant
+        assert!(m.coeffs[1].abs() < EPSILON); // e1 ≈ 0
+        assert!(m.coeffs[4].abs() < EPSILON); // e3 ≈ 0
+    }
+
+    #[test]
+    fn dual_properties() {
+        let v = vector(1.0, 2.0, 3.0);
+        let d1 = dual(&v);
+        assert_eq!(dominant_grade(&d1), 2);
+
+        let d2 = dual(&d1);
+        assert_eq!(dominant_grade(&d2), 1);
+
+        // dual(dual(v)) ≈ ±v
+        let mut same = true;
+        let mut opp = true;
+        for i in 0..8 {
+            if (v.coeffs[i] - d2.coeffs[i]).abs() > EPSILON {
+                same = false;
+            }
+            if (v.coeffs[i] + d2.coeffs[i]).abs() > EPSILON {
+                opp = false;
+            }
+        }
+        assert!(same || opp);
     }
 
     #[test]
