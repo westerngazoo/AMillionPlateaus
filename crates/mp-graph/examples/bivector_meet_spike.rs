@@ -86,7 +86,10 @@ fn main() {
         show(&m_meet_p)
     );
     // The meet of the e1e2-plane and the e2e3-plane is the e2 axis.
-    assert!(ga::dominant_grade(&m_meet_p) == 1, "meet of two planes is a line (grade-1)");
+    assert!(
+        ga::dominant_grade(&m_meet_p) == 1,
+        "meet of two planes is a line (grade-1)"
+    );
     assert!(m_meet_p.coeffs[2].abs() > EPS, "shared line lies along e2");
     assert!(
         m_meet_p.coeffs[1].abs() < EPS && m_meet_p.coeffs[4].abs() < EPS,
@@ -96,10 +99,22 @@ fn main() {
 
     // Membership by the wedge: v ∧ B == 0  ⇔  v lies in plane B.
     println!("\n  membership (v ∧ B = 0 ⇔ v ∈ plane B):");
-    println!("    e1 ∧ B_M = {}  → e1 ∈ Math plane", show(&wedge(&e1, &math)));
-    println!("    e3 ∧ B_M = {}  → e3 ∉ Math plane", show(&wedge(&e3, &math)));
-    assert!(ga::grade_magnitude(&wedge(&e1, &math), 3) < EPS, "e1 lies in the e1e2 plane");
-    assert!(ga::grade_magnitude(&wedge(&e3, &math), 3) > EPS, "e3 is out of the e1e2 plane");
+    println!(
+        "    e1 ∧ B_M = {}  → e1 ∈ Math plane",
+        show(&wedge(&e1, &math))
+    );
+    println!(
+        "    e3 ∧ B_M = {}  → e3 ∉ Math plane",
+        show(&wedge(&e3, &math))
+    );
+    assert!(
+        ga::grade_magnitude(&wedge(&e1, &math), 3) < EPS,
+        "e1 lies in the e1e2 plane"
+    );
+    assert!(
+        ga::grade_magnitude(&wedge(&e3, &math), 3) > EPS,
+        "e3 is out of the e1e2 plane"
+    );
     println!("    [PASS] the wedge is a clean in/out-of-plane test.");
 
     // A broad domain reuses the space: it meets every other domain in a line,
@@ -135,7 +150,10 @@ fn main() {
         "\n  meet  B_math ∨ B_music (unit) = {}\n    → the shared strand where the Math and Music planes cross.",
         show(&real_meet)
     );
-    assert!(ga::dominant_grade(&real_meet) == 1, "the meet of two real planes is still a line");
+    assert!(
+        ga::dominant_grade(&real_meet) == 1,
+        "the meet of two real planes is still a line"
+    );
 
     // The honest finding: real topics are NEAR a domain plane, not exactly in it.
     println!("\n  out-of-plane residual for a same-domain topic (0 = exactly in-plane):");
@@ -150,8 +168,14 @@ fn main() {
     );
 
     println!("\n=== Conclusion ===");
-    println!("  • meet (∨) and membership (∧) work directly on garust — no GA stubbing, no new axis.");
+    println!(
+        "  • meet (∨) and membership (∧) work directly on garust — no GA stubbing, no new axis."
+    );
     println!("  • Two domain-planes intersect in a line = a computable 'grounded island'.");
-    println!("  • A broad domain is 3 floats that meet every other domain in a line — it reuses Cl(3).");
-    println!("  • Real topics are ~near, not in, one plane → membership needs a tolerance (RFC input).");
+    println!(
+        "  • A broad domain is 3 floats that meet every other domain in a line — it reuses Cl(3)."
+    );
+    println!(
+        "  • Real topics are ~near, not in, one plane → membership needs a tolerance (RFC input)."
+    );
 }
