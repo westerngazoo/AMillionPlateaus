@@ -86,8 +86,9 @@ flowchart TB
         ID["mp-identity<br/>Nostr BIP340 · wizard_id_of"]
     end
 
-    subgraph NATIVE["mp-host — native CLI"]
-        HOST["seed · stats · merge"]
+    subgraph OS_KERNEL["AI-First OS Kernel / mp-host"]
+        HOST["seed · stats · merge<br/>(Agent Plugin API)"]
+        AGENT["Agent Tooling WASM Plugins<br/>(Dynamic Custom Software)"]
         REDB[("redb (durable, same save-blob)")]
     end
 
@@ -109,7 +110,8 @@ flowchart TB
     REP --> GARUST
     HOST --> CRDT
     HOST --> REDB
-    IDB -. "export blob → mp-host merge" .-> HOST
+    AGENT --> HOST
+    IDB -. "export blob → OS kernel merge" .-> HOST
 
     classDef built fill:#1b2735,stroke:#4a6280,color:#d6e0ea;
     classDef math fill:#2c4a3a,stroke:#7fd0a0,color:#eaffee;

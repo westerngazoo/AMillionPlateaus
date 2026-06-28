@@ -49,6 +49,16 @@ tokio       = { version = "1", features = ["full"] }
 
 ---
 
+## AI-First OS / Kernel Integration
+
+| Choice | Why |
+|---|---|
+| WASM Agent Plugins | Sandboxed execution layer allowing AI agents to hook directly into the core graph OS kernel. |
+| Security Cloud Native | Agent-generated state is natively synchronized via CRDT/Nostr, treating the decentralized network as a secure extension of the local OS. |
+| Dynamic Tooling Generation | Bypasses Linux-style package managers; agents generate bespoke tooling per user, company, or government on the fly. |
+
+---
+
 ## Decentralization
 
 | Layer | Tech | Why |

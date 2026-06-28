@@ -25,10 +25,11 @@ Plateaus are not chapters or lessons. They are **places with atmosphere** — vi
 ### Bridges
 Bridges connect plateaus at their **conceptual intersection points**. A bridge is not just a path — it carries a concept label:
 
-```
-[Linear Algebra] ──"linear transformation"──► [Differential Geometry]
-[Fourier Analysis] ──"eigenfunctions"──► [Quantum Mechanics]
-[Musical Harmony] ──"frequency ratios"──► [Number Theory]
+```mermaid
+flowchart LR
+    LA[Linear Algebra] -- "linear transformation" --> DG[Differential Geometry]
+    FA[Fourier Analysis] -- "eigenfunctions" --> QM[Quantum Mechanics]
+    MH[Musical Harmony] -- "frequency ratios" --> NT[Number Theory]
 ```
 
 Bridges are **bidirectional but asymmetric** — crossing from A→B feels different from B→A. The bridge encodes the orientation of the relationship as a geometric (GA) rotor.
@@ -83,6 +84,18 @@ You do not click a thumbs-up. You **place a glowing stone** on a resource. Enoug
 
 ### Shared Traversal
 You can see other travelers as silhouettes in the fog. You can follow someone's path. You can leave **trail markers** — short personal notes anchored to a specific location in a plateau — that others can find.
+
+---
+
+## The AI-First OS Kernel
+
+A Million Plateaus is evolving beyond a knowledge graph; it is the foundation of an **AI-First Operating System**. 
+
+Instead of traditional user-land software and slow, decade-long open-source development cycles, this OS allows client apps to plug agents directly into the kernel. 
+
+- **Custom Tooling on the Fly:** Agents dynamically generate the tooling and software the OS needs.
+- **Zero Legacy:** People, companies, and governments can have custom software built instantaneously by agents, bypassing the need for legacy Linux-style package management and standard binaries.
+- **Agent Kernel Integration:** By plugging an agent directly into the kernel, the execution speed and customizability of the system are drastically increased.
 
 ---
 

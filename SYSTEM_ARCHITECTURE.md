@@ -4,65 +4,48 @@
 
 > The graph is the platform. Every other component is a projection of it.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLIENT LAYER                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │   Web/Three  │  │  Godot WASM  │  │  Mobile (future) │  │
-│  │    .js 3D    │  │   VR/XR      │  │   2D map view    │  │
-│  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
-│         └─────────────────┼──────────────────-┘            │
-│                           │                                  │
-│              ┌────────────▼─────────────┐                   │
-│              │     WASM Graph API       │  ← mp-wasm crate  │
-│              │  (Rust → WASM bridge)    │                   │
-│              └────────────┬─────────────┘                   │
-└───────────────────────────┼─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│                    CORE LAYER (Rust)                         │
-│                                                              │
-│  ┌─────────────────┐    ┌──────────────────┐                │
-│  │   mp-graph      │    │  mp-reputation   │                │
-│  │                 │    │                  │                │
-│  │ petgraph +      │◄───│ GA Eigentrust    │                │
-│  │ garust types    │    │ Sybil detection  │                │
-│  │ PlateauNode     │    │ WizardRank       │                │
-│  │ Bridge (rotor)  │    │ (Multivector)    │                │
-│  └────────┬────────┘    └──────────────────┘                │
-│           │                                                  │
-│  ┌────────▼────────┐    ┌──────────────────┐                │
-│  │   mp-crdt       │    │   mp-wasm        │                │
-│  │                 │    │                  │                │
-│  │ automerge-rs    │    │ wasm-bindgen     │                │
-│  │ offline-first   │    │ JS-callable API  │                │
-│  │ p2p sync        │    │ serde-wasm       │                │
-│  └────────┬────────┘    └──────────────────┘                │
-│           │                                                  │
-│  ┌────────▼────────┐                                        │
-│  │   redb          │  ← local embedded DB                   │
-│  │ (local persist) │                                        │
-│  └─────────────────┘                                        │
-└─────────────────────────────────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│                  NETWORK LAYER                               │
-│                                                              │
-│  ┌─────────────────┐    ┌──────────────────┐                │
-│  │  apps/server    │    │  apps/alebrije   │                │
-│  │                 │    │                  │                │
-│  │ Colyseus        │    │ Claude API proxy │                │
-│  │ Node.js 20+     │    │ Context builder  │                │
-│  │ Room mgmt       │    │ Island prompts   │                │
-│  │ Presence sync   │    │ Traversal memory │                │
-│  └────────┬────────┘    └──────────────────┘                │
-│           │                                                  │
-│  ┌────────▼──────────────────────────────────┐              │
-│  │         P2P / Decentralized Layer          │              │
-│  │  Gun.js (graph sync) | IPFS (content)     │              │
-│  │  Nostr (identity + social)                │              │
-│  └───────────────────────────────────────────┘              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ClientLayer [CLIENT LAYER]
+        Web[Web/Three.js 3D]
+        Godot[Godot WASM VR/XR]
+        Mobile[Mobile 2D map view]
+    end
+
+    subgraph WasmLayer [WASM BRIDGE]
+        WasmApi[WASM Graph API<br>mp-wasm crate]
+    end
+
+    subgraph CoreLayer [CORE LAYER / RUST]
+        Graph[mp-graph<br>petgraph + garust]
+        Rep[mp-reputation<br>GA Eigentrust]
+        Crdt[mp-crdt<br>Automerge sync]
+    end
+
+    subgraph KernelLayer [AI-FIRST OS KERNEL]
+        Kernel[Graph Engine OS Kernel<br>Agent Tooling Plugin API]
+        Redb[(redb local persist)]
+    end
+
+    subgraph NetworkLayer [SECURITY CLOUD NATIVE / NETWORK]
+        Server[apps/server<br>Presence & Auth]
+        Alebrije[apps/alebrije<br>AI Proxy]
+        P2P[P2P Decentralized Layer<br>Gun.js / IPFS / Nostr]
+    end
+
+    Web --> WasmApi
+    Godot --> WasmApi
+    Mobile --> WasmApi
+    WasmApi --> Graph
+    WasmApi --> Rep
+    WasmApi --> Crdt
+    Graph --> Kernel
+    Rep --> Kernel
+    Crdt --> Kernel
+    Kernel --> Redb
+    Kernel --> NetworkLayer
+    Server --> P2P
+    Alebrije --> P2P
 ```
 
 ---
@@ -93,6 +76,23 @@ Exports:
 - PlateauNode.position is always Grade-1 (pure vector)
 - Bridge.rotor is always even-grade (Grade-0 + Grade-2)
 - All UUIDs are v4 random
+
+---
+
+### AI-First OS Kernel
+
+**Responsibility:** Serve as the foundational operating system layer for client applications and agent tools. By conceptualizing the graph engine as an OS kernel, client apps can plug AI agents directly into it for unprecedented execution speed and customizability.
+
+```
+Design:
+  - Agent Plugin Interface: Direct WASM/FFI hook into the graph engine.
+  - Dynamic Tooling: Agents generate custom system utilities and software on the fly.
+  - Zero-Legacy: Bypasses the need for decades of open-source framework building by having AI build custom user-land software directly on top of the graph kernel.
+```
+
+**Security Cloud Native:**
+- Local execution of dynamic agent code operates in a highly constrained, verifiable WASM sandbox.
+- State generated by agents is natively synchronized over the secure, decentralized network layer.
 
 ---
 

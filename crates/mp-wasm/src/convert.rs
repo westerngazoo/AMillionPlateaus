@@ -18,8 +18,8 @@ use mp_domain::{
     Bridge, KnowledgeGraph, PlateauNode, Resource, ResourceKind, ResourceState, WizardReputation,
 };
 use mp_identity::{
-    Keypair, Mastery, NostrEvent, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PROOF,
-    KIND_TRAVERSAL, KIND_VOUCH,
+    Keypair, Mastery, NostrEvent, PathDoc, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PATH,
+    KIND_PROOF, KIND_TRAVERSAL, KIND_VOUCH,
 };
 use uuid::Uuid;
 
@@ -400,6 +400,31 @@ pub fn sign_proof_json(
         body,
     })?;
     let event = mp_identity::sign(kp, KIND_PROOF, vec![], &content, created_at)?;
+    Ok(serde_json::to_string(&event)?)
+}
+
+/// R-0039 — sign a learning path event (a shareable artifact), returning its NostrEvent JSON.
+/// Like `sign_mastery_json`, it is NOT reputation-bearing: `recompute` ignores `KIND_PATH`.
+pub fn sign_path_json(
+    kp: &Keypair,
+    path_id: &str,
+    title: &str,
+    goal: &str,
+    steps: &[String],
+    domains: &[String],
+    created_at: u64,
+) -> Result<String, EventError> {
+    let id = Uuid::parse_str(path_id)?;
+    let parsed_steps: Result<Vec<Uuid>, _> = steps.iter().map(|s| Uuid::parse_str(s)).collect();
+    let parsed_domains: Result<Vec<Uuid>, _> = domains.iter().map(|s| Uuid::parse_str(s)).collect();
+    let content = serde_json::to_string(&PathDoc {
+        id,
+        title: title.to_string(),
+        goal: goal.to_string(),
+        steps: parsed_steps?,
+        domains: parsed_domains?,
+    })?;
+    let event = mp_identity::sign(kp, KIND_PATH, vec![], &content, created_at)?;
     Ok(serde_json::to_string(&event)?)
 }
 
@@ -799,6 +824,51 @@ mod tests {
         let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
         let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
         assert_eq!(rep_without, rep_with, "proof must not change reputation");
+    }
+
+    #[test]
+    fn path_signs_verifies_and_leaves_reputation_untouched() {
+        // R-0039: a path is a real signed event (verifies, kind 30082, content PathDoc),
+        // but `recompute` ignores KIND_PATH, so reputation is byte-identical with vs. without it.
+        let kp = Keypair::generate();
+        let other = Keypair::generate();
+        let domain = Uuid::new_v4();
+        let path_id = Uuid::new_v4();
+        let step1 = Uuid::new_v4();
+
+        let trav =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 1).unwrap();
+        let vouch = sign_vouch_json(
+            &kp,
+            &domain.to_string(),
+            &other.pubkey_hex(),
+            &[1.0, 0.0, 0.0],
+            &[0.0, 0.0, 1.0],
+            2,
+        )
+        .unwrap();
+        let path = sign_path_json(
+            &kp,
+            &path_id.to_string(),
+            "Path to Mastery",
+            "Learn things",
+            &[step1.to_string()],
+            &[domain.to_string()],
+            3,
+        ).unwrap();
+
+        assert!(crate::verify_event(&path), "path verifies");
+        let ev: NostrEvent = serde_json::from_str(&path).unwrap();
+        assert_eq!(ev.kind, KIND_PATH);
+        let p: PathDoc = serde_json::from_str(&ev.content).unwrap();
+        assert_eq!(p.id, path_id);
+        assert_eq!(p.title, "Path to Mastery");
+
+        let without = format!("[{trav},{vouch}]");
+        let with = format!("[{trav},{vouch},{path}]");
+        let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
+        let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
+        assert_eq!(rep_without, rep_with, "path must not change reputation");
     }
 
     #[test]

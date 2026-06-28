@@ -8,12 +8,18 @@ No single server owns the world. The platform survives any individual node going
 
 ## Layer Stack
 
-```
-Layer 4 — Identity     → Nostr (keypairs, signed events, reputation events)
-Layer 3 — Content      → IPFS (resource files, plateau assets)
-Layer 2 — Graph Sync   → Automerge CRDT over WebRTC / Gun.js relay
-Layer 1 — Local Store  → redb (embedded, always-available)
-Layer 0 — In-Memory    → mp-graph (petgraph + garust)
+```mermaid
+flowchart TD
+    L4["Layer 4 — Identity<br/>Nostr (keypairs, signed events, reputation events)"]
+    L3["Layer 3 — Content<br/>IPFS (resource files, plateau assets)"]
+    L2["Layer 2 — Graph Sync<br/>Automerge CRDT over WebRTC / Gun.js relay"]
+    L1["Layer 1 — Local Store<br/>redb (embedded, always-available)"]
+    L0["Layer 0 — AI-First Kernel / In-Memory<br/>mp-graph + Agent Plugin Interface"]
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
 ```
 
 Reads always go **down** (fastest available layer). Writes go **up** (local first, sync later).
@@ -34,6 +40,16 @@ Only these require network:
 - Seeing other wizard presence in real-time
 - Alebrije AI responses (Claude API)
 - Syncing reputation events to other peers
+
+---
+
+## Agent Kernel Integration (Security Cloud Native)
+
+By leveraging an AI-First Kernel approach, decentralization no longer means just sharing data—it means sharing **secure execution**.
+
+- **Agents as Kernel Plugins:** Agents operate directly at the kernel layer, synthesizing custom tooling locally. This avoids dependency on centralized app stores or monolithic open-source legacy systems.
+- **Security Cloud Native:** The agent operations run in a sandboxed, zero-trust environment. While agents run locally (plugged into the local OS kernel), their certified outcomes sync natively across the cloud via the CRDT and Nostr event graph.
+- **Personalized Software:** Each government, company, or individual effectively runs a bespoke OS tailored on the fly by their agent, fully decentralized and secure by default.
 
 ---
 

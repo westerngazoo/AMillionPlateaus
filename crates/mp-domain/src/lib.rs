@@ -12,9 +12,11 @@
 //! depends on `mp-domain` alone and reaches the store through it.
 
 mod graph;
+mod path;
 mod types;
 
 pub use graph::KnowledgeGraph;
+pub use path::*;
 pub use types::*;
 
 // Re-export the generic core so consumers reach it through mp-domain.

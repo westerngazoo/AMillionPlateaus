@@ -26,6 +26,9 @@ pub const KIND_MASTERY: u32 = 30080;
 /// `KIND_MASTERY` it is NOT reputation — `recompute` ignores it (it sums only
 /// traversal/vouch), so a published proof never changes reach.
 pub const KIND_PROOF: u32 = 30081;
+/// Path kind (R-0039): a learning path. A path is content, NOT reputation —
+/// `recompute` ignores it.
+pub const KIND_PATH: u32 = 30082;
 
 /// A Nostr event (NIP-01 shape).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +91,16 @@ pub struct Proof {
     pub plateau: Uuid,
     pub kind: String,
     pub body: String,
+}
+
+/// Path content payload (R-0039). Self-contained and **not read by [`crate::recompute`]**.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathDoc {
+    pub id: Uuid,
+    pub title: String,
+    pub goal: String,
+    pub steps: Vec<Uuid>,
+    pub domains: Vec<Uuid>,
 }
 
 /// The canonical serialization whose SHA-256 is the event id (NIP-01):

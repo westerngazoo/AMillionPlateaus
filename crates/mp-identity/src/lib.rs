@@ -26,7 +26,7 @@ mod verify;
 
 pub use error::IdError;
 pub use event::{
-    sign, Mastery, NostrEvent, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PROOF, KIND_TRAVERSAL,
+    sign, Mastery, NostrEvent, PathDoc, Proof, Traversal, Vouch, KIND_MASTERY, KIND_PATH, KIND_PROOF, KIND_TRAVERSAL,
     KIND_VOUCH,
 };
 pub use keys::Keypair;
