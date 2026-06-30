@@ -30,6 +30,43 @@ pub type WizardId = Uuid;
 pub type ResourceId = Uuid;
 pub type BridgeId = EdgeId;
 
+// ─── Bivector Domain Math (Phase 1 Additions) ────────────────
+
+/// Fit a domain's characteristic plane (a grade-2 bivector) from its member topics.
+///
+/// A domain is geometrically a plane spanning its topics. Since real topics scatter in 3D
+/// and are rarely perfectly coplanar, we take the wedge of the first two distinct topics
+/// as a cheap approximation of the plane (the Phase 1 fit). For a 1-topic or empty
+/// domain, it returns the zero multivector (or a fallback lens axis in Phase 2).
+pub fn domain_plane(topics: &[&Mv]) -> Mv {
+    if topics.len() < 2 {
+        return Mv::zero();
+    }
+    ga::normalize(&ga::wedge(topics[0], topics[1]))
+}
+
+/// The out-of-plane fraction for a topic `v` against a domain plane `b`.
+///
+/// Returns 0.0 if `v` lies exactly in `b`, up to 1.0 if orthogonal.
+/// Computed as `‖⟨v ∧ B⟩₃‖ / (‖v‖·‖B‖)`.
+pub fn membership(v: &Mv, b: &Mv) -> f32 {
+    let vol = ga::grade_magnitude(&ga::wedge(v, b), 3);
+    let denom = ga::grade_magnitude(v, 1) * ga::grade_magnitude(b, 2);
+    if denom > ga::EPSILON {
+        vol / denom
+    } else {
+        0.0
+    }
+}
+
+/// The shared line (a grade-1 vector) where two domain planes overlap.
+///
+/// Computes the regressive product (meet) of the two bivectors. If the planes
+/// are parallel or non-intersecting in the relevant way, the meet will be near-zero.
+pub fn shared_line(b1: &Mv, b2: &Mv) -> Mv {
+    ga::meet(b1, b2)
+}
+
 // ─── Knowledge Space ─────────────────────────────────────────
 
 /// A self-contained knowledge domain / concept.
