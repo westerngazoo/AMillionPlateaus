@@ -556,6 +556,39 @@ impl WasmIdentity {
             now_secs(),
         )?)
     }
+
+    /// R-0039 — sign a learning path event (a shareable artifact), returning its NostrEvent JSON.
+    /// Like `sign_mastery_json`, it is NOT reputation-bearing: `recompute` ignores `KIND_PATH`.
+    pub fn sign_path(
+        &self,
+        path_id: &str,
+        title: &str,
+        goal: &str,
+        steps: Box<[JsValue]>,
+        domains: Box<[JsValue]>,
+    ) -> Result<String, JsError> {
+        let mut steps_vec = Vec::new();
+        for step in steps.iter() {
+            if let Some(s) = step.as_string() {
+                steps_vec.push(s);
+            }
+        }
+        let mut domains_vec = Vec::new();
+        for domain in domains.iter() {
+            if let Some(d) = domain.as_string() {
+                domains_vec.push(d);
+            }
+        }
+        Ok(convert::sign_path_json(
+            &self.inner,
+            path_id,
+            title,
+            goal,
+            &steps_vec,
+            &domains_vec,
+            now_secs(),
+        )?)
+    }
 }
 
 impl Default for WasmIdentity {
