@@ -24,8 +24,8 @@ Epic: **#13**.
 | Phase | Task | Issue | Status |
 |-------|------|-------|--------|
 | 1 | `ga` adapter: `wedge` / `meet` / `dual` wrappers + tests | #14 | ✅ merged (PR #20) |
-| 1 | `mp-domain`: `domain_plane(topics)` best-fit plane + canonical fallback | #15 | ⬜ open |
-| 1 | `mp-domain`: `membership(v,B)` tolerance + `shared_line(meet)` + degeneracy guard | #16 | ⬜ open |
+| 1 | `mp-domain`: `domain_plane(topics)` best-fit plane + canonical fallback | #15 | ✅ merged (PR #23) |
+| 1 | `mp-domain`: `membership(v,B)` tolerance + `shared_line(meet)` + degeneracy guard | #16 | ✅ merged (PR #23) |
 | 2 | Surface overlaps in clients + paths on the meet | #17 | ⬜ open (also R-0039 slice 5) |
 | 3 | *(optional)* migrate reach/fog onto the domain plane | — | 🔒 future RFC, gated on Phase 2 evidence |
 
@@ -57,6 +57,22 @@ only slice 5 (grounding) does.
 
 Note (slice 6): the Godot client consumes only the CRDT graph blob today — it has **no
 signed-event-log ingestion** (no proof/mastery/path DTO there yet); slice 6 must add it.
+
+---
+
+## Front 3 — Study mode: the first real-life test
+
+The owner is now studying WITH the tool (the "ground-up new physicist" lens): the QC
+curriculum region is seeded in-app ([`curriculum.js`](../apps/web/src/curriculum.js) —
+22 plateaus / 28 bridges across the Classical ↔ Intuitionistic fork, bodies + KaTeX),
+and the long-horizon spine + usage loop live in
+[`curriculum/lem-free-foundations.md`](curriculum/lem-free-foundations.md) +
+[`curriculum/STUDY-GUIDE.md`](curriculum/STUDY-GUIDE.md). Code adjusts as study exposes
+gaps.
+
+| Task | Issue | Status |
+|------|-------|--------|
+| LOD roadmaps: expand a plateau into a sub-roadmap (semantic zoom in/out, progress roll-up) | #31 | ⬜ needs R-0040 requirement first |
 
 ---
 

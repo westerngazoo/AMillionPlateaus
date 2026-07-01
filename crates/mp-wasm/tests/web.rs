@@ -291,7 +291,7 @@ fn seed_resource_is_idempotent_and_convergent() {
 
     // (a) local idempotency — seeding the same id twice yields ONE entry.
     let mut doc = WasmCrdtDoc::new().expect("doc");
-    doc.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+    doc.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3, "")
         .expect("seed plateau");
     doc.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
         .expect("seed 1");
@@ -307,9 +307,9 @@ fn seed_resource_is_idempotent_and_convergent() {
     // then merge to quiescence → still exactly one entry.
     let mut a = WasmCrdtDoc::new().expect("A");
     let mut b = WasmCrdtDoc::new().expect("B");
-    a.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+    a.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3, "")
         .expect("A plateau");
-    b.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3)
+    b.seed_plateau(pid, "Calculus", domain, 0.6, 0.3, 0.3, "")
         .expect("B plateau");
     a.seed_resource(rid, pid, "Essence of Calculus", "Video", "https://ex.com/v")
         .expect("A resource");

@@ -21,6 +21,18 @@ export const MUSIC_DOMAIN = "22222222-2222-2222-2222-222222222222";
 // notes with it, R-0021); both sides pin the literal in their tests (R-0022).
 export const PHYSICS_DOMAIN = "33333333-3333-3333-3333-333333333333";
 
+// The Quantum-Computing curriculum's two-logic fork (curriculum.js). The doc's
+// central decision is CLASSICAL (LEM · ZFC · hyperreal) vs INTUITIONISTIC
+// (topos · SIA) foundations — two backends targeting "infinitesimal calculus"
+// as one spec. Modeled here as two grade-1 lenses that MEET on the pure Formal
+// axis (the shared math both target): Classical leans Formal→Empirical (the
+// backend that reconnects to measured physics), Intuitionistic leans
+// Formal→Creative (constructive proof, build-the-witness). Their near-e1
+// directions are close enough to share the meet, far enough that each lens
+// clears the SEED=0.16 fog margin on its OWN trailhead but not the other's.
+export const CLASSICAL_DOMAIN = "44444444-4444-4444-4444-444444444444";
+export const INTUITIONISTIC_DOMAIN = "55555555-5555-5555-5555-555555555555";
+
 // grade-1 blade indices in [1, e1, e2, e12, e3, e13, e23, e123]
 const E1 = 1;
 const E2 = 2;
@@ -69,6 +81,23 @@ export const ARCHETYPES = [
     blurb: "Wakes facing Physics — begins at Motion.",
     orient: [{ domain: PHYSICS_DOMAIN, dir: { e1: 0, e2: 1, e3: 0 } }],
   },
+  // The Quantum-Computing curriculum's two entry lenses (curriculum.js). Both
+  // face the Formal axis; the Logician tilts Empirical (classical → physics),
+  // the Constructivist tilts Creative (intuitionistic → build-the-witness).
+  {
+    id: "logician",
+    name: "The Logician",
+    domainLabel: "Classical Foundations",
+    blurb: "Wakes facing the classical branch — begins at Classical Predicate Logic.",
+    orient: [{ domain: CLASSICAL_DOMAIN, dir: { e1: 0.95, e2: 0.3, e3: 0 } }],
+  },
+  {
+    id: "constructivist",
+    name: "The Constructivist",
+    domainLabel: "Intuitionistic Foundations",
+    blurb: "Wakes facing the intuitionistic branch — begins at Intuitionistic Logic.",
+    orient: [{ domain: INTUITIONISTIC_DOMAIN, dir: { e1: 0.95, e2: 0, e3: 0.3 } }],
+  },
 ];
 
 // ── Visitor-authored personas (SPEC-0009 / R-0009) ─────────────────────────
@@ -85,6 +114,10 @@ export const DOMAINS = [
   { id: MATH_DOMAIN, label: "Mathematics", canonical: { e1: 1, e2: 0, e3: 0 } },
   { id: MUSIC_DOMAIN, label: "Music", canonical: { e1: 0, e2: 0, e3: 1 } },
   { id: PHYSICS_DOMAIN, label: "Physics", canonical: { e1: 0, e2: 1, e3: 0 } },
+  // The QC-curriculum fork (curriculum.js): two near-Formal lenses that meet on
+  // the e1 axis — the shared infinitesimal-calculus/algebra spine both target.
+  { id: CLASSICAL_DOMAIN, label: "Classical Foundations", canonical: { e1: 0.95, e2: 0.3, e3: 0 } },
+  { id: INTUITIONISTIC_DOMAIN, label: "Intuitionistic Foundations", canonical: { e1: 0.95, e2: 0, e3: 0.3 } },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
