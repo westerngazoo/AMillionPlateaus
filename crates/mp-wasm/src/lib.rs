@@ -137,6 +137,22 @@ impl WasmGraph {
     /// FFI (CLAUDE.md §5): a non-finite or negative `k` is a thrown `Error`, a
     /// fractional `k` is floored, and the result is naturally capped at the
     /// plateau count by the core.
+
+    /// The domains spanned by a learning path (R-0039 §2.1).
+    pub fn path_domains(&self, steps: Vec<String>) -> Result<Vec<String>, JsError> {
+        let mut domain_ids = Vec::new();
+        for step_id in steps {
+            let id = uuid::Uuid::parse_str(&step_id)?;
+            if let Some(plateau) = self.inner.plateau(&id) {
+                let dom = plateau.domain_id.to_string();
+                if !domain_ids.contains(&dom) {
+                    domain_ids.push(dom);
+                }
+            }
+        }
+        Ok(domain_ids)
+    }
+
     pub fn nearest_plateaus(&self, wizard_rep_json: &str, k: f64) -> Result<JsValue, JsError> {
         if !k.is_finite() || k < 0.0 {
             return Err(JsError::new("k must be a finite, non-negative number"));
@@ -557,6 +573,28 @@ impl WasmIdentity {
     /// "proof" | "solution", `body` the text). Returns the NostrEvent JSON. NOT
     /// reputation-bearing (recompute ignores `KIND_PROOF`); it records a verifiable,
     /// shareable artifact. `body` is capped at sign time.
+
+    /// R-0039 — sign a learning path event (a shareable artifact), returning its NostrEvent JSON.
+    /// NOT reputation-bearing (recompute ignores `KIND_PATH`).
+    pub fn sign_path(
+        &self,
+        path_id: &str,
+        title: &str,
+        goal: &str,
+        steps: Vec<String>,
+        domains: Vec<String>,
+    ) -> Result<String, JsError> {
+        Ok(convert::sign_path_json(
+            &self.inner,
+            path_id,
+            title,
+            goal,
+            &steps,
+            &domains,
+            now_secs(),
+        )?)
+    }
+
     pub fn sign_proof(&self, plateau_id: &str, kind: &str, body: &str) -> Result<String, JsError> {
         Ok(convert::sign_proof_json(
             &self.inner,
@@ -621,6 +659,14 @@ pub fn mastery_kind() -> u32 {
 pub fn proof_kind() -> u32 {
     mp_identity::KIND_PROOF
 }
+
+/// R-0039 — the path event kind. Exposed so the web app can pin its
+/// `PATH_KIND` constant to the Rust source (one source of truth).
+#[wasm_bindgen]
+pub fn path_kind() -> u32 {
+    mp_identity::KIND_PATH
+}
+
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
 /// mapping reputation and discovery use (`mp_identity::wizard_id_of`). Exposed so

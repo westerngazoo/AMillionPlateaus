@@ -81,3 +81,22 @@ pub fn resource_dto(r: &Resource) -> ResourceDto {
         vote_count: r.vote_count,
     }
 }
+
+#[derive(serde::Serialize)]
+pub struct PathDto {
+    pub id: String,
+    pub title: String,
+    pub goal: String,
+    pub steps: Vec<String>,
+    pub domains: Vec<String>,
+}
+
+pub fn path_dto(p: &mp_identity::PathDoc) -> PathDto {
+    PathDto {
+        id: p.id.to_string(),
+        title: p.title.clone(),
+        goal: p.goal.clone(),
+        steps: p.steps.iter().map(|id| id.to_string()).collect(),
+        domains: p.domains.iter().map(|id| id.to_string()).collect(),
+    }
+}
