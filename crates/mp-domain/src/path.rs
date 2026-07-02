@@ -13,11 +13,16 @@ pub struct Path {
 impl Path {
     /// Creates a new Path. Returns an error if the title is empty.
     /// Deduplicates steps, preserving the order of first occurrence.
-    pub fn new(id: Uuid, title: String, goal: String, steps: Vec<PlateauId>) -> Result<Self, &'static str> {
+    pub fn new(
+        id: Uuid,
+        title: String,
+        goal: String,
+        steps: Vec<PlateauId>,
+    ) -> Result<Self, &'static str> {
         if title.is_empty() {
             return Err("Title cannot be empty");
         }
-        
+
         let mut unique_steps = Vec::new();
         for step in steps {
             if !unique_steps.contains(&step) {

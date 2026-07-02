@@ -40,6 +40,7 @@ import {
   PHYSICS_DOMAIN,
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
+import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES } from "./curriculum.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
@@ -234,11 +235,15 @@ async function main() {
   // Apply the deterministic seed on every load — an idempotent upsert on fixed
   // ids (convergent, R-0004 AC4); authored nodes have random ids and are never
   // touched (AC4).
-  for (const p of SEED_PLATEAUS) doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3);
-  for (const b of SEED_BRIDGES) doc.seed_bridge(b.id, b.from, b.to, b.concept);
+  // (`description` rides the same upsert since the QC curriculum — seeds.js rows
+  // have none, curriculum.js rows ship their Markdown body.)
+  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS])
+    doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3, p.description ?? "");
+  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES]) doc.seed_bridge(b.id, b.from, b.to, b.concept);
   // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
   // fresh world has something to read; re-seeding never resets earned stones.
-  for (const r of SEED_RESOURCES) doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
+  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES])
+    doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
 
   // Rebuild id→domain from the (possibly restored) doc so a restored authored
   // plateau scores reputation under its OWN domain, not a fallback (AC5).

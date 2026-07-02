@@ -855,7 +855,8 @@ mod tests {
             &[step1.to_string()],
             &[domain.to_string()],
             3,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(crate::verify_event(&path), "path verifies");
         let ev: NostrEvent = serde_json::from_str(&path).unwrap();

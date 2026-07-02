@@ -205,6 +205,15 @@ impl WasmCrdtDoc {
     /// shared map instead of doubling (each tab seeds independently — there is no
     /// shared base). For user-authored plateaus use [`WasmCrdtDoc::add_plateau`],
     /// which assigns a fresh id.
+    ///
+    /// `description` is the seeded plateau's authored Markdown body (R-0020),
+    /// carried the same way [`WasmCrdtDoc::add_plateau`] carries it — serialized
+    /// into the CRDT `plateaus` map so it syncs and persists with the node. This
+    /// lets a seed world ship curriculum content, not just a bare skeleton. An
+    /// empty string is the common (body-less) case and is stored verbatim.
+    // 8 args: a flat wasm-bindgen seeding call — JS callers pass positional
+    // literals from seed rows, so a params struct would only add indirection.
+    #[allow(clippy::too_many_arguments)]
     pub fn seed_plateau(
         &mut self,
         id: &str,
@@ -213,10 +222,11 @@ impl WasmCrdtDoc {
         e1: f32,
         e2: f32,
         e3: f32,
+        description: &str,
     ) -> Result<(), JsError> {
         let id = Uuid::parse_str(id)?;
         let domain = Uuid::parse_str(domain_id)?;
-        let mut p = PlateauNode::new(name, domain, e1, e2, e3);
+        let mut p = PlateauNode::new(name, domain, e1, e2, e3).with_description(description);
         p.id = id; // deterministic seed id; Grade-1 invariant already enforced.
         self.inner.add_plateau(&p)?;
         Ok(())
