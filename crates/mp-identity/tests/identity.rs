@@ -8,7 +8,8 @@
 use mp_domain::ga::{self, EPSILON};
 use mp_domain::WizardReputation;
 use mp_identity::{
-    rank_by_domain, recompute, sign, verify, Keypair, Traversal, Vouch, KIND_TRAVERSAL, KIND_VOUCH,
+    rank_by_domain, recompute, sign, verify, Keypair, PathDoc, Traversal, Vouch, KIND_PATH,
+    KIND_TRAVERSAL, KIND_VOUCH,
 };
 use uuid::Uuid;
 
@@ -314,4 +315,44 @@ fn rank_by_domain_orders_by_reach() {
     let top1 = rank_by_domain(&events, domain, 1);
     assert_eq!(top1.len(), 1);
     assert_eq!(top1[0].0, deep.pubkey_hex());
+}
+
+// ─── R-0039 — paths are content, not reputation ──────────────
+
+#[test]
+fn kind_path_leaves_reputation_untouched() {
+    let kp = Keypair::generate();
+    let domain = Uuid::new_v4();
+    let trav = traversal(&kp, domain, 0.9, 0.1, 0.0, 1.0, 1);
+    let path_id = Uuid::new_v4();
+    let content = serde_json::to_string(&PathDoc {
+        id: path_id,
+        title: "Path".into(),
+        goal: "Goal".into(),
+        steps: vec![Uuid::new_v4()],
+        domains: vec![domain],
+    })
+    .expect("serialize path");
+    let path = sign(&kp, KIND_PATH, vec![], &content, 2).expect("sign path");
+
+    // WizardReputation has neither PartialEq nor Serialize — flatten each map to
+    // sorted (pubkey, domain, coeffs) rows and compare bit-for-bit, matching the
+    // sibling tests' "byte-identical reputation" contract.
+    fn flatten(
+        reps: &std::collections::BTreeMap<String, WizardReputation>,
+    ) -> Vec<(String, String, [f32; 8])> {
+        let mut rows = Vec::new();
+        for (pk, rep) in reps {
+            let mut domains: Vec<_> = rep.domain_reps.iter().collect();
+            domains.sort_by_key(|(d, _)| d.to_string());
+            for (d, mv) in domains {
+                rows.push((pk.clone(), d.to_string(), mv.coeffs));
+            }
+            rows.push((pk.clone(), "synthesis".to_string(), rep.synthesis.coeffs));
+        }
+        rows
+    }
+    let without = flatten(&recompute(std::slice::from_ref(&trav)));
+    let with = flatten(&recompute(&[trav, path]));
+    assert_eq!(without, with, "KIND_PATH must not change reputation");
 }

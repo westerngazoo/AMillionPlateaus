@@ -19,6 +19,7 @@ import init, {
   wizard_id_of,
   mastery_kind,
   proof_kind,
+  path_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
 import { createSync } from "./sync.js";
@@ -69,6 +70,14 @@ import {
 import { offlineDigest } from "./offline-digest.js";
 import { masteredTopics, visitedTopics, communityApproved, MASTERY_KIND } from "./mastery.js";
 import { publishedProofs, PROOF_KIND } from "./proofs.js";
+import {
+  buildPath,
+  pathDomains,
+  nextPathStep,
+  pathProgress,
+  publishedPaths,
+  PATH_KIND,
+} from "./paths.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -344,6 +353,10 @@ async function main() {
     proof_kind() === PROOF_KIND,
     `PROOF_KIND ${PROOF_KIND} ≠ Rust proof_kind() ${proof_kind()}`,
   );
+  console.assert(
+    path_kind() === PATH_KIND,
+    `PATH_KIND ${PATH_KIND} ≠ Rust path_kind() ${path_kind()}`,
+  );
 
   // The persona is the page's local lens. Null until the visitor chooses one; the
   // world is not interactive before then (R-0006 AC1). Phase 8: the persona only
@@ -373,6 +386,29 @@ async function main() {
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
   let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
+  let followPathId = null; // R-0039: local path being followed (camera/UI only)
+  const PATHS_KEY = "mp.paths";
+  function loadPaths() {
+    try {
+      return JSON.parse(localStorage.getItem(PATHS_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+  function savePaths(all) {
+    try {
+      localStorage.setItem(PATHS_KEY, JSON.stringify(all));
+    } catch {
+      /* quota */
+    }
+  }
+  function followSteps() {
+    if (!followPathId) return [];
+    return loadPaths()[followPathId]?.steps ?? [];
+  }
+  function followNext() {
+    return nextPathStep(followSteps(), mastered);
+  }
 
   // Show the PUBLIC half of the key (safe to display). The secret is never shown.
   identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
@@ -407,6 +443,8 @@ async function main() {
       visited, // studying set (R-0033)
       mastered, // mastered set — ✓ + gold (R-0030)
       community, // crowd-approved set — bedrock ring (R-0031)
+      pathSteps: followSteps(),
+      pathNext: followNext(),
     });
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
@@ -2214,6 +2252,192 @@ async function main() {
   // not lost on close (closes the AC2/AC3 loss window; bfcache-safe event).
   addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") snapshots.flush();
+  });
+
+  // ── Learning paths (R-0039) ─────────────────────────────────────────────────
+  const pathsPanel = document.getElementById("paths-panel");
+  const pathPick = document.getElementById("path-pick");
+  const pathTitle = document.getElementById("path-title");
+  const pathGoal = document.getElementById("path-goal");
+  const pathStepTopic = document.getElementById("path-step-topic");
+  const pathStepsList = document.getElementById("path-steps-list");
+  const pathProgressEl = document.getElementById("path-progress");
+  const pathPublished = document.getElementById("path-published");
+  let draftPathSteps = [];
+
+  function plateauById(id) {
+    return doc.to_graph().plateaus().find((p) => p.id === id);
+  }
+
+  function refreshPathTopics() {
+    pathStepTopic.replaceChildren(
+      ...doc.to_graph().plateaus().map((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.name;
+        return o;
+      }),
+    );
+  }
+
+  function renderDraftPathSteps() {
+    pathStepsList.replaceChildren(
+      ...draftPathSteps.map((id, i) => {
+        const li = document.createElement("li");
+        li.textContent = plateauById(id)?.name ?? id;
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.textContent = "×";
+        rm.style.marginLeft = "8px";
+        rm.addEventListener("click", () => {
+          draftPathSteps.splice(i, 1);
+          renderDraftPathSteps();
+        });
+        li.append(rm);
+        return li;
+      }),
+    );
+    const prog = pathProgress(draftPathSteps, mastered);
+    pathProgressEl.textContent = draftPathSteps.length
+      ? `Draft progress: ${prog.done}/${prog.total} mastered`
+      : "";
+  }
+
+  function refreshPathPick() {
+    const all = loadPaths();
+    const cur = pathPick.value;
+    pathPick.replaceChildren(
+      Object.assign(document.createElement("option"), { value: "", textContent: "— new path —" }),
+      ...Object.values(all).map((p) =>
+        Object.assign(document.createElement("option"), { value: p.id, textContent: p.title }),
+      ),
+    );
+    pathPick.value = cur;
+  }
+
+  function loadDraftFromPick() {
+    const id = pathPick.value;
+    if (!id) {
+      pathTitle.value = "";
+      pathGoal.value = "";
+      draftPathSteps = [];
+    } else {
+      const p = loadPaths()[id];
+      if (p) {
+        pathTitle.value = p.title;
+        pathGoal.value = p.goal ?? "";
+        draftPathSteps = [...p.steps];
+      }
+    }
+    renderDraftPathSteps();
+  }
+
+  function renderPublishedPaths() {
+    pathPublished.replaceChildren();
+    for (const p of publishedPaths(log.all())) {
+      const row = document.createElement("div");
+      row.className = "path-published-item";
+      const who = p.pubkey === myPubkey ? "you" : shortKey(p.pubkey);
+      row.textContent = `${p.title} — ${who} (${p.steps.length} steps)`;
+      const followBtn = document.createElement("button");
+      followBtn.type = "button";
+      followBtn.textContent = "Follow";
+      followBtn.style.marginLeft = "8px";
+      followBtn.addEventListener("click", () => {
+        draftPathSteps = [...p.steps];
+        pathTitle.value = p.title;
+        pathGoal.value = p.goal ?? "";
+        renderDraftPathSteps();
+        followPathId = null;
+        draw();
+      });
+      row.append(followBtn);
+      pathPublished.append(row);
+    }
+  }
+
+  document.getElementById("paths-toggle").addEventListener("click", () => {
+    pathsPanel.hidden = !pathsPanel.hidden;
+    if (!pathsPanel.hidden) {
+      pathsPanel.open = true;
+      refreshPathTopics();
+      refreshPathPick();
+      renderPublishedPaths();
+      loadDraftFromPick();
+    }
+  });
+
+  pathPick.addEventListener("change", loadDraftFromPick);
+
+  document.getElementById("path-add-step").addEventListener("click", () => {
+    const id = pathStepTopic.value;
+    if (!id || draftPathSteps.includes(id)) return;
+    draftPathSteps.push(id);
+    renderDraftPathSteps();
+  });
+
+  document.getElementById("path-save").addEventListener("click", () => {
+    try {
+      const id = pathPick.value || crypto.randomUUID();
+      const path = buildPath({
+        id,
+        title: pathTitle.value,
+        goal: pathGoal.value,
+        steps: draftPathSteps,
+      });
+      const all = loadPaths();
+      all[path.id] = path;
+      savePaths(all);
+      pathPick.value = path.id;
+      refreshPathPick();
+      pathPick.value = path.id;
+    } catch (err) {
+      console.error("[mp] save path:", err);
+    }
+  });
+
+  document.getElementById("path-follow").addEventListener("click", () => {
+    const id = pathPick.value;
+    if (!id || !loadPaths()[id]) return;
+    followPathId = id;
+    const next = followNext();
+    if (next) {
+      const p = plateauById(next);
+      if (p) {
+        const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+        VIEW.cx = cx;
+        VIEW.cy = cy;
+      }
+    }
+    draw();
+  });
+
+  document.getElementById("path-unfollow").addEventListener("click", () => {
+    followPathId = null;
+    draw();
+  });
+
+  document.getElementById("path-publish").addEventListener("click", () => {
+    const id = pathPick.value;
+    if (!id) return;
+    const entry = loadPaths()[id];
+    if (!entry || !entry.steps.length) return;
+    const plateaus = doc.to_graph().plateaus();
+    const domains = pathDomains(plateaus, entry.steps);
+    try {
+      ingest(
+        identity.sign_path(
+          entry.id,
+          entry.title,
+          entry.goal ?? "",
+          entry.steps,
+          domains,
+        ),
+      );
+      renderPublishedPaths();
+    } catch (err) {
+      console.error("[mp] sign_path failed:", err);
+    }
   });
 
   // ── Travel: focus the camera on a topic (SPEC-0019 / R-0019) ────────────────

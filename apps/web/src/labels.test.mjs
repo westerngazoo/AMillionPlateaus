@@ -65,3 +65,35 @@ test("labelBox is centered under the disc and at least a minimum width", () => {
   assert.ok(Math.abs(box.x + box.w / 2 - 200) < 1e-9, "centered on the disc x");
   assert.ok(box.y > 100, "below the disc");
 });
+
+// ── planBoxes: the generic caption declutter (bridge concepts, resource titles) ──
+
+test("planBoxes keeps non-overlapping captions and drops colliders, in priority order", async () => {
+  const { planBoxes, captionBox } = await import("./labels.js");
+  const a = { key: "a", box: captionBox("wide caption text", 100, 100) };
+  const b = { key: "b", box: captionBox("overlapping here", 110, 102) }; // collides with a
+  const c = { key: "c", box: captionBox("far away", 400, 300) };
+  const kept = planBoxes([a, b, c]);
+  assert.ok(kept.has("a"), "first wins");
+  assert.ok(!kept.has("b"), "collider dropped");
+  assert.ok(kept.has("c"), "distant kept");
+});
+
+test("planBoxes never displaces obstacles — name labels always win", async () => {
+  const { planBoxes, captionBox, labelBox } = await import("./labels.js");
+  const nameBox = labelBox("Intuitionistic Logic", { x: 100, y: 100 });
+  const under = { key: "u", box: captionBox("concept", 100, 100 + 16 + 4 + 7) }; // sits on the name box
+  const clear = { key: "k", box: captionBox("concept", 100, 300) };
+  const kept = planBoxes([under, clear], { obstacles: [nameBox] });
+  assert.ok(!kept.has("u"), "caption under a name label is culled");
+  assert.ok(kept.has("k"));
+});
+
+test("planBoxes is deterministic", async () => {
+  const { planBoxes, captionBox } = await import("./labels.js");
+  const cands = [
+    { key: "x", box: captionBox("one", 10, 10) },
+    { key: "y", box: captionBox("two", 12, 11) },
+  ];
+  assert.deepEqual([...planBoxes(cands)], [...planBoxes(cands)]);
+});

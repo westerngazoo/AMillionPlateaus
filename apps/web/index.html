@@ -388,6 +388,9 @@
       }
       .proofs-publish:hover { background: #195441; }
       .proofs-note { font-size: 11px; color: #8aa0b4; }
+      .path-steps-list { margin: 8px 0; padding-left: 20px; font-size: 13px; color: #cdd9e6; }
+      .path-published { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #cdd9e6; }
+      .path-published-item { padding: 6px 8px; background: #1b2330; border-radius: 6px; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -475,6 +478,7 @@
     <div class="bar">
       <button id="change-persona">Change lens</button>
       <button id="travel-toggle">Travel</button>
+      <button id="paths-toggle">Paths</button>
       <button id="model-setup">Model setup</button>
       <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="draft-bridge-toggle">Draft a bridge</button>
@@ -642,6 +646,40 @@
           <button type="button" id="p2p-accept">Accept invite</button>
           <button type="button" id="p2p-complete">Complete</button>
         </div>
+      </div>
+    </details>
+    <!-- Learning paths (R-0039): author/follow/publish a route through topics. -->
+    <details id="paths-panel" class="draft-plateau" hidden>
+      <summary>Learning paths</summary>
+      <div class="draft-plateau-body">
+        <p class="author-hint">Author an ordered route, follow it on the map, or publish deliberately to the signed log.</p>
+        <div class="dp-row">
+          <label for="path-pick">Your paths</label>
+          <select id="path-pick"><option value="">— new path —</option></select>
+        </div>
+        <div class="dp-row">
+          <label for="path-title">Title</label>
+          <input id="path-title" type="text" placeholder="e.g. GA → Physics" />
+        </div>
+        <div class="dp-row">
+          <label for="path-goal">Goal</label>
+          <input id="path-goal" type="text" placeholder="What you want to learn" />
+        </div>
+        <div class="dp-row">
+          <label for="path-step-topic">Add step</label>
+          <select id="path-step-topic"></select>
+          <button type="button" id="path-add-step">Add</button>
+        </div>
+        <ol id="path-steps-list" class="path-steps-list"></ol>
+        <p id="path-progress" class="author-hint"></p>
+        <div class="dp-actions">
+          <button type="button" id="path-save">Save locally</button>
+          <button type="button" id="path-follow">Follow</button>
+          <button type="button" id="path-unfollow">Stop following</button>
+          <button type="button" id="path-publish">Publish</button>
+        </div>
+        <h4 class="proofs-head">Published paths</h4>
+        <div id="path-published" class="path-published"></div>
       </div>
     </details>
     <!-- Travel (SPEC-0019 / R-0019). Focus the camera on a topic: pick a topic
