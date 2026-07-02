@@ -43,6 +43,31 @@ pub struct ResourceDto {
     pub vote_count: f32,
 }
 
+#[derive(serde::Serialize)]
+pub struct PathDto {
+    pub id: String,
+    pub title: String,
+    pub goal: String,
+    pub steps: Vec<String>,
+    pub domains: Vec<String>,
+}
+
+pub fn path_dto(
+    id: &str,
+    title: &str,
+    goal: &str,
+    steps: &[String],
+    domains: &[String],
+) -> PathDto {
+    PathDto {
+        id: id.to_string(),
+        title: title.to_string(),
+        goal: goal.to_string(),
+        steps: steps.to_vec(),
+        domains: domains.to_vec(),
+    }
+}
+
 /// Map a `PlateauNode` to its DTO. `position` is the grade-1 part `(e1,e2,e3)` of the
 /// multivector — blade order `[1, e1, e2, e12, e3, e13, e23, e123]`, so e3 = coeffs[4]
 /// (matches `mp-wasm::convert::plateau_dto`).

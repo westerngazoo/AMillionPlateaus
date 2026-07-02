@@ -4,7 +4,8 @@
 // between visited topics. The map is browsable — nothing is dimmed/locked.
 
 import { project } from "./project.js";
-import { planLabels } from "./labels.js";
+import { planLabels, planBoxes, labelBox, captionBox } from "./labels.js";
+import { spreadNodes } from "./layout.js";
 
 // Progress palette (R-0033): the map colours by how far you've got, not reach.
 const UNEXPLORED = "#2f3e50"; // never visited — a clickable node, not "locked"
@@ -28,19 +29,61 @@ const RADIUS = 16;
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set() }) {
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const points = new Map();
+  const raw = new Map();
   for (const p of plateaus) {
-    points.set(p.id, project(p.position, view));
+    raw.set(p.id, project(p.position, view));
+  }
+  const points = spreadNodes(raw);
+
+  // Learning-path route (R-0039): dashed line through followed steps, drawn under discs.
+  if (pathSteps.length > 1) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(159, 208, 255, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    let started = false;
+    for (const id of pathSteps) {
+      const pt = points.get(id);
+      if (!pt) continue;
+      if (!started) {
+        ctx.moveTo(pt.x, pt.y);
+        started = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    }
+    if (started) ctx.stroke();
+    ctx.restore();
   }
 
   // Label level-of-detail (R-0024): which plateau names to draw so none overlap
   // (priority focused → in-progress → rest, greedy box-pack). The `visited` set is
   // the priority tier post-R-0033 (studied topics keep label priority).
   const labelled = planLabels({ plateaus, points, reachable: visited, focusedId });
+
+  // Caption declutter: bridge concepts + resource titles go through the SAME
+  // greedy box-pack as names, with the kept name labels as immovable obstacles —
+  // names always win. At the seeded density this is what keeps the map readable
+  // (discs are de-overlapped by spreadNodes; unculled text was the residual soup).
+  const nameBoxes = plateaus
+    .filter((p) => labelled.has(p.id))
+    .map((p) => labelBox(p.name, points.get(p.id)));
+  const conceptCandidates = [];
+  for (const b of bridges) {
+    const a = points.get(b.from);
+    const c = points.get(b.to);
+    if (!a || !c || !b.concept) continue;
+    conceptCandidates.push({
+      key: b.id,
+      box: captionBox(b.concept, (a.x + c.x) / 2 + 6, (a.y + c.y) / 2 - 6),
+    });
+  }
+  const captionedBridges = planBoxes(conceptCandidates, { obstacles: nameBoxes });
 
   // Bridges first, so plateau discs sit on top. A bridge between two VISITED
   // plateaus is "covered" — your trail (R-0033).
@@ -56,7 +99,7 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(c.x, c.y);
     ctx.stroke();
-    if (b.concept) {
+    if (b.concept && captionedBridges.has(b.id)) {
       ctx.fillStyle = LABEL;
       ctx.fillText(b.concept, (a.x + c.x) / 2 + 6, (a.y + c.y) / 2 - 6);
     }
@@ -118,7 +161,22 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, RADIUS + 7, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, RADIUS + 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Path next-step ring (R-0039): highlight the next not-yet-mastered step.
+  if (pathNext && pathNext !== focusedId) {
+    const pt = points.get(pathNext);
+    if (pt) {
+      ctx.save();
+      ctx.strokeStyle = "#9fd0ff";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, RADIUS + 6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -130,6 +188,24 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
   ctx.save();
   ctx.textAlign = "left";
   ctx.font = "10px system-ui, sans-serif";
+  // Titles get the same declutter as names/concepts (left-anchored at the dot, so
+  // the box starts at the text's x rather than centering on it). The DOT always
+  // draws — presence stays visible; only colliding text is culled this frame.
+  const titleCandidates = [];
+  {
+    const seen = new Map();
+    for (const r of resources) {
+      const pt = points.get(r.plateau_id);
+      if (!pt) continue;
+      const i = seen.get(r.plateau_id) ?? 0;
+      seen.set(r.plateau_id, i + 1);
+      const text = (r.vote_count ?? 0) > 0 ? `${r.title} · ${Math.round(r.vote_count)}` : r.title;
+      const box = captionBox(text, 0, pt.y - RADIUS + i * 14 + 3);
+      box.x = pt.x + RADIUS + 18; // left-anchored: shift the centered box to start at the text
+      titleCandidates.push({ key: r.id, box });
+    }
+  }
+  const captionedResources = planBoxes(titleCandidates, { obstacles: nameBoxes });
   const placed = new Map(); // plateauId → markers already drawn (for stacking)
   for (const r of resources) {
     const pt = points.get(r.plateau_id);
@@ -146,9 +222,11 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     ctx.beginPath();
     ctx.arc(mx, my, crystallized ? 5 : 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = LABEL;
-    const n = Math.round(r.vote_count ?? 0);
-    ctx.fillText(n > 0 ? `${r.title} · ${n}` : r.title, mx + 8, my + 3);
+    if (captionedResources.has(r.id)) {
+      ctx.fillStyle = LABEL;
+      const n = Math.round(r.vote_count ?? 0);
+      ctx.fillText(n > 0 ? `${r.title} · ${n}` : r.title, mx + 8, my + 3);
+    }
   }
   ctx.restore();
 

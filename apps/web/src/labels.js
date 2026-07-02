@@ -20,6 +20,30 @@ export function labelBox(name, pt) {
 const overlaps = (a, b) =>
   a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
+/** Estimated box for any midpoint-anchored caption (bridge concepts, resource titles). */
+export function captionBox(text, x, y) {
+  const w = Math.max(12, (text?.length ?? 0) * CHAR_W);
+  return { x: x - w / 2, y: y - LINE_H / 2, w, h: LINE_H };
+}
+
+/**
+ * Generic greedy box declutter — the same discipline planLabels applies to names,
+ * for ANY caption layer (bridge concepts, resource titles). `candidates` is
+ * [{ key, box }] in priority order; `obstacles` are boxes already committed
+ * (e.g. the kept name labels) that candidates must clear but never displace.
+ * Deterministic; returns the Set of kept keys.
+ */
+export function planBoxes(candidates, { obstacles = [] } = {}) {
+  const kept = new Set();
+  const boxes = [...obstacles];
+  for (const { key, box } of candidates) {
+    if (boxes.some((b) => overlaps(box, b))) continue;
+    boxes.push(box);
+    kept.add(key);
+  }
+  return kept;
+}
+
 /**
  * The Set of plateau ids whose label should render this frame. `plateaus` is the
  * DTO array, `points` the id→{x,y} screen map, `reachable` the lit Set,
