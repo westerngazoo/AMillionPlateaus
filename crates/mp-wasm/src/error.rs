@@ -26,6 +26,8 @@ pub enum EventError {
     Uuid(#[from] uuid::Error),
     #[error("identity error: {0}")]
     Identity(#[from] mp_identity::IdError),
+    #[error("invalid input: {0}")]
+    Invalid(String),
 }
 
 /// Failure answering a single-plateau fog query by id string.

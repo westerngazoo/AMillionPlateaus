@@ -384,16 +384,7 @@ pub fn sign_proof_json(
     created_at: u64,
 ) -> Result<String, EventError> {
     let plateau = Uuid::parse_str(plateau_id)?;
-    let body = if body.len() > PROOF_BODY_CAP {
-        // truncate on a char boundary at or below the cap (never split a UTF-8 codepoint)
-        let mut end = PROOF_BODY_CAP;
-        while end > 0 && !body.is_char_boundary(end) {
-            end -= 1;
-        }
-        body[..end].to_string()
-    } else {
-        body.to_string()
-    };
+    let body = cap_str(body, PROOF_BODY_CAP);
     let content = serde_json::to_string(&Proof {
         plateau,
         kind: kind.to_string(),
@@ -403,8 +394,31 @@ pub fn sign_proof_json(
     Ok(serde_json::to_string(&event)?)
 }
 
+/// Max path title/goal bytes embedded in a published event (SPEC-0039 §2.2) — like
+/// `PROOF_BODY_CAP`, bounds how much one artifact can bloat the gossiped log; longer
+/// text is truncated at sign time (char-boundary-safe).
+const PATH_TITLE_CAP: usize = 256;
+const PATH_GOAL_CAP: usize = 2048;
+/// Max steps in a published path. Truncating a route would silently corrupt it, so
+/// exceeding this is an ERROR, not a trim.
+const PATH_STEPS_CAP: usize = 512;
+
+/// truncate on a char boundary at or below `cap` (never split a UTF-8 codepoint)
+fn cap_str(s: &str, cap: usize) -> String {
+    if s.len() <= cap {
+        return s.to_string();
+    }
+    let mut end = cap;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s[..end].to_string()
+}
+
 /// R-0039 — sign a learning path event (a shareable artifact), returning its NostrEvent JSON.
 /// Like `sign_mastery_json`, it is NOT reputation-bearing: `recompute` ignores `KIND_PATH`.
+/// `title`/`goal` are capped (truncated); a path with more than `PATH_STEPS_CAP` steps is
+/// rejected outright — truncating a route would silently corrupt it.
 pub fn sign_path_json(
     kp: &Keypair,
     path_id: &str,
@@ -415,12 +429,18 @@ pub fn sign_path_json(
     created_at: u64,
 ) -> Result<String, EventError> {
     let id = Uuid::parse_str(path_id)?;
+    if steps.len() > PATH_STEPS_CAP {
+        return Err(EventError::Invalid(format!(
+            "path has {} steps; the publish cap is {PATH_STEPS_CAP}",
+            steps.len()
+        )));
+    }
     let parsed_steps: Result<Vec<Uuid>, _> = steps.iter().map(|s| Uuid::parse_str(s)).collect();
     let parsed_domains: Result<Vec<Uuid>, _> = domains.iter().map(|s| Uuid::parse_str(s)).collect();
     let content = serde_json::to_string(&PathDoc {
         id,
-        title: title.to_string(),
-        goal: goal.to_string(),
+        title: cap_str(title, PATH_TITLE_CAP),
+        goal: cap_str(goal, PATH_GOAL_CAP),
         steps: parsed_steps?,
         domains: parsed_domains?,
     })?;
@@ -883,6 +903,31 @@ mod tests {
         let p: Proof = serde_json::from_str(&ev.content).unwrap();
         assert!(p.body.len() <= 8192, "body capped at 8 KB");
         assert!(crate::verify_event(&proof), "capped proof still verifies");
+    }
+
+    #[test]
+    fn path_title_goal_are_capped_and_oversize_steps_rejected() {
+        // SPEC-0039 §2.2: title/goal truncate (char-boundary-safe); steps over the
+        // cap ERROR — truncating a route would silently corrupt it.
+        let kp = Keypair::generate();
+        let pid = Uuid::new_v4().to_string();
+        let dom = vec![Uuid::new_v4().to_string()];
+        let step = vec![Uuid::new_v4().to_string()];
+
+        let long_title = "é".repeat(1000); // 2 bytes/char — exercises the boundary walk
+        let long_goal = "g".repeat(10_000);
+        let signed = sign_path_json(&kp, &pid, &long_title, &long_goal, &step, &dom, 1).unwrap();
+        let ev: NostrEvent = serde_json::from_str(&signed).unwrap();
+        let doc: PathDoc = serde_json::from_str(&ev.content).unwrap();
+        assert!(doc.title.len() <= 256, "title capped");
+        assert!(doc.goal.len() <= 2048, "goal capped");
+        assert!(crate::verify_event(&signed), "capped path still verifies");
+
+        let too_many: Vec<String> = (0..513).map(|_| Uuid::new_v4().to_string()).collect();
+        assert!(matches!(
+            sign_path_json(&kp, &pid, "t", "g", &too_many, &dom, 1),
+            Err(EventError::Invalid(_))
+        ));
     }
 
     #[test]
