@@ -11,10 +11,14 @@
 //! `GeoGraph`, the traits, the id aliases) are re-exported here, so a consumer
 //! depends on `mp-domain` alone and reaches the store through it.
 
+mod domain;
 mod graph;
 mod path;
 mod types;
 
+pub use domain::{
+    domain_plane, has_domain_overlap, is_member, membership, shared_line, MEMBERSHIP_TOLERANCE,
+};
 pub use graph::KnowledgeGraph;
 pub use path::*;
 pub use types::*;

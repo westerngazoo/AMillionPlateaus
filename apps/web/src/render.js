@@ -5,6 +5,7 @@
 
 import { project } from "./project.js";
 import { planLabels } from "./labels.js";
+import { spreadNodes } from "./layout.js";
 
 // Progress palette (R-0033): the map colours by how far you've got, not reach.
 const UNEXPLORED = "#2f3e50"; // never visited — a clickable node, not "locked"
@@ -28,13 +29,36 @@ const RADIUS = 16;
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set() }) {
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const points = new Map();
+  const raw = new Map();
   for (const p of plateaus) {
-    points.set(p.id, project(p.position, view));
+    raw.set(p.id, project(p.position, view));
+  }
+  const points = spreadNodes(raw);
+
+  // Learning-path route (R-0039): dashed line through followed steps, drawn under discs.
+  if (pathSteps.length > 1) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(159, 208, 255, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    let started = false;
+    for (const id of pathSteps) {
+      const pt = points.get(id);
+      if (!pt) continue;
+      if (!started) {
+        ctx.moveTo(pt.x, pt.y);
+        started = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    }
+    if (started) ctx.stroke();
+    ctx.restore();
   }
 
   // Label level-of-detail (R-0024): which plateau names to draw so none overlap
@@ -118,7 +142,22 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, RADIUS + 7, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, RADIUS + 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Path next-step ring (R-0039): highlight the next not-yet-mastered step.
+  if (pathNext && pathNext !== focusedId) {
+    const pt = points.get(pathNext);
+    if (pt) {
+      ctx.save();
+      ctx.strokeStyle = "#9fd0ff";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, RADIUS + 6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

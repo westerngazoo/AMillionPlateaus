@@ -7,7 +7,7 @@ says *where we're going*; this file says *what's left on the active fronts and w
 on what*.
 
 Implementation is dispatched to the dev team as GitHub issues; Claude authors the
-RFCs / requirements / specs and the dev-ready tickets. Last synced: 2026-06-27.
+RFCs / requirements / specs and the dev-ready tickets. Last synced: 2026-07-02.
 
 ---
 
@@ -24,8 +24,8 @@ Epic: **#13**.
 | Phase | Task | Issue | Status |
 |-------|------|-------|--------|
 | 1 | `ga` adapter: `wedge` / `meet` / `dual` wrappers + tests | #14 | ✅ merged (PR #20) |
-| 1 | `mp-domain`: `domain_plane(topics)` best-fit plane + canonical fallback | #15 | ⬜ open |
-| 1 | `mp-domain`: `membership(v,B)` tolerance + `shared_line(meet)` + degeneracy guard | #16 | ⬜ open |
+| 1 | `mp-domain`: `domain_plane(topics)` best-fit plane + canonical fallback | #15 | ✅ done (`domain.rs`) |
+| 1 | `mp-domain`: `membership(v,B)` tolerance + `shared_line(meet)` + degeneracy guard | #16 | ✅ done (`domain.rs`) |
 | 2 | Surface overlaps in clients + paths on the meet | #17 | ⬜ open (also R-0039 slice 5) |
 | 3 | *(optional)* migrate reach/fog onto the domain plane | — | 🔒 future RFC, gated on Phase 2 evidence |
 
@@ -48,10 +48,10 @@ only slice 5 (grounding) does.
 
 | Slice | Task | Issue | Depends on |
 |-------|------|-------|------------|
-| 1 | Rust-core `Path` + `KIND_PATH` + recompute-ignores test | #19 | — *(startable now)* |
-| 2 | Bindings: `sign_path` (wasm) + `path_domains` seam + `PathDto` (gdext) | #25 | #19 |
-| 3 | Web: author + follow (`paths.js`, `mp.paths`, render + next-step) | #26 | #25 |
-| 4 | Web: publish + trust (opt-in `KIND_PATH`, `publishedPaths`, R-0035) | #27 | #26 |
+| 1 | Rust-core `Path` + `KIND_PATH` + recompute-ignores test | #19 | — ✅ done |
+| 2 | Bindings: `sign_path` (wasm) + `path_domains` seam + `PathDto` (gdext) | #25 | #19 ✅ wasm + gdext DTO; `path_domains` in `mp-domain` |
+| 3 | Web: author + follow (`paths.js`, `mp.paths`, render + next-step) | #26 | #25 ✅ |
+| 4 | Web: publish + trust (opt-in `KIND_PATH`, `publishedPaths`, R-0035) | #27 | #26 ✅ publish; trust weighting still uses R-0035 reach on publish list (future polish) |
 | 5 | Grounding: meet-based shared islands + resource reuse | #17 | #15 + #16 + #19 |
 | 6 | Godot parity: path render/follow + **event-log ingestion** | #28 | #25 |
 

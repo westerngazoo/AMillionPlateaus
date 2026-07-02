@@ -556,6 +556,28 @@ impl WasmIdentity {
             now_secs(),
         )?)
     }
+
+    /// R-0039 — sign a learning path event. NOT reputation-bearing.
+    pub fn sign_path(
+        &self,
+        path_id: &str,
+        title: &str,
+        goal: &str,
+        steps: JsValue,
+        domains: JsValue,
+    ) -> Result<String, JsError> {
+        let steps: Vec<String> = serde_wasm_bindgen::from_value(steps)?;
+        let domains: Vec<String> = serde_wasm_bindgen::from_value(domains)?;
+        Ok(convert::sign_path_json(
+            &self.inner,
+            path_id,
+            title,
+            goal,
+            &steps,
+            &domains,
+            now_secs(),
+        )?)
+    }
 }
 
 impl Default for WasmIdentity {
@@ -610,6 +632,13 @@ pub fn mastery_kind() -> u32 {
 #[wasm_bindgen]
 pub fn proof_kind() -> u32 {
     mp_identity::KIND_PROOF
+}
+
+/// R-0039 — the learning-path event kind. Exposed so the web app can pin
+/// its `PATH_KIND` constant to the Rust source (one source of truth).
+#[wasm_bindgen]
+pub fn path_kind() -> u32 {
+    mp_identity::KIND_PATH
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
