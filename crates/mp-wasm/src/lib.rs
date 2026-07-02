@@ -556,6 +556,43 @@ impl WasmIdentity {
             now_secs(),
         )?)
     }
+
+    /// R-0039 — sign a learning path event (a shareable artifact), returning its NostrEvent JSON.
+    /// Like `sign_mastery_json`, it is NOT reputation-bearing: `recompute` ignores `KIND_PATH`.
+    pub fn sign_path(
+        &self,
+        path_id: &str,
+        title: &str,
+        goal: &str,
+        steps: Vec<JsValue>,
+        domains: Vec<JsValue>,
+    ) -> Result<String, JsError> {
+        let mut steps_vec = Vec::with_capacity(steps.len());
+        for step in steps.iter() {
+            if let Some(s) = step.as_string() {
+                steps_vec.push(s);
+            } else {
+                return Err(JsError::new("Step must be a string"));
+            }
+        }
+        let mut domains_vec = Vec::with_capacity(domains.len());
+        for domain in domains.iter() {
+            if let Some(d) = domain.as_string() {
+                domains_vec.push(d);
+            } else {
+                return Err(JsError::new("Domain must be a string"));
+            }
+        }
+        Ok(convert::sign_path_json(
+            &self.inner,
+            path_id,
+            title,
+            goal,
+            &steps_vec,
+            &domains_vec,
+            now_secs(),
+        )?)
+    }
 }
 
 impl Default for WasmIdentity {
@@ -610,6 +647,12 @@ pub fn mastery_kind() -> u32 {
 #[wasm_bindgen]
 pub fn proof_kind() -> u32 {
     mp_identity::KIND_PROOF
+}
+
+/// R-0039 — return the `KIND_PATH` constant for JS to pin against.
+#[wasm_bindgen]
+pub fn path_kind() -> u32 {
+    mp_identity::KIND_PATH
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`

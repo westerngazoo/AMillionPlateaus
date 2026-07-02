@@ -415,12 +415,37 @@ pub fn sign_path_json(
     created_at: u64,
 ) -> Result<String, EventError> {
     let id = Uuid::parse_str(path_id)?;
-    let parsed_steps: Result<Vec<Uuid>, _> = steps.iter().map(|s| Uuid::parse_str(s)).collect();
+
+    // Cap steps count per SPEC-0039 §2.2
+    let steps_capped = if steps.len() > 1000 {
+        &steps[..1000]
+    } else {
+        steps
+    };
+
+    // Cap strings (mirroring PROOF_BODY_CAP char-boundary logic)
+    let truncate_str = |s: &str, cap: usize| {
+        if s.len() > cap {
+            let mut end = cap;
+            while end > 0 && !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            s[..end].to_string()
+        } else {
+            s.to_string()
+        }
+    };
+
+    let title = truncate_str(title, 256);
+    let goal = truncate_str(goal, 1024);
+
+    let parsed_steps: Result<Vec<Uuid>, _> = steps_capped.iter().map(|s| Uuid::parse_str(s)).collect();
     let parsed_domains: Result<Vec<Uuid>, _> = domains.iter().map(|s| Uuid::parse_str(s)).collect();
+
     let content = serde_json::to_string(&PathDoc {
         id,
-        title: title.to_string(),
-        goal: goal.to_string(),
+        title,
+        goal,
         steps: parsed_steps?,
         domains: parsed_domains?,
     })?;
