@@ -564,19 +564,23 @@ impl WasmIdentity {
         path_id: &str,
         title: &str,
         goal: &str,
-        steps: Box<[JsValue]>,
-        domains: Box<[JsValue]>,
+        steps: Vec<JsValue>,
+        domains: Vec<JsValue>,
     ) -> Result<String, JsError> {
-        let mut steps_vec = Vec::new();
+        let mut steps_vec = Vec::with_capacity(steps.len());
         for step in steps.iter() {
             if let Some(s) = step.as_string() {
                 steps_vec.push(s);
+            } else {
+                return Err(JsError::new("Step must be a string"));
             }
         }
-        let mut domains_vec = Vec::new();
+        let mut domains_vec = Vec::with_capacity(domains.len());
         for domain in domains.iter() {
             if let Some(d) = domain.as_string() {
                 domains_vec.push(d);
+            } else {
+                return Err(JsError::new("Domain must be a string"));
             }
         }
         Ok(convert::sign_path_json(
@@ -643,6 +647,12 @@ pub fn mastery_kind() -> u32 {
 #[wasm_bindgen]
 pub fn proof_kind() -> u32 {
     mp_identity::KIND_PROOF
+}
+
+/// R-0039 — return the `KIND_PATH` constant for JS to pin against.
+#[wasm_bindgen]
+pub fn path_kind() -> u32 {
+    mp_identity::KIND_PATH
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
