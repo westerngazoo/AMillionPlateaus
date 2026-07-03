@@ -517,6 +517,9 @@
       <input id="relay-url" type="text" placeholder="wss://relay… (optional)" autocomplete="off" />
       <button id="relay-connect">Connect relay</button>
       <span id="relay-hud" class="idhud">relay ○ offline</span>
+      <!-- Godot export-sync status (Track B6): last successful PUT of the
+           world.bin / focus.json / reputation.json mirror. Non-blocking readout. -->
+      <span id="sync-status" class="idhud" title="Godot 3D sync — world.bin · focus.json · reputation.json">sync ○ idle</span>
     </div>
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
          domain select is populated from DOMAINS at init. Position sliders use

@@ -81,6 +81,7 @@ import {
   PATH_KIND,
 } from "./paths.js";
 import { graphIds, importSummary, formatImportSummary } from "./import.js";
+import { formatSyncStatus } from "./sync-status.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -257,6 +258,19 @@ async function main() {
   // plateau scores reputation under its OWN domain, not a fallback (AC5).
   for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
 
+  // Export-sync status readout (Track B6): record the last SUCCESSFUL Godot-sync
+  // PUT and surface a "synced ✓ …ago" chip. Purely observational — it never blocks
+  // or alters the PUT (same method/headers/body), just taps the resolved promise.
+  let lastSyncAt = 0;
+  function updateSyncStatus() {
+    const el = document.getElementById("sync-status");
+    if (el) el.textContent = formatSyncStatus(lastSyncAt);
+  }
+  function markSynced() {
+    lastSyncAt = Date.now();
+    updateSyncStatus();
+  }
+
   // Persist the whole converged doc to IndexedDB; debounced inside the store
   // (AC3). Called after every local edit and inbound sync.
   let lastDevFocus = "";
@@ -268,20 +282,26 @@ async function main() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: payload,
-    }).catch(() => {});
+    })
+      .then(markSynced)
+      .catch(() => {});
   }
   function syncDevReputation() {
     fetch("/dev/reputation.json", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(reputation),
-    }).catch(() => {});
+    })
+      .then(markSynced)
+      .catch(() => {});
   }
   function persist() {
     const bytes = doc.save();
     snapshots.save(bytes);
     // Dev: mirror CRDT + lens + reputation for the Godot 3D client (start-dev.sh).
-    fetch("/dev/world.bin", { method: "PUT", body: bytes }).catch(() => {});
+    fetch("/dev/world.bin", { method: "PUT", body: bytes })
+      .then(markSynced)
+      .catch(() => {});
     syncDevFocus();
     syncDevReputation();
   }
@@ -515,6 +535,7 @@ async function main() {
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
     hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
     updatePathHud(); // Track B2: keep the next-step chip in sync every frame
+    updateSyncStatus(); // Track B6: refresh the "synced ✓ …ago" readout
     syncDevFocus();
   }
 
