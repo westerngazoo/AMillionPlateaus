@@ -11,6 +11,9 @@
 
 mod convert;
 mod error;
+// C5 — structural DTO parity with the native binding (`mp-godot`). Test-only.
+#[cfg(test)]
+mod parity;
 
 use mp_crdt::{CrdtDoc, SyncSession};
 use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};

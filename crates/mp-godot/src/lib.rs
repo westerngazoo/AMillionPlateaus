@@ -19,3 +19,7 @@ pub use graph_source::GraphData;
 
 #[cfg(feature = "gdext")]
 mod gdext;
+
+// C5 — structural DTO parity with the web binding (`mp-wasm`). Test-only.
+#[cfg(test)]
+mod parity;
