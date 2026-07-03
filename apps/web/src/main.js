@@ -75,6 +75,7 @@ import {
   nextPathStep,
   pathProgress,
   publishedPaths,
+  rankPublishedPaths,
   PATH_KIND,
 } from "./paths.js";
 import { buildBridge } from "./bridge.js";
@@ -2384,13 +2385,41 @@ async function main() {
     renderDraftPathSteps();
   }
 
+  // Each published path's author reach = the sum of their GA grade-1 reach across
+  // the path's domains (R-0035), read from the SAME rank_wizards the fog/discovery
+  // path uses — so a Sybil-ring author (grade-0, reach ≈ 0) sinks to the bottom and
+  // reach-bearing authors surface first. One rank_wizards call per distinct domain.
+  function buildPathReach(paths) {
+    const logJson = JSON.stringify(log.all());
+    const byDomain = new Map(); // domainId → Map<pubkey, reach>
+    const domains = new Set();
+    for (const p of paths) for (const d of p.domains ?? []) domains.add(d);
+    for (const domain of domains) {
+      try {
+        const rows = rank_wizards(logJson, domain, MASTER_K); // [{ pubkey, reach }]
+        byDomain.set(domain, new Map(rows.map((r) => [r.pubkey, r.reach])));
+      } catch (err) {
+        console.error("[mp] rank_wizards (path reach) failed:", err);
+      }
+    }
+    return (path) => {
+      let sum = 0;
+      for (const d of path.domains ?? []) sum += byDomain.get(d)?.get(path.pubkey) ?? 0;
+      return sum;
+    };
+  }
+
   function renderPublishedPaths() {
     pathPublished.replaceChildren();
-    for (const p of publishedPaths(log.all())) {
+    const paths = publishedPaths(log.all());
+    const reachOf = buildPathReach(paths); // R-0035 author-reach weighting
+    for (const p of rankPublishedPaths(paths, reachOf)) {
       const row = document.createElement("div");
       row.className = "path-published-item";
       const who = p.pubkey === myPubkey ? "you" : shortKey(p.pubkey);
-      row.textContent = `${p.title} — ${who} (${p.steps.length} steps)`;
+      const reach = reachOf(p);
+      const reachTag = reach > 0 ? ` · reach ${reach.toFixed(1)}` : "";
+      row.textContent = `${p.title} — ${who} (${p.steps.length} steps${reachTag})`;
       const followBtn = document.createElement("button");
       followBtn.type = "button";
       followBtn.textContent = "Follow";

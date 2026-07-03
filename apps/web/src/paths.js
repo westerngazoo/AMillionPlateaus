@@ -82,3 +82,24 @@ export function publishedPaths(events = []) {
     a.pubkey < b.pubkey ? -1 : a.pubkey > b.pubkey ? 1 : 0,
   );
 }
+
+/**
+ * Rank published paths by their author's EARNED REACH (R-0035), best-first.
+ * `reachOf(path)` maps a published-path object (which carries `pubkey` + `domains`)
+ * to a numeric reach — the grade-1 reputation magnitude the app reads from the GA
+ * core; the trust-weighting stays in Rust/wasm, this only orders by it. The default
+ * gives every author reach 0, so ranking reduces to `publishedPaths`' pubkey order
+ * (back-compatible). Non-mutating. Total order: reach desc → step-count desc →
+ * pubkey asc, so equal-reach authors stay deterministic.
+ */
+export function rankPublishedPaths(paths = [], reachOf = () => 0) {
+  return [...paths]
+    .map((p) => ({ p, reach: Number(reachOf(p)) || 0 }))
+    .sort(
+      (a, b) =>
+        b.reach - a.reach ||
+        (b.p.steps?.length ?? 0) - (a.p.steps?.length ?? 0) ||
+        (a.p.pubkey < b.p.pubkey ? -1 : a.p.pubkey > b.p.pubkey ? 1 : 0),
+    )
+    .map((x) => x.p);
+}

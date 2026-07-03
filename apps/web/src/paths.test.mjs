@@ -6,6 +6,7 @@ import {
   nextPathStep,
   pathProgress,
   publishedPaths,
+  rankPublishedPaths,
   PATH_KIND,
 } from "./paths.js";
 
@@ -63,4 +64,36 @@ test("publishedPaths keeps latest per signer and sorts", () => {
   assert.equal(out[0].pubkey, "aa".repeat(32));
   assert.equal(out[1].title, "New");
   assert.deepEqual(out[1].steps, ["a", "b"]);
+});
+
+test("rankPublishedPaths orders by author reach, best-first", () => {
+  const paths = [
+    { pubkey: "aa", title: "Low", steps: ["x"], domains: ["d1"] },
+    { pubkey: "bb", title: "High", steps: ["x", "y"], domains: ["d1"] },
+    { pubkey: "cc", title: "Mid", steps: ["x"], domains: ["d2"] },
+  ];
+  const reach = { aa: 0.2, bb: 9, cc: 3 };
+  const ranked = rankPublishedPaths(paths, (p) => reach[p.pubkey]);
+  assert.deepEqual(ranked.map((p) => p.title), ["High", "Mid", "Low"]);
+});
+
+test("rankPublishedPaths defaults to a stable pubkey order (reach 0)", () => {
+  const paths = [
+    { pubkey: "cc", title: "C", steps: [] },
+    { pubkey: "aa", title: "A", steps: [] },
+    { pubkey: "bb", title: "B", steps: [] },
+  ];
+  assert.deepEqual(rankPublishedPaths(paths).map((p) => p.pubkey), ["aa", "bb", "cc"]);
+});
+
+test("rankPublishedPaths breaks reach ties by step-count then pubkey, and is non-mutating", () => {
+  const paths = [
+    { pubkey: "bb", title: "Short", steps: ["a"], domains: [] },
+    { pubkey: "aa", title: "Long", steps: ["a", "b", "c"], domains: [] },
+    { pubkey: "cc", title: "Also short", steps: ["a"], domains: [] },
+  ];
+  const before = [...paths];
+  const ranked = rankPublishedPaths(paths, () => 5); // all equal reach
+  assert.deepEqual(ranked.map((p) => p.title), ["Long", "Short", "Also short"]);
+  assert.deepEqual(paths, before); // input untouched
 });
