@@ -37,3 +37,40 @@ static func compute_fit(positions: Array, span: float = 12.0) -> Dictionary:
 	var center := (lo + hi) * 0.5
 	# offset so the SCALED centre lands at the origin
 	return {"scale": scale, "offset": -center * scale}
+
+## Push apart plateaus that landed too close after scaling (imported vaults).
+## `positions` is id -> Vector3 raw world positions; returns adjusted copy.
+static func spread_positions(positions: Dictionary, min_dist: float = 2.2, iterations: int = 24) -> Dictionary:
+	var out: Dictionary = {}
+	for id in positions:
+		out[id] = positions[id]
+	var ids: Array = out.keys()
+	if ids.size() < 2:
+		return out
+	for _iter in iterations:
+		var moved := false
+		for i in ids.size():
+			for j in range(i + 1, ids.size()):
+				var id_a: String = ids[i]
+				var id_b: String = ids[j]
+				var a: Vector3 = out[id_a]
+				var b: Vector3 = out[id_b]
+				var delta := b - a
+				var dist := delta.length()
+				if dist < 0.001:
+					delta = Vector3(0.1, 0.0, 0.1)
+					dist = delta.length()
+				if dist >= min_dist:
+					continue
+				var push := (min_dist - dist) * 0.5
+				var dir := delta / dist
+				out[id_a] = a - dir * push
+				out[id_b] = b + dir * push
+				moved = true
+		if not moved:
+			break
+	return out
+
+## Adaptive separation for large graphs (mirrors web layout.js).
+static func adaptive_min_dist(count: int) -> float:
+	return clampf(1.8 + sqrt(float(count)) * 0.35, 2.0, 5.5)

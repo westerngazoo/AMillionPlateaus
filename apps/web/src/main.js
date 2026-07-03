@@ -381,6 +381,8 @@ async function main() {
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
   let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
+  let lensId = null; // R-0025 lens: active topic while studying (persistent focus)
+  let lensMode = localStorage.getItem("mp.lensMode") !== "0"; // Obsidian-style focus (default on)
   let followPathId = null; // R-0039: local path being followed (camera/UI only)
   const PATHS_KEY = "mp.paths";
   function loadPaths() {
@@ -435,6 +437,8 @@ async function main() {
       resources,
       peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
       focusedId, // transient travel highlight (R-0019); null most of the time
+      lensId,
+      lensMode,
       visited, // studying set (R-0033)
       mastered, // mastered set — ✓ + gold (R-0030)
       community, // crowd-approved set — bedrock ring (R-0031)
@@ -1319,6 +1323,7 @@ async function main() {
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
     studyPlateau = p;
+    lensId = p.id; // focus lens: current topic full colour, neighbors medium, rest shadows
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
     // otherwise show the raw prompt:/answer: lines (and leak the answer).
@@ -1861,6 +1866,33 @@ async function main() {
 
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
+    lensId = null;
+    draw();
+  });
+
+  // Focus lens (Obsidian-style): shrink distant plateaus to shadows while studying.
+  const lensBtn = document.getElementById("lens-toggle");
+  function syncLensBtn() {
+    lensBtn.textContent = lensMode ? "Focus lens ✓" : "Focus lens";
+    lensBtn.style.opacity = lensMode ? "1" : "0.65";
+  }
+  syncLensBtn();
+  lensBtn.addEventListener("click", () => {
+    lensMode = !lensMode;
+    try {
+      localStorage.setItem("mp.lensMode", lensMode ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    syncLensBtn();
+    draw();
+  });
+
+  document.getElementById("open-3d").addEventListener("click", () => {
+    importNote(
+      "3D world: run `godot --path apps/godot` (Godot 4). Uses true e2 depth — dense imports separate naturally. See apps/godot/README.md.",
+      true,
+    );
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────

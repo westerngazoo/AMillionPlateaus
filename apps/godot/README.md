@@ -5,12 +5,14 @@ empirical-axis collapse** the 2D map projects away. It is a **pure consumer** of
 unchanged GA/CRDT core: it places a plateau at its `{e1,e2,e3}` position and does
 **no GA**.
 
-## Status — Slice 1 (Track A foundation)
+## Status — Slice 1 (Track A foundation) + dense-graph spacing
 
 This slice ships the binding-agnostic, GPU-free foundation:
 
 - `src/place_node.gd` — pure `place_node(e1,e2,e3,fit)` + `compute_fit(positions)`
   (axes `x=e1, y=e3, z=e2`; "up" is the Creative axis). **AC1.**
+  Also `spread_positions` + `adaptive_min_dist` — Obsidian-style 3D separation for
+  imported vaults (many topics sharing similar GA coords).
 - `src/label_plan.gd` — pure `plan_labels(rects, focused, lit)` (a port of R-0024's
   `planLabels`) + `project_to_rect(pos, view, proj, viewport, size)` (the
   camera-dependent surface, modelled with a plain `Transform3D`+`Projection` so it is

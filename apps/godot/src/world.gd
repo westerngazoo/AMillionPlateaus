@@ -49,13 +49,22 @@ func build(src, rep_json: String = "") -> void:
 	positions_by_id.clear()
 
 	var plats: Array = src.plateaus()
-	var fit: Dictionary = PlaceNodeS.compute_fit(plats)
+	var fit: Dictionary = PlaceNodeS.compute_fit(plats, _fit_span(plats.size()))
 	var lit := {}
 	for id in src.reachable(rep_json):
 		lit[id] = true
 
+	var raw: Dictionary = {}
 	for p in plats:
-		var world_pos: Vector3 = PlaceNodeS.place_node(p.e1, p.e2, p.e3, fit)
+		raw[p.id] = PlaceNodeS.place_node(p.e1, p.e2, p.e3, fit)
+	var spread: Dictionary = PlaceNodeS.spread_positions(
+		raw,
+		PlaceNodeS.adaptive_min_dist(plats.size()),
+		32
+	)
+
+	for p in plats:
+		var world_pos: Vector3 = spread[p.id]
 		positions_by_id[p.id] = world_pos
 		graph.add_child(_make_plateau(p, world_pos, lit.has(p.id)))
 
@@ -90,6 +99,10 @@ func _frame_camera() -> void:
 		return
 	cam.position = Vector3(0.0, 5.0, 16.0)
 	cam.look_at(Vector3.ZERO, Vector3.UP)
+
+func _fit_span(count: int) -> float:
+	# Larger imports need more volume so nodes don't stack in 3D either.
+	return clampf(12.0 + sqrt(float(count)) * 1.2, 12.0, 28.0)
 
 func _make_plateau(p: Dictionary, world_pos: Vector3, is_lit: bool) -> Node3D:
 	var root := Node3D.new()
