@@ -21,7 +21,8 @@ import init, {
   proof_kind,
   path_kind,
 } from "../pkg/mp_wasm.js";
-import { render, RADIUS } from "./render.js";
+import { render } from "./render.js";
+import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -82,7 +83,7 @@ import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
-import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
+import { centerOn, zoomAt } from "./wayfinding.js";
 import { pinch } from "./gestures.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
@@ -1161,18 +1162,12 @@ async function main() {
     const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
-    // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
-    // (no reachability gate). Opening one is "studying" it.
-    let hit = null;
-    let best = RADIUS * RADIUS;
-    for (const p of graph.plateaus()) {
-      const pt = points.get(p.id);
-      const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
-      if (d <= best) {
-        best = d;
-        hit = p;
-      }
-    }
+    // R-0033 — the map is browsable: hit-test the last-drawn placement (no
+    // reachability gate). Discs win over bridges; `hitTest` iterates `points`
+    // keys so it is total (SPEC-0043 §2.4). Opening a disc is "studying" it.
+    const id = hitTest(points, mx, my, { bridges: graph.bridges(), tol: 6 });
+    if (id === null) return;
+    const hit = graph.plateaus().find((p) => p.id === id);
     if (hit) {
       // Focusing a plateau is the wizard's position — announce it to peers
       // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
@@ -1190,14 +1185,11 @@ async function main() {
       openPlateau(hit);
       return;
     }
-    // No disc hit → test bridges (R-0029). Every disc is now a hit candidate, so
-    // "cursor over a disc" ⇔ `hit` is set above — a disc already wins precedence
-    // over a bridge, and opening a bridge stays read-only.
-    const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
-    if (bid) {
-      const b = graph.bridges().find((x) => x.id === bid);
-      if (b) openBridge(b, graph);
-    }
+    // Not a disc → the id is a bridge (R-0029). Disc precedence is already handled
+    // by hitTest (a disc under the cursor is returned first); opening a bridge
+    // stays read-only.
+    const b = graph.bridges().find((x) => x.id === id);
+    if (b) openBridge(b, graph);
   });
 
   // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
