@@ -53,6 +53,16 @@ pub struct PathDto {
     pub domains: Vec<String>,
 }
 
+/// One row of the graph-grounded retrieval ranking (C6 / R-0007): a plateau and
+/// how strongly a reputation projects onto it. Same shape as `mp-wasm`'s
+/// `NearestDto` (`{ id, name, score }`), guaranteed by the parity tests.
+#[derive(serde::Serialize)]
+pub struct NearestDto {
+    pub id: String,
+    pub name: String,
+    pub score: f32,
+}
+
 pub fn path_dto(id: &str, title: &str, goal: &str, steps: &[String], domains: &[String]) -> PathDto {
     PathDto {
         id: id.to_string(),

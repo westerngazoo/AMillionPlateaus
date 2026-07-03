@@ -9,6 +9,8 @@ use mp_domain::ga::Mv;
 use mp_domain::{KnowledgeGraph, WizardReputation};
 use uuid::Uuid;
 
+use crate::dto::NearestDto;
+
 /// Failure decoding `wizard_rep_json`.
 #[derive(thiserror::Error, Debug)]
 pub enum ReputationParseError {
@@ -53,6 +55,31 @@ pub fn reachable_ids(g: &KnowledgeGraph, json: &str) -> Result<Vec<String>, Repu
         .collect())
 }
 
+/// Top-`k` plateaus nearest a reputation JSON's orientation, ordered by
+/// descending projection score (C6 / R-0007) — the retrieval mirror of
+/// `mp-wasm`'s `nearest_dtos`. The GA ranking is delegated to `mp-domain`
+/// (`KnowledgeGraph::nearest_plateaus`); this only decodes the same reputation
+/// JSON `reachable_ids` consumes and marshals ids/names/scores into DTOs. A
+/// ranked id with no matching plateau is skipped (keeps the marshaller total —
+/// never a row with an empty name).
+pub fn nearest_dtos(
+    g: &KnowledgeGraph,
+    json: &str,
+    k: usize,
+) -> Result<Vec<NearestDto>, ReputationParseError> {
+    let rep = parse_reputation(json)?;
+    Ok(g.nearest_plateaus(&rep, k)
+        .into_iter()
+        .filter_map(|(id, score)| {
+            g.plateau(&id).map(|p| NearestDto {
+                id: id.to_string(),
+                name: p.name.clone(),
+                score,
+            })
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,8 +91,8 @@ mod tests {
         let a = PlateauNode::new("A", domain, 0.95, 0.1, 0.0);
         let b = PlateauNode::new("B", domain, 0.1, 0.1, 0.9);
         let mut g = KnowledgeGraph::new();
-        g.add_plateau(a.clone()).expect("add");
-        g.add_plateau(b.clone()).expect("add");
+        g.add_plateau(a.clone());
+        g.add_plateau(b.clone());
         let json = format!(
             r#"{{ "domain_reps": {{ "{domain}": [0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0] }} }}"#
         );
@@ -79,8 +106,45 @@ mod tests {
         let domain = Uuid::new_v4();
         let p = PlateauNode::new("P", domain, 0.9, 0.1, 0.0);
         let mut g = KnowledgeGraph::new();
-        g.add_plateau(p).expect("add");
+        g.add_plateau(p);
         let ids = reachable_ids(&g, "{}").expect("reachable");
         assert!(ids.is_empty());
+    }
+
+    // ── C6 / R-0007 — nearest_dtos retrieval ranking ─────────
+
+    #[test]
+    fn nearest_dtos_ranks_and_truncates() {
+        let domain = Uuid::new_v4();
+        let a = PlateauNode::new("A", domain, 1.0, 0.0, 0.0);
+        let b = PlateauNode::new("B", domain, 0.0, 0.0, 1.0);
+        let (a_id, b_id) = (a.id, b.id);
+        let mut g = KnowledgeGraph::new();
+        g.add_plateau(a);
+        g.add_plateau(b);
+        // A reputation facing e1 ranks A above B (both returned — no threshold).
+        let json = format!(
+            r#"{{ "domain_reps": {{ "{domain}": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }} }}"#
+        );
+        let rows = nearest_dtos(&g, &json, 10).expect("nearest");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, a_id.to_string(), "A (e1) is nearest");
+        assert_eq!(rows[0].name, "A");
+        assert!(rows[0].score >= rows[1].score, "descending by score");
+        assert_eq!(rows[1].id, b_id.to_string());
+
+        // k truncates to the top of the ranking.
+        let top1 = nearest_dtos(&g, &json, 1).expect("nearest");
+        assert_eq!(top1.len(), 1);
+        assert_eq!(top1[0].id, a_id.to_string());
+    }
+
+    #[test]
+    fn nearest_dtos_rejects_bad_json() {
+        let g = KnowledgeGraph::new();
+        assert!(matches!(
+            nearest_dtos(&g, "{ broken", 5),
+            Err(ReputationParseError::Json(_))
+        ));
     }
 }
