@@ -73,6 +73,7 @@ import {
   buildPath,
   pathDomains,
   nextPathStep,
+  nextStepInfo,
   pathProgress,
   publishedPaths,
   rankPublishedPaths,
@@ -432,6 +433,39 @@ async function main() {
     return nextPathStep(followSteps(), mastered);
   }
 
+  // Path next-step HUD (Track B2 / R-0039): a persistent toolbar chip showing the
+  // next unmastered step on the followed path. Pure `nextStepInfo` decides content;
+  // clicking focuses that plateau (camera-only, like Travel). Hidden when not
+  // following or the path is complete. Refreshed from draw() so it always tracks.
+  const pathNextHud = document.getElementById("path-next-hud");
+  let pathHudTimer = null;
+  function updatePathHud() {
+    const info = nextStepInfo(followSteps(), mastered);
+    if (!info) {
+      pathNextHud.hidden = true;
+      return;
+    }
+    const name = doc.to_graph().plateaus().find((p) => p.id === info.id)?.name ?? "next step";
+    pathNextHud.textContent = `→ Next: ${name} (${info.position}/${info.total})`;
+    pathNextHud.hidden = false;
+  }
+  pathNextHud.addEventListener("click", () => {
+    const info = nextStepInfo(followSteps(), mastered);
+    if (!info) return;
+    const p = doc.to_graph().plateaus().find((x) => x.id === info.id);
+    if (!p) return;
+    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    VIEW.cx = cx;
+    VIEW.cy = cy;
+    focusedId = p.id; // transient highlight ring (render.js)
+    draw();
+    if (pathHudTimer) clearTimeout(pathHudTimer);
+    pathHudTimer = setTimeout(() => {
+      focusedId = null;
+      draw();
+    }, 1800);
+  });
+
   // Show the PUBLIC half of the key (safe to display). The secret is never shown.
   identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
 
@@ -474,6 +508,7 @@ async function main() {
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
     hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
+    updatePathHud(); // Track B2: keep the next-step chip in sync every frame
     syncDevFocus();
   }
 

@@ -4,6 +4,7 @@ import {
   buildPath,
   pathDomains,
   nextPathStep,
+  nextStepInfo,
   pathProgress,
   publishedPaths,
   rankPublishedPaths,
@@ -30,6 +31,13 @@ test("nextPathStep returns first unmastered step", () => {
   const mastered = new Set(["a"]);
   assert.equal(nextPathStep(["a", "b", "c"], mastered), "b");
   assert.equal(nextPathStep(["a", "b"], new Set(["a", "b"])), null);
+});
+
+test("nextStepInfo returns the next step with 1-based position and total", () => {
+  assert.deepEqual(nextStepInfo(["a", "b", "c"], new Set(["a"])), { id: "b", position: 2, total: 3 });
+  assert.deepEqual(nextStepInfo(["a", "b"], new Set()), { id: "a", position: 1, total: 2 });
+  assert.equal(nextStepInfo(["a", "b"], new Set(["a", "b"])), null); // fully mastered → hide
+  assert.equal(nextStepInfo([], new Set()), null); // empty path → hide
 });
 
 test("pathProgress counts mastered steps", () => {

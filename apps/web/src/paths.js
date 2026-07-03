@@ -41,6 +41,18 @@ export function nextPathStep(stepIds, mastered = new Set()) {
   return null;
 }
 
+/**
+ * The next-step HUD payload (R-0039): the first not-yet-mastered step plus its
+ * 1-based position and the total. `null` when the path is empty or fully mastered
+ * (the chip then hides). Pure — the DOM chip in main.js is a thin view over this.
+ */
+export function nextStepInfo(stepIds = [], mastered = new Set()) {
+  const total = stepIds.length;
+  const id = nextPathStep(stepIds, mastered);
+  if (id === null) return null;
+  return { id, position: stepIds.indexOf(id) + 1, total };
+}
+
 /** Progress along a path: mastered count / total. */
 export function pathProgress(stepIds, mastered = new Set()) {
   if (!stepIds.length) return { done: 0, total: 0 };
