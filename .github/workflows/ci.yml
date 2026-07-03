@@ -1,0 +1,102 @@
+# CI — the red/green gate on every PR (issue #33).
+#
+# The workspace has a PATH dependency `garust = { path = "../garust" }` (root Cargo.toml),
+# so every Rust/wasm job checks this repo out into `AMillionPlateaus/` and clones
+# `westerngazoo/garust` as a SIBLING `garust/` — matching `../garust`.
+#
+# If `westerngazoo/garust` is PRIVATE, add a fine-grained PAT (repo:read) or deploy key as
+# the `GARUST_TOKEN` secret; the checkout below uses it when present. For a public garust
+# the token is simply ignored.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref so the queue stays short (< ~10 min warm).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust — fmt · clippy · test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AMillionPlateaus
+        uses: actions/checkout@v4
+        with:
+          path: AMillionPlateaus
+      - name: Checkout garust (sibling path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: westerngazoo/garust
+          path: garust
+          token: ${{ secrets.GARUST_TOKEN || github.token }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: AMillionPlateaus
+      - name: cargo fmt --check
+        working-directory: AMillionPlateaus
+        run: cargo fmt --all -- --check
+      - name: cargo clippy -D warnings
+        working-directory: AMillionPlateaus
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo test --workspace
+        working-directory: AMillionPlateaus
+        run: cargo test --workspace
+
+  web:
+    name: Web — node --test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AMillionPlateaus
+        uses: actions/checkout@v4
+        with:
+          path: AMillionPlateaus
+      - name: Setup Node (>= 20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Plain ES modules — no package.json / npm install. Glob the suites directly.
+      - name: node --test
+        working-directory: AMillionPlateaus
+        run: node --test apps/web/src/*.test.mjs
+
+  wasm:
+    name: wasm — wasm-pack build check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AMillionPlateaus
+        uses: actions/checkout@v4
+        with:
+          path: AMillionPlateaus
+      - name: Checkout garust (sibling path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: westerngazoo/garust
+          path: garust
+          token: ${{ secrets.GARUST_TOKEN || github.token }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: AMillionPlateaus
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      # Build-only check; pkg/ stays gitignored (never committed).
+      - name: wasm-pack build crates/mp-wasm
+        working-directory: AMillionPlateaus
+        run: wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
