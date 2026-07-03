@@ -22,7 +22,8 @@ import init, {
   path_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
-import { LAYOUT_PRESET_ORDER } from "./layout.js";
+import { LAYOUT_PRESET_ORDER, bridgeNeighbors } from "./layout.js";
+import { subgraphDigest, digestFilename } from "./digest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -1772,6 +1773,32 @@ async function main() {
     btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
   }
+
+  // Download study digest (Track B7 / R-0026): the focused subgraph (this topic +
+  // its bridge-neighbors + its resources) as a Markdown file, built by the pure
+  // `subgraphDigest` and saved via an object-URL. Offline — no model, no network.
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  document.getElementById("detail-digest").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    const g = doc.to_graph();
+    const bridges = g.bridges();
+    const neighborIds = bridgeNeighbors(studyPlateau.id, bridges);
+    const neighbors = g.plateaus().filter((p) => neighborIds.has(p.id));
+    const touching = bridges.filter((b) => b.from === studyPlateau.id || b.to === studyPlateau.id);
+    const own = g.resources().filter((r) => r.plateau_id === studyPlateau.id);
+    const md = subgraphDigest({ plateau: studyPlateau, neighbors, bridges: touching, resources: own });
+    downloadText(md, digestFilename(studyPlateau.name));
+  });
 
   // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
   // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS

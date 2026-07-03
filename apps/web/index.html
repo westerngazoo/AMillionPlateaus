@@ -283,6 +283,13 @@
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
       }
       .detail-study button:hover { background: #345780; }
+      /* Download study digest (Track B7). */
+      .detail-digest { margin-top: 6px; }
+      .detail-digest button {
+        font-size: 12px; padding: 5px 10px; border-radius: 8px;
+        background: #1b2735; color: #9fd0b4; border: 1px solid #34495f; cursor: pointer;
+      }
+      .detail-digest button:hover { background: #223346; }
       .detail-reply {
         font-size: 13px; line-height: 1.5; color: #d6e0ea; white-space: pre-wrap;
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
@@ -818,6 +825,9 @@
            resources, via the bring-your-own model (R-0007). Buttons filled by main.js. -->
       <h3 class="detail-res-title">Study with your companion</h3>
       <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
+      <!-- Offline study digest (Track B7 / R-0026): download this topic + its
+           neighbors + resources as a self-contained Markdown file. -->
+      <div class="detail-digest"><button id="detail-digest" type="button">⬇ Download study digest</button></div>
       <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
       <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm.
            A model-gated "Prove it" toggle (R-0032) is appended here by main.js. -->
