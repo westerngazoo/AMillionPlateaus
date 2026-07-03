@@ -54,3 +54,54 @@ jobs:
           ./tools/godot/Godot --headless \
             --path apps/godot \
             --script res://test/run_tests.gd
+
+  gdext-build:
+    name: GDExtension build (Linux)
+    runs-on: ubuntu-latest
+    # The workspace pins garust as a path dep (`garust = { path = "../garust" }`
+    # in Cargo.toml — a sibling of the repo root). CI has no access to that source
+    # unless it is cloned. Until the garust source location is wired up as a repo
+    # secret/variable (see GARUST_REPO below), keep this job non-blocking so it is
+    # present and runnable but never red on a missing private dep.
+    continue-on-error: true
+    env:
+      # Parameterized: set repo/org variables to point at the real garust source.
+      #   Settings → Secrets and variables → Actions → Variables:
+      #     GARUST_REPO  e.g. https://github.com/westerngazoo/garust  (or a git URL)
+      #     GARUST_REF   e.g. main  (branch/tag/sha; defaults to main)
+      # For a private repo, also add a token (e.g. GH_PAT secret) and swap the
+      # clone step to authenticate. If GARUST_REPO is empty the job self-skips.
+      GARUST_REPO: ${{ vars.GARUST_REPO }}
+      GARUST_REF: ${{ vars.GARUST_REF || 'main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Clone garust next to the repo root so the `../garust` path dep resolves.
+      # $GITHUB_WORKSPACE is the checkout dir; its parent is where `../garust` lands.
+      - name: Fetch garust (sibling path dependency)
+        id: garust
+        run: |
+          if [ -z "${GARUST_REPO}" ]; then
+            echo "GARUST_REPO is not set — skipping the gdext build."
+            echo "Set the GARUST_REPO Actions variable to enable this job."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git clone --depth 1 --branch "${GARUST_REF}" "${GARUST_REPO}" "${GITHUB_WORKSPACE}/../garust"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build mp-godot GDExtension
+        if: steps.garust.outputs.skip != 'true'
+        run: cargo build -p mp-godot --features gdext
+
+      - name: Note when skipped
+        if: steps.garust.outputs.skip == 'true'
+        run: |
+          echo "::notice title=gdext-build skipped::GARUST_REPO not configured; \
+          set the GARUST_REPO (and optionally GARUST_REF) Actions variable to build \
+          the mp-godot GDExtension in CI."
