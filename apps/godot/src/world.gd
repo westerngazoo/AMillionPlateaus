@@ -7,6 +7,7 @@ extends Node3D
 const LIT := Color(1.0, 0.82, 0.4)
 const FOGGED := Color(0.18, 0.24, 0.31)
 const FOCUS := Color(0.62, 0.85, 1.0)
+const RESOURCE := Color(0.55, 1.0, 0.72)
 const PlaceNodeS := preload("res://src/place_node.gd")
 const LabelPlanS := preload("res://src/label_plan.gd")
 const DomainPaletteS := preload("res://src/domain_palette.gd")
@@ -206,6 +207,8 @@ func build(src, rep_json: String = "") -> void:
 			graph.add_child(bnode)
 			_bridge_nodes[b.id] = bnode
 
+	_attach_resources(src)
+
 	_ensure_environment()
 	_frame_camera()
 	_apply_focus_file()
@@ -275,6 +278,42 @@ func _update_labels() -> void:
 		var label := node.get_child(1) as Label3D
 		if label:
 			label.visible = kept_set.has(id)
+
+# A5: render read-only resource orbs, parented to their plateau node so they inherit
+# its world position + focus-lens scale (and never change the Graph child count, which
+# the scene smoke test guards). Resources whose plateau is absent are skipped.
+func _attach_resources(src) -> void:
+	var res: Array = src.resources() if src.has_method("resources") else []
+	var by_plateau: Dictionary = {}
+	for r in res:
+		var pid := str(r.get("plateau_id", ""))
+		if not _plateau_nodes.has(pid):
+			continue
+		if not by_plateau.has(pid):
+			by_plateau[pid] = []
+		by_plateau[pid].append(r)
+	for pid in by_plateau:
+		var list: Array = by_plateau[pid]
+		var node: Node3D = _plateau_nodes[pid]
+		for i in list.size():
+			node.add_child(_make_resource_marker(list[i], i, list.size()))
+
+func _make_resource_marker(r: Dictionary, index: int, count: int) -> MeshInstance3D:
+	var orb := MeshInstance3D.new()
+	orb.name = "Resource_%s" % str(r.get("id", index))
+	orb.set_meta("resource_id", str(r.get("id", "")))
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.12
+	sphere.height = 0.24
+	orb.mesh = sphere
+	orb.position = PlaceNodeS.resource_offset(index, count)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = RESOURCE
+	mat.emission_enabled = true
+	mat.emission = RESOURCE
+	mat.emission_energy_multiplier = 1.2
+	orb.material_override = mat
+	return orb
 
 func _neighbor_ids(id: String) -> Dictionary:
 	var out := {}
