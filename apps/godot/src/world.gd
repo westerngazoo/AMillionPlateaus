@@ -68,15 +68,37 @@ func _read_text(path: String, fallback: String) -> String:
 func _apply_focus_file() -> void:
 	if _watch_focus_path.is_empty() or not FileAccess.file_exists(_watch_focus_path):
 		return
-	var data = JSON.parse_string(FileAccess.get_file_as_string(_watch_focus_path))
+	var parsed := parse_focus(FileAccess.get_file_as_string(_watch_focus_path))
+	_lens_mode = parsed.lens_mode
+	_focus_id = parsed.focus_id
+	_apply_focus_visuals()
+	_fly_to_focus()
+
+## Pure: parse a `focus.json` payload → { lens_mode: bool, focus_id: String }. Mirrors
+## the read-only sync contract: `lens_mode` gates whether `lens_id` is the active
+## focus, and a "null"/absent id (or the lens turned off) means no focus. Bad JSON →
+## lens on, no focus. Static + scene-free so it is unit-tested headless.
+static func parse_focus(text: String) -> Dictionary:
+	var data = JSON.parse_string(text)
 	if typeof(data) != TYPE_DICTIONARY:
-		return
-	_lens_mode = bool(data.get("lens_mode", true))
-	var lid = str(data.get("lens_id", ""))
+		return {"lens_mode": true, "focus_id": ""}
+	var lens_mode := bool(data.get("lens_mode", true))
+	var lid := str(data.get("lens_id", ""))
 	if lid == "null":
 		lid = ""
-	_focus_id = lid if _lens_mode else ""
-	_apply_focus_visuals()
+	return {"lens_mode": lens_mode, "focus_id": lid if lens_mode else ""}
+
+# A2: smoothly tween the camera toward the current focus plateau (if any). Guarded on
+# tree membership + a known position so build()/headless callers stay side-effect free.
+func _fly_to_focus() -> void:
+	if not is_inside_tree():
+		return
+	var active := _focus_id if _lens_mode else ""
+	if active.is_empty() or not positions_by_id.has(active):
+		return
+	var cam := get_node_or_null("Camera3D")
+	if cam != null and cam.has_method("fly_to"):
+		cam.fly_to(positions_by_id[active])
 
 func _try_load_blob(native) -> bool:
 	_watch_path = OS.get_environment("MP_WORLD_BLOB")
@@ -216,6 +238,7 @@ func _pick_plateau(screen_pos: Vector2) -> bool:
 		return false
 	_focus_id = best_id
 	_apply_focus_visuals()
+	_fly_to_focus()
 	print("Focus: %s" % best_id)
 	return true
 
