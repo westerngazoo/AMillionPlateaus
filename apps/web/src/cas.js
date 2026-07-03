@@ -19,8 +19,15 @@ function tokenize(src) {
   let i = 0;
   while (i < s.length) {
     const c = s[i];
-    if (c === " " || c === "\t" || c === "\n" || c === "\r") { i++; continue; }
-    if ("+-*/^()".includes(c)) { toks.push({ k: c }); i++; continue; }
+    if (c === " " || c === "\t" || c === "\n" || c === "\r") {
+      i++;
+      continue;
+    }
+    if ("+-*/^()".includes(c)) {
+      toks.push({ k: c });
+      i++;
+      continue;
+    }
     if ((c >= "0" && c <= "9") || c === ".") {
       let j = i + 1;
       while (j < s.length && ((s[j] >= "0" && s[j] <= "9") || s[j] === ".")) j++;
@@ -87,24 +94,42 @@ export function parseExpr(src, variable = "x") {
   }
   function parseUnary() {
     const t = peek();
-    if (t && t.k === "-") { next(); return { t: "neg", a: parseUnary() }; }
-    if (t && t.k === "+") { next(); return parseUnary(); }
+    if (t && t.k === "-") {
+      next();
+      return { t: "neg", a: parseUnary() };
+    }
+    if (t && t.k === "+") {
+      next();
+      return parseUnary();
+    }
     return parsePower();
   }
   function parsePower() {
     const base = parseAtom();
     const t = peek();
-    if (t && t.k === "^") { next(); return { t: "pow", a: base, b: parseUnary() }; } // right-assoc
+    if (t && t.k === "^") {
+      next();
+      return { t: "pow", a: base, b: parseUnary() };
+    } // right-assoc
     return base;
   }
   function parseAtom() {
     const t = next();
     if (!t) throw new Error("unexpected end");
     if (t.k === "num") return { t: "num", v: t.v };
-    if (t.k === "(") { const e = parseExpression(); expect(")"); return e; }
+    if (t.k === "(") {
+      const e = parseExpression();
+      expect(")");
+      return e;
+    }
     if (t.k === "ident") {
       const name = t.v.toLowerCase();
-      if (FUNCS.has(name)) { expect("("); const a = parseExpression(); expect(")"); return { t: "func", name, a }; }
+      if (FUNCS.has(name)) {
+        expect("(");
+        const a = parseExpression();
+        expect(")");
+        return { t: "func", name, a };
+      }
       if (name === "pi") return { t: "const", name: "pi" };
       if (name === "e") return { t: "const", name: "e" };
       if (t.v === variable) return { t: "var" };
@@ -121,30 +146,49 @@ export function parseExpr(src, variable = "x") {
 /** Evaluate an AST at `x` → a JS number (NaN/±Infinity at undefined points). Real-only. */
 export function evalAt(ast, x) {
   switch (ast.t) {
-    case "num": return ast.v;
-    case "const": return ast.name === "pi" ? Math.PI : Math.E;
-    case "var": return x;
-    case "neg": return -evalAt(ast.a, x);
-    case "add": return evalAt(ast.a, x) + evalAt(ast.b, x);
-    case "sub": return evalAt(ast.a, x) - evalAt(ast.b, x);
-    case "mul": return evalAt(ast.a, x) * evalAt(ast.b, x);
-    case "div": return evalAt(ast.a, x) / evalAt(ast.b, x);
-    case "pow": return Math.pow(evalAt(ast.a, x), evalAt(ast.b, x));
+    case "num":
+      return ast.v;
+    case "const":
+      return ast.name === "pi" ? Math.PI : Math.E;
+    case "var":
+      return x;
+    case "neg":
+      return -evalAt(ast.a, x);
+    case "add":
+      return evalAt(ast.a, x) + evalAt(ast.b, x);
+    case "sub":
+      return evalAt(ast.a, x) - evalAt(ast.b, x);
+    case "mul":
+      return evalAt(ast.a, x) * evalAt(ast.b, x);
+    case "div":
+      return evalAt(ast.a, x) / evalAt(ast.b, x);
+    case "pow":
+      return Math.pow(evalAt(ast.a, x), evalAt(ast.b, x));
     case "func": {
       const v = evalAt(ast.a, x);
       switch (ast.name) {
-        case "sin": return Math.sin(v);
-        case "cos": return Math.cos(v);
-        case "tan": return Math.tan(v);
-        case "sqrt": return Math.sqrt(v);
-        case "exp": return Math.exp(v);
-        case "ln": return Math.log(v);
-        case "log": return Math.log10(v);
-        case "abs": return Math.abs(v);
-        default: return NaN;
+        case "sin":
+          return Math.sin(v);
+        case "cos":
+          return Math.cos(v);
+        case "tan":
+          return Math.tan(v);
+        case "sqrt":
+          return Math.sqrt(v);
+        case "exp":
+          return Math.exp(v);
+        case "ln":
+          return Math.log(v);
+        case "log":
+          return Math.log10(v);
+        case "abs":
+          return Math.abs(v);
+        default:
+          return NaN;
       }
     }
-    default: return NaN;
+    default:
+      return NaN;
   }
 }
 
@@ -156,27 +200,52 @@ export function numericDerivAt(ast, x, h = 1e-4) {
 
 /** AST → LaTeX, for the live preview ONLY (display, not security). Pure. */
 export function toTeX(ast) {
-  const PREC = { add: 1, sub: 1, mul: 2, div: 2, neg: 2, pow: 3, func: 4, num: 5, const: 5, var: 5 };
+  const PREC = {
+    add: 1,
+    sub: 1,
+    mul: 2,
+    div: 2,
+    neg: 2,
+    pow: 3,
+    func: 4,
+    num: 5,
+    const: 5,
+    var: 5,
+  };
   const wrap = (node, min) => {
     const tex = toTeX(node);
     return PREC[node.t] < min ? `\\left(${tex}\\right)` : tex;
   };
   switch (ast.t) {
-    case "num": return String(ast.v);
-    case "const": return ast.name === "pi" ? "\\pi" : "e";
-    case "var": return "x";
-    case "neg": return `-${wrap(ast.a, 2)}`;
-    case "add": return `${toTeX(ast.a)} + ${wrap(ast.b, 1)}`;
-    case "sub": return `${toTeX(ast.a)} - ${wrap(ast.b, 2)}`;
+    case "num":
+      return String(ast.v);
+    case "const":
+      return ast.name === "pi" ? "\\pi" : "e";
+    case "var":
+      return "x";
+    case "neg":
+      return `-${wrap(ast.a, 2)}`;
+    case "add":
+      return `${toTeX(ast.a)} + ${wrap(ast.b, 1)}`;
+    case "sub":
+      return `${toTeX(ast.a)} - ${wrap(ast.b, 2)}`;
     case "mul": {
-      const L = wrap(ast.a, 2), R = wrap(ast.b, 2);
-      const juxt = ast.a.t === "num" && (ast.b.t === "var" || ast.b.t === "pow" || ast.b.t === "func");
+      const L = wrap(ast.a, 2),
+        R = wrap(ast.b, 2);
+      const juxt =
+        ast.a.t === "num" && (ast.b.t === "var" || ast.b.t === "pow" || ast.b.t === "func");
       return juxt ? `${L}${R}` : `${L} \\cdot ${R}`;
     }
-    case "div": return `\\frac{${toTeX(ast.a)}}{${toTeX(ast.b)}}`;
-    case "pow": return `${wrap(ast.a, 4)}^{${toTeX(ast.b)}}`;
-    case "func": return ast.name === "sqrt" ? `\\sqrt{${toTeX(ast.a)}}` : `\\${ast.name}\\left(${toTeX(ast.a)}\\right)`;
-    default: return "";
+    case "div":
+      return `\\frac{${toTeX(ast.a)}}{${toTeX(ast.b)}}`;
+    case "pow":
+      return `${wrap(ast.a, 4)}^{${toTeX(ast.b)}}`;
+    case "func":
+      return ast.name === "sqrt"
+        ? `\\sqrt{${toTeX(ast.a)}}`
+        : `\\${ast.name}\\left(${toTeX(ast.a)}\\right)`;
+    default:
+      return "";
   }
 }
 
@@ -212,7 +281,8 @@ function hashString(s) {
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -267,12 +337,17 @@ export function checkEquivalence(answer, reference, opts = {}) {
     aAst = parseExpr(answer, variable);
     bAst = parseExpr(reference, variable);
   } catch {
-    return { equivalent: false, reason: "I couldn't read that — check the syntax (use *, ^, and the symbols)." };
+    return {
+      equivalent: false,
+      reason: "I couldn't read that — check the syntax (use *, ^, and the symbols).",
+    };
   }
   const points = seededPoints(reference); // seeded from the REFERENCE, not the answer
   const fail = (v) => ({
     equivalent: false,
-    reason: v.disagreed ? "Not quite — that isn't equivalent." : "I couldn't verify this — try a more explicit form.",
+    reason: v.disagreed
+      ? "Not quite — that isn't equivalent."
+      : "I couldn't verify this — try a more explicit form.",
   });
 
   if (antiderivative) {
@@ -324,7 +399,11 @@ function evalPoly(c, x) {
 export function generateDrill({ operation, seed }) {
   const rng = mulberry32((seed >>> 0) ^ hashString(operation));
   const pick = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
-  const nonzero = (lo, hi) => { let v = 0; while (v === 0) v = pick(lo, hi); return v; };
+  const nonzero = (lo, hi) => {
+    let v = 0;
+    while (v === 0) v = pick(lo, hi);
+    return v;
+  };
 
   if (operation === "differentiate") {
     const deg = pick(2, 3);
@@ -333,7 +412,11 @@ export function generateDrill({ operation, seed }) {
     const expr = polyToSrc(c);
     const reference = polyToSrc(derivativeCoeffs(c));
     return {
-      operation, reference, solution: reference, variable: "x", check: { variable: "x", checkDerivative: true },
+      operation,
+      reference,
+      solution: reference,
+      variable: "x",
+      check: { variable: "x", checkDerivative: true },
       prompt: `Differentiate with respect to $x$:\n\n$$${toTeX(parseExpr(expr))}$$`,
     };
   }
@@ -346,19 +429,28 @@ export function generateDrill({ operation, seed }) {
     const integrand = derivativeCoeffs(P);
     const reference = polyToSrc(integrand); // the check compares d/dx(answer) ≡ integrand
     return {
-      operation, reference, solution: polyToSrc(P), variable: "x", check: { variable: "x", antiderivative: true },
+      operation,
+      reference,
+      solution: polyToSrc(P),
+      variable: "x",
+      check: { variable: "x", antiderivative: true },
       prompt: `Find an antiderivative (any constant of integration is fine):\n\n$$\\int ${toTeX(parseExpr(polyToSrc(integrand)))}\\,dx$$`,
     };
   }
   if (operation === "simplify") {
-    const a = nonzero(-6, 6), b = nonzero(-6, 6);
+    const a = nonzero(-6, 6),
+      b = nonzero(-6, 6);
     let s = a + b;
     if (s === 0) s = 1; // keep the reference x-dependent
     const k = pick(-5, 5);
     const expr = `${a}*x + ${b}*x${k ? ` + ${k}` : ""}`;
     const reference = `${s}*x${k ? ` + ${k}` : ""}`;
     return {
-      operation, reference, solution: reference, variable: "x", check: { variable: "x", checkDerivative: true },
+      operation,
+      reference,
+      solution: reference,
+      variable: "x",
+      check: { variable: "x", checkDerivative: true },
       prompt: `Simplify:\n\n$$${toTeX(parseExpr(expr))}$$`,
     };
   }
@@ -369,7 +461,10 @@ export function generateDrill({ operation, seed }) {
   const at = nonzero(-3, 3);
   const value = evalPoly(c, at);
   return {
-    operation: "evaluate", reference: `${value}`, solution: `${value}`, variable: "x",
+    operation: "evaluate",
+    reference: `${value}`,
+    solution: `${value}`,
+    variable: "x",
     check: { variable: "x", checkDerivative: false },
     prompt: `Evaluate at $x = ${at}$:\n\n$$${toTeX(parseExpr(polyToSrc(c)))}$$`,
   };
@@ -439,5 +534,8 @@ export function parseChallenges(body = "") {
  *  so the author's answer never shows in the read view or rides to the model. */
 export function stripChallenges(body = "") {
   const re = new RegExp(SOLVE_FENCE.source, "gi");
-  return String(body).replace(re, "").replace(/\n{3,}/g, "\n\n").trim();
+  return String(body)
+    .replace(re, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

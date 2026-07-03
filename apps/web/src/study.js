@@ -36,7 +36,9 @@ export function buildPlateauStudyContext({ plateau, resources = [] } = {}) {
   return [
     `The learner is studying the plateau "${name}".`,
     body ? `Its notes:\n${body}` : "It has no notes yet.",
-    top.length ? `Resources pinned here (best first):\n${top.join("\n")}` : "No resources pinned yet.",
+    top.length
+      ? `Resources pinned here (best first):\n${top.join("\n")}`
+      : "No resources pinned yet.",
     "Help them learn THIS topic, grounded ONLY in the notes and resources above. " +
       "If the notes are thin, say so and suggest what to add — do not invent facts or resources.",
   ].join("\n\n");
@@ -45,11 +47,16 @@ export function buildPlateauStudyContext({ plateau, resources = [] } = {}) {
 // The companion study actions: a label + the prompt sent through the existing
 // bring-your-own model path (R-0007), grounded by buildPlateauStudyContext.
 export const STUDY_ACTIONS = [
-  { key: "summary", label: "Summarize", prompt: "Summarize this topic in a few clear sentences, using only its notes." },
+  {
+    key: "summary",
+    label: "Summarize",
+    prompt: "Summarize this topic in a few clear sentences, using only its notes.",
+  },
   {
     key: "model",
     label: "Mental model",
-    prompt: "Give me the core mental model for this topic — the 2–3 ideas everything else hangs on.",
+    prompt:
+      "Give me the core mental model for this topic — the 2–3 ideas everything else hangs on.",
   },
   {
     key: "first",
@@ -165,7 +172,9 @@ export function crossLinks({ resources = [], plateaus = [], uri, currentPlateauI
   }
   return [...best.entries()]
     .map(([id, count]) => ({ id, name: nameOf.get(id), count }))
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    );
 }
 
 /**
@@ -187,5 +196,7 @@ export function bridgeResources({ resources = [], fromId, toId } = {}) {
   return [...onFrom]
     .filter((k) => onTo.has(k))
     .map((k) => meta.get(k))
-    .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
+    .sort((a, b) =>
+      a.title < b.title ? -1 : a.title > b.title ? 1 : a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0,
+    );
 }

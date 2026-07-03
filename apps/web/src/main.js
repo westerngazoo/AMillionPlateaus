@@ -678,7 +678,8 @@ async function main() {
 
   function appendMessage(role, text) {
     const div = document.createElement("div");
-    div.className = role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
+    div.className =
+      role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
     div.textContent = text;
     companionLog.append(div);
     companionLog.scrollTop = companionLog.scrollHeight;
@@ -929,7 +930,8 @@ async function main() {
       const hit = SUGGESTED_DOMAINS.find(
         (s) => s.name.toLowerCase() === lensName.value.trim().toLowerCase(),
       );
-      if (hit) for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
+      if (hit)
+        for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
     });
     const addBtn = document.createElement("button");
     addBtn.type = "button";
@@ -1331,7 +1333,9 @@ async function main() {
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
     // otherwise show the raw prompt:/answer: lines (and leak the answer).
-    detailBody.innerHTML = renderMarkdown(stripChallenges(p.description || "") || "_No description yet._");
+    detailBody.innerHTML = renderMarkdown(
+      stripChallenges(p.description || "") || "_No description yet._",
+    );
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
@@ -1439,7 +1443,9 @@ async function main() {
     const shared = bridgeResources({ resources: graph.resources(), fromId: b.from, toId: b.to });
     const label = document.createElement("p");
     label.className = "bridge-res-label";
-    label.textContent = shared.length ? "Books that span both:" : "No resources span both topics yet.";
+    label.textContent = shared.length
+      ? "Books that span both:"
+      : "No resources span both topics yet.";
     detailBridge.append(label);
     if (shared.length) {
       const ul = document.createElement("ul");
@@ -1521,7 +1527,9 @@ async function main() {
 
       const stones = document.createElement("span");
       stones.className = crystallized ? "res-stones bedrock" : "res-stones";
-      stones.textContent = crystallized ? `◆ ${Math.round(r.vote_count)}` : `● ${Math.round(r.vote_count)}`;
+      stones.textContent = crystallized
+        ? `◆ ${Math.round(r.vote_count)}`
+        : `● ${Math.round(r.vote_count)}`;
       stones.title = crystallized ? "crystallized — community-vouched" : "weighted stones";
       li.append(stones);
 
@@ -1593,7 +1601,9 @@ async function main() {
       .to_graph()
       .plateaus()
       .filter((p) => p.id !== currentId)
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .sort((a, b) =>
+        a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
     for (const p of others) {
       const label = document.createElement("label");
       label.className = "also-pin-item";
@@ -1664,7 +1674,10 @@ async function main() {
     }
     showStudyReply("…"); // feedback in the drawer while the model answers
     // R-0034: strip any author ```solve answer from the grounding so it never rides to the model.
-    const groundPlateau = { name: studyPlateau.name, description: stripChallenges(studyPlateau.description || "") };
+    const groundPlateau = {
+      name: studyPlateau.name,
+      description: stripChallenges(studyPlateau.description || ""),
+    };
     const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
     const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
@@ -1673,7 +1686,10 @@ async function main() {
         showStudyReply(reply);
         // Shares the global transcript by design — one companion, one history
         // (R-0023): a plateau answer can context a later global turn, and vice-versa.
-        history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+        history.push(
+          { role: "user", content: action.prompt },
+          { role: "assistant", content: reply },
+        );
       })
       .catch((err) => {
         appendMessage("error", `⚠ ${err.message}`); // graceful (R-0007 AC4)
@@ -1696,9 +1712,18 @@ async function main() {
   // the verdict parse is fail-safe. Wired once — the box is a static sibling, so
   // a draft survives renderMastery's replaceChildren.
   const PROOF_SYMBOLS = [
-    ["∀", "\\forall "], ["∃", "\\exists "], ["∈", "\\in "], ["≤", "\\le "],
-    ["≥", "\\ge "], ["⇒", "\\Rightarrow "], ["⇔", "\\iff "], ["√", "\\sqrt{}"],
-    ["∑", "\\sum"], ["∫", "\\int"], ["a/b", "\\frac{}{}"], ["lim", "\\lim_{}"],
+    ["∀", "\\forall "],
+    ["∃", "\\exists "],
+    ["∈", "\\in "],
+    ["≤", "\\le "],
+    ["≥", "\\ge "],
+    ["⇒", "\\Rightarrow "],
+    ["⇔", "\\iff "],
+    ["√", "\\sqrt{}"],
+    ["∑", "\\sum"],
+    ["∫", "\\int"],
+    ["a/b", "\\frac{}{}"],
+    ["lim", "\\lim_{}"],
     ["$ $", "$$"],
   ];
   function insertAtCursor(el, text) {
@@ -1770,8 +1795,16 @@ async function main() {
   // LOCAL, deterministic equivalence engine (no model). Correct → signMastery
   // (the same ✓). Wired once — the box is a static sibling.
   const SOLVE_SYMBOLS = [
-    ["x", "x"], ["^", "^"], ["( )", "()"], ["/", "/"], ["·", "*"],
-    ["√", "sqrt()"], ["π", "pi"], ["sin", "sin()"], ["cos", "cos()"], ["ln", "ln()"],
+    ["x", "x"],
+    ["^", "^"],
+    ["( )", "()"],
+    ["/", "/"],
+    ["·", "*"],
+    ["√", "sqrt()"],
+    ["π", "pi"],
+    ["sin", "sin()"],
+    ["cos", "cos()"],
+    ["ln", "ln()"],
   ];
   function solveInsert(text) {
     const el = solveInput;
@@ -1858,8 +1891,14 @@ async function main() {
     }
     // LOCAL deterministic check (no model). Conservative — a wrong/unparseable
     // answer signs nothing.
-    const { equivalent, reason } = checkEquivalence(ans, solveCurrent.reference, solveCurrent.check);
-    solveFeedback.textContent = equivalent ? "✓ Correct — verified equivalent to the answer." : reason;
+    const { equivalent, reason } = checkEquivalence(
+      ans,
+      solveCurrent.reference,
+      solveCurrent.check,
+    );
+    solveFeedback.textContent = equivalent
+      ? "✓ Correct — verified equivalent to the answer."
+      : reason;
     if (equivalent) {
       signMastery(studyPlateau); // the ONLY sign path — same mastery as self-test / proof
       saveProof(studyPlateau.id, "solution", ans); // R-0036 — keep it locally (private)
@@ -1913,7 +1952,7 @@ async function main() {
   document.getElementById("draft-plateau-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const spec = buildPlateau({
-      name:   document.getElementById("dp-name").value,
+      name: document.getElementById("dp-name").value,
       domain: dpDomain.value,
       e1: parseFloat(document.getElementById("dp-e1").value),
       e2: parseFloat(document.getElementById("dp-e2").value),
@@ -2022,12 +2061,15 @@ async function main() {
   // synced-in plateaus are anchorable (AC1).
   function refreshMarkerPlateaus() {
     dmPlateau.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2086,12 +2128,15 @@ async function main() {
   function refreshVoteMarkers() {
     const threshold = crystallize_threshold();
     vsMarker.replaceChildren(
-      ...doc.to_graph().resources().map((r) => {
-        const o = document.createElement("option");
-        o.value = r.id;
-        o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .resources()
+        .map((r) => {
+          const o = document.createElement("option");
+          o.value = r.id;
+          o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
+          return o;
+        }),
     );
   }
 
@@ -2270,17 +2315,23 @@ async function main() {
   let draftPathSteps = [];
 
   function plateauById(id) {
-    return doc.to_graph().plateaus().find((p) => p.id === id);
+    return doc
+      .to_graph()
+      .plateaus()
+      .find((p) => p.id === id);
   }
 
   function refreshPathTopics() {
     pathStepTopic.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2408,7 +2459,11 @@ async function main() {
     if (next) {
       const p = plateauById(next);
       if (p) {
-        const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+        const { cx, cy } = centerOn(
+          p.position,
+          { width: canvas.width, height: canvas.height },
+          VIEW.scale,
+        );
         VIEW.cx = cx;
         VIEW.cy = cy;
       }
@@ -2429,15 +2484,7 @@ async function main() {
     const plateaus = doc.to_graph().plateaus();
     const domains = pathDomains(plateaus, entry.steps);
     try {
-      ingest(
-        identity.sign_path(
-          entry.id,
-          entry.title,
-          entry.goal ?? "",
-          entry.steps,
-          domains,
-        ),
-      );
+      ingest(identity.sign_path(entry.id, entry.title, entry.goal ?? "", entry.steps, domains));
       renderPublishedPaths();
     } catch (err) {
       console.error("[mp] sign_path failed:", err);
@@ -2482,7 +2529,11 @@ async function main() {
       .find((x) => x.id === travelSel.value);
     if (!p) return;
     // Re-centre the camera so the chosen topic sits at the canvas centre.
-    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    const { cx, cy } = centerOn(
+      p.position,
+      { width: canvas.width, height: canvas.height },
+      VIEW.scale,
+    );
     VIEW.cx = cx;
     VIEW.cy = cy;
     focusedId = p.id; // transient highlight ring (render.js); cleared below

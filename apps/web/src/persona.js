@@ -117,7 +117,11 @@ export const DOMAINS = [
   // The QC-curriculum fork (curriculum.js): two near-Formal lenses that meet on
   // the e1 axis — the shared infinitesimal-calculus/algebra spine both target.
   { id: CLASSICAL_DOMAIN, label: "Classical Foundations", canonical: { e1: 0.95, e2: 0.3, e3: 0 } },
-  { id: INTUITIONISTIC_DOMAIN, label: "Intuitionistic Foundations", canonical: { e1: 0.95, e2: 0, e3: 0.3 } },
+  {
+    id: INTUITIONISTIC_DOMAIN,
+    label: "Intuitionistic Foundations",
+    canonical: { e1: 0.95, e2: 0, e3: 0.3 },
+  },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
@@ -138,7 +142,8 @@ function labelForDomain(domain, resolve) {
 
 // A one-line human blurb describing which way the lens faces. Pure, no GA.
 function describeOrientation(faced, resolve) {
-  if (faced.length === 0) return "Faces nothing yet — orient toward a domain to set where you begin.";
+  if (faced.length === 0)
+    return "Faces nothing yet — orient toward a domain to set where you begin.";
   const labels = faced.map(({ domain }) => labelForDomain(domain, resolve));
   return `Wakes facing ${labels.join(" and ")} — your starting orientation.`;
 }
@@ -182,7 +187,9 @@ export function authorPersona({ name, orient, tone } = {}, resolveLabel) {
 // (distinct golden-ratio seeds + an avalanche finalizer) give ~128-bit spread, so short or
 // near-identical names don't collide on the high bits.
 export function domainIdFor(name) {
-  const s = String(name ?? "").trim().toLowerCase();
+  const s = String(name ?? "")
+    .trim()
+    .toLowerCase();
   const lane = (salt) => {
     let h = (0x811c9dc5 ^ Math.imul(salt + 1, 0x9e3779b9)) >>> 0;
     for (let i = 0; i < s.length; i++) {
@@ -211,7 +218,11 @@ const clamp01 = (n) => {
 export function authorDomain({ name, e1, e2, e3 } = {}) {
   const label = String(name ?? "").trim();
   if (!label) return null;
-  return { id: domainIdFor(label), label, canonical: { e1: clamp01(e1), e2: clamp01(e2), e3: clamp01(e3) } };
+  return {
+    id: domainIdFor(label),
+    label,
+    canonical: { e1: clamp01(e1), e2: clamp01(e2), e3: clamp01(e3) },
+  };
 }
 
 // Suggested lenses for the add-lens datalist — grounded BLENDS of the three axes (not new

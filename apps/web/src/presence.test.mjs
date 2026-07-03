@@ -67,7 +67,10 @@ test("our OWN session is excluded — two tabs differ by session, not pubkey (AC
   ch.deliver(buildBeacon({ session: "tab2", pubkey: "SAME", plateau: "p1", ts: 1 }));
   // Our own session echoed back → ignored.
   ch.deliver(buildBeacon({ session: "me", pubkey: "SAME", plateau: "p9", ts: 1 }));
-  assert.deepEqual(p.peers().map((x) => x.session), ["tab2"]);
+  assert.deepEqual(
+    p.peers().map((x) => x.session),
+    ["tab2"],
+  );
 });
 
 test("a peer with no plateau is not rendered, but a later positioned beacon is", () => {
@@ -91,7 +94,10 @@ test("a stale peer is GC'd from the map after the TTL (AC3/AC6)", () => {
   // And actually removed from the map (not just filtered) — a fresh beacon from a
   // NEW session is the only entry, proving the stale one was deleted.
   ch.deliver(buildBeacon({ session: "n", pubkey: "pk2", plateau: "p3", ts: c.now() }));
-  assert.deepEqual(p.peers().map((x) => x.session), ["n"]);
+  assert.deepEqual(
+    p.peers().map((x) => x.session),
+    ["n"],
+  );
 });
 
 test("a refreshed beacon keeps a peer alive past the original TTL", () => {

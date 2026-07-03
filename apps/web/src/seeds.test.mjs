@@ -35,7 +35,10 @@ test("every seed resource anchors to a seeded plateau and uses a known kind (R-0
   // At least three distinct topics carry resources (incl. Harmony, the owner's).
   const topics = new Set(SEED_RESOURCES.map((r) => r.plateau));
   assert.ok(topics.size >= 3, "resources spread across ≥3 topics");
-  assert.ok(SEED_RESOURCES.some((r) => r.plateau === P.Harmony), "Harmony has a resource");
+  assert.ok(
+    SEED_RESOURCES.some((r) => r.plateau === P.Harmony),
+    "Harmony has a resource",
+  );
 });
 
 test("every seed bridge endpoint is a seeded plateau", () => {
@@ -65,8 +68,7 @@ test("the Physics trailhead row: Motion, e2-dominant on-axis, PHYSICS domain (R-
 });
 
 test("each domain has an on-axis trailhead-grade row (coord 1.0)", () => {
-  const onAxis = (domain, key) =>
-    SEED_PLATEAUS.some((p) => p.domain === domain && p[key] === 1.0);
+  const onAxis = (domain, key) => SEED_PLATEAUS.some((p) => p.domain === domain && p[key] === 1.0);
   assert.ok(onAxis(MATH_DOMAIN, "e1"), "Mathematics has an e1=1.0 row (Arithmetic)");
   assert.ok(onAxis(MUSIC_DOMAIN, "e3"), "Music has an e3=1.0 row (Rhythm)");
   assert.ok(onAxis(PHYSICS_DOMAIN, "e2"), "Physics has an e2=1.0 row (Motion)");

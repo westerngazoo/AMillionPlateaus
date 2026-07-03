@@ -17,8 +17,7 @@ export function labelBox(name, pt) {
   return { x: pt.x - w / 2, y: pt.y + RADIUS + 4, w, h: LINE_H };
 }
 
-const overlaps = (a, b) =>
-  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /** Estimated box for any midpoint-anchored caption (bridge concepts, resource titles). */
 export function captionBox(text, x, y) {

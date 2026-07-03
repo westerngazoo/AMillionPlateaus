@@ -98,7 +98,11 @@ test("two peers handshake; a message crosses both ways (AC2/AC6)", async () => {
   const gotA = [];
   const gotB = [];
   let openA = false;
-  const peerA = createPeer({ rtcFactory: net.offerer, onMessage: (m) => gotA.push(m), onOpen: () => (openA = true) });
+  const peerA = createPeer({
+    rtcFactory: net.offerer,
+    onMessage: (m) => gotA.push(m),
+    onOpen: () => (openA = true),
+  });
   const peerB = createPeer({ rtcFactory: net.answerer, onMessage: (m) => gotB.push(m) });
 
   const offer = await peerA.createOffer();
@@ -139,7 +143,10 @@ test("a send before open is queued, then flushed on open (AC6)", async () => {
 test("a malformed offer blob rejects (caught upstream, AC4)", async () => {
   const net = fakeNetwork();
   const peer = createPeer({ rtcFactory: net.answerer });
-  await assert.rejects(() => peer.acceptOffer("not json"), "bad blob must reject, not silently pass");
+  await assert.rejects(
+    () => peer.acceptOffer("not json"),
+    "bad blob must reject, not silently pass",
+  );
 });
 
 test("send before any channel exists is queued, not thrown", () => {

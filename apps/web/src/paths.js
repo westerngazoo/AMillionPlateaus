@@ -73,7 +73,9 @@ export function publishedPaths(events = []) {
         title: parsed.title,
         goal: typeof parsed.goal === "string" ? parsed.goal : "",
         steps: parsed.steps.filter((s) => typeof s === "string"),
-        domains: Array.isArray(parsed.domains) ? parsed.domains.filter((d) => typeof d === "string") : [],
+        domains: Array.isArray(parsed.domains)
+          ? parsed.domains.filter((d) => typeof d === "string")
+          : [],
         created_at: at,
       });
     }

@@ -37,7 +37,8 @@ function fakeStorage(init = {}) {
   };
 }
 
-const ev = (id, sig = "ok") => JSON.stringify({ id, pubkey: "me", created_at: 1, kind: 30078, tags: [], content: "{}", sig });
+const ev = (id, sig = "ok") =>
+  JSON.stringify({ id, pubkey: "me", created_at: 1, kind: 30078, tags: [], content: "{}", sig });
 
 test("an empty log reaches nothing — empty reputation, no seed (AC3)", () => {
   const log = makeLog(wasm, "me", fakeStorage());

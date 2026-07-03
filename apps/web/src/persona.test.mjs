@@ -123,18 +123,27 @@ test("domainIdFor: distinct + near-identical short names get distinct ids (~128-
 test("authorPersona resolves an AUTHORED domain's label via the resolver — not 'Uncharted' (finding #1/AC4)", () => {
   const ai = authorDomain({ name: "AI", e1: 0.7, e2: 0.6 });
   const resolve = (id) => (id === ai.id ? ai.label : undefined);
-  const p = authorPersona({ name: "Me", orient: [{ domain: ai.id, dir: { e1: 1, e2: 0, e3: 0 } }] }, resolve);
+  const p = authorPersona(
+    { name: "Me", orient: [{ domain: ai.id, dir: { e1: 1, e2: 0, e3: 0 } }] },
+    resolve,
+  );
   assert.equal(p.domainLabel, "AI");
   assert.ok(p.blurb.includes("AI"));
   assert.ok(!p.domainLabel.includes("Uncharted") && !p.blurb.includes("Uncharted"));
 });
 
 test("authorPersona with NO resolver is byte-identical to the pre-0038 output", () => {
-  const seed = { name: "Geo", orient: [{ domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } }], tone: "" };
+  const seed = {
+    name: "Geo",
+    orient: [{ domain: MATH_DOMAIN, dir: { e1: 1, e2: 0, e3: 0 } }],
+    tone: "",
+  };
   const p = authorPersona(seed); // no second arg → static DOMAINS only
   assert.equal(p.domainLabel, "Mathematics"); // built-in still resolves
   assert.equal(p.blurb, "Wakes facing Mathematics — your starting orientation.");
   // an UNKNOWN domain with no resolver still degrades to "Uncharted" exactly as before
-  const u = authorPersona({ orient: [{ domain: "deadbeef-0000-0000-0000-000000000000", dir: { e1: 1 } }] });
+  const u = authorPersona({
+    orient: [{ domain: "deadbeef-0000-0000-0000-000000000000", dir: { e1: 1 } }],
+  });
   assert.equal(u.domainLabel, "Uncharted");
 });

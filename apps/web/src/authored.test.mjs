@@ -46,7 +46,9 @@ test("authored persona facing Mathematics seeds identically to the Geometer (AC2
 
 test("two different authored orientations seed different reputations (AC2)", () => {
   const a = seedReputation(authorPersona({ orient: facing(MATH_DOMAIN, { e1: 1, e2: 0, e3: 0 }) }));
-  const b = seedReputation(authorPersona({ orient: facing(MUSIC_DOMAIN, { e1: 0, e2: 0, e3: 1 }) }));
+  const b = seedReputation(
+    authorPersona({ orient: facing(MUSIC_DOMAIN, { e1: 0, e2: 0, e3: 1 }) }),
+  );
   assert.notDeepEqual(a.domain_reps, b.domain_reps);
   assert.deepEqual(Object.keys(a.domain_reps), [MATH_DOMAIN]);
   assert.deepEqual(Object.keys(b.domain_reps), [MUSIC_DOMAIN]);
@@ -89,7 +91,10 @@ test("a blank name falls back to a safe default; id is never a VOICES key (AC1/A
 });
 
 test("a visitor tone composes a companion voice; absence leaves it undefined (AC3)", () => {
-  const withTone = authorPersona({ orient: facing(MATH_DOMAIN, { e1: 1, e2: 0, e3: 0 }), tone: "  playful " });
+  const withTone = authorPersona({
+    orient: facing(MATH_DOMAIN, { e1: 1, e2: 0, e3: 0 }),
+    tone: "  playful ",
+  });
   assert.equal(withTone.voice, "Speak as playful.");
   const without = authorPersona({ orient: facing(MATH_DOMAIN, { e1: 1, e2: 0, e3: 0 }) });
   assert.equal(without.voice, undefined);

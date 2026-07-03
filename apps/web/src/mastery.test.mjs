@@ -14,7 +14,11 @@ import {
 const ev = (pubkey, kind, content) => ({ pubkey, kind, content });
 const mastery = (pubkey, plateau) => ev(pubkey, MASTERY_KIND, JSON.stringify({ plateau }));
 const traversal = (pubkey, plateau) =>
-  ev(pubkey, TRAVERSAL_KIND, JSON.stringify({ domain: "d", e1: 1, e2: 0, e3: 0, depth: 1, plateau }));
+  ev(
+    pubkey,
+    TRAVERSAL_KIND,
+    JSON.stringify({ domain: "d", e1: 1, e2: 0, e3: 0, depth: 1, plateau }),
+  );
 
 test("MASTERY_KIND is the pinned app-data kind (must match mp_identity::KIND_MASTERY)", () => {
   assert.equal(MASTERY_KIND, 30080);
@@ -143,7 +147,10 @@ test("masteryCounts ignores non-mastery kinds, malformed, and null plateau", () 
 test("communityApproved: empty → ∅; deterministic", () => {
   assert.equal(communityApproved([], { bar: 3 }).size, 0);
   const events = [mastery(key(1), "calc"), mastery(key(2), "calc"), mastery(key(3), "calc")];
-  assert.deepEqual([...communityApproved(events, { bar: 3 })], [...communityApproved(events, { bar: 3 })]);
+  assert.deepEqual(
+    [...communityApproved(events, { bar: 3 })],
+    [...communityApproved(events, { bar: 3 })],
+  );
 });
 
 // ── Trusted-master weighting (R-0035 / SPEC-0035) ──────────────────────────────
@@ -162,7 +169,10 @@ test("communityApproved (weighted): a Sybil ring (many masters, all reach 0) is 
 
 test("communityApproved (weighted): a few HIGH-reach masters DO approve", () => {
   const two = [mastery(key(1), "calc"), mastery(key(2), "calc")];
-  const reach = new Map([[key(1), 0.8], [key(2), 0.9]]); // sum 1.7 ≥ 1.5
+  const reach = new Map([
+    [key(1), 0.8],
+    [key(2), 0.9],
+  ]); // sum 1.7 ≥ 1.5
   const approved = communityApproved(two, {
     bar: 1.5,
     domainOf: () => "math",
@@ -174,11 +184,14 @@ test("communityApproved (weighted): a few HIGH-reach masters DO approve", () => 
 test("communityApproved (weighted): CROSS-DOMAIN reach does not count", () => {
   // the master has reach, but only in 'music'; the topic is in 'math' → 0 weight
   const events = [mastery(key(1), "calc"), mastery(key(2), "calc")];
-  const reachInMusic = new Map([[key(1), 5], [key(2), 5]]);
+  const reachInMusic = new Map([
+    [key(1), 5],
+    [key(2), 5],
+  ]);
   const approved = communityApproved(events, {
     bar: 1.5,
     domainOf: () => "math",
-    weightOf: (pk, domain) => (domain === "music" ? reachInMusic.get(pk) ?? 0 : 0),
+    weightOf: (pk, domain) => (domain === "music" ? (reachInMusic.get(pk) ?? 0) : 0),
   });
   assert.equal(approved.has("calc"), false); // huge music reach, zero math weight
 });
@@ -192,9 +205,16 @@ test("communityApproved (weighted): bar boundary (just-under vs at)", () => {
 
 test("communityApproved (weighted): NaN / negative / absent weight ⇒ 0 (never adds or subtracts)", () => {
   const three = [mastery(key(1), "calc"), mastery(key(2), "calc"), mastery(key(3), "calc")];
-  const weird = new Map([[key(1), NaN], [key(2), -10], [key(3), 2.0]]);
+  const weird = new Map([
+    [key(1), NaN],
+    [key(2), -10],
+    [key(3), 2.0],
+  ]);
   const approved = communityApproved(three, { bar: 1.5, weightOf: (pk) => weird.get(pk) });
   assert.ok(approved.has("calc")); // only key(3)'s 2.0 counts; NaN & -10 ⇒ 0, so sum = 2.0 ≥ 1.5
   // and the negative must not have SUBTRACTED below the lone positive
-  assert.equal(communityApproved(three, { bar: 2.5, weightOf: (pk) => weird.get(pk) }).has("calc"), false);
+  assert.equal(
+    communityApproved(three, { bar: 2.5, weightOf: (pk) => weird.get(pk) }).has("calc"),
+    false,
+  );
 });

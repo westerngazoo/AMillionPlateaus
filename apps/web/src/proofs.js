@@ -33,7 +33,12 @@ export function publishedProofs(events = [], plateauId) {
     const at = typeof e.created_at === "number" ? e.created_at : 0;
     const prev = latest.get(e.pubkey);
     if (!prev || at >= prev.created_at) {
-      latest.set(e.pubkey, { pubkey: e.pubkey, kind: parsed.kind, body: parsed.body, created_at: at });
+      latest.set(e.pubkey, {
+        pubkey: e.pubkey,
+        kind: parsed.kind,
+        body: parsed.body,
+        created_at: at,
+      });
     }
   }
   return [...latest.values()]

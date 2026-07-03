@@ -18,7 +18,10 @@ test("context names the persona, the lit set, and nearest — deterministically"
     persona: GEOMETER,
     plateaus,
     reachableIds: new Set(["a1"]),
-    nearest: [{ id: "a1", score: 0.16 }, { id: "c1", score: 0.008 }],
+    nearest: [
+      { id: "a1", score: 0.16 },
+      { id: "c1", score: 0.008 },
+    ],
     bridges,
   };
   const ctx = buildGroundingContext(args);
@@ -31,21 +34,32 @@ test("context names the persona, the lit set, and nearest — deterministically"
 
 test("two personas (different reachable/nearest) yield different context (AC3)", () => {
   const geo = buildGroundingContext({
-    persona: GEOMETER, plateaus, bridges,
-    reachableIds: new Set(["a1"]), nearest: [{ id: "a1", score: 0.16 }],
+    persona: GEOMETER,
+    plateaus,
+    bridges,
+    reachableIds: new Set(["a1"]),
+    nearest: [{ id: "a1", score: 0.16 }],
   });
   const com = buildGroundingContext({
-    persona: COMPOSER, plateaus, bridges,
-    reachableIds: new Set(["c1"]), nearest: [{ id: "c1", score: 0.16 }],
+    persona: COMPOSER,
+    plateaus,
+    bridges,
+    reachableIds: new Set(["c1"]),
+    nearest: [{ id: "c1", score: 0.16 }],
   });
   assert.notEqual(geo, com);
 });
 
 test("a nearest id absent from the snapshot never renders 'undefined'", () => {
   const ctx = buildGroundingContext({
-    persona: GEOMETER, plateaus, bridges,
+    persona: GEOMETER,
+    plateaus,
+    bridges,
     reachableIds: new Set(["a1"]),
-    nearest: [{ id: "ghost", score: 0.99 }, { id: "a1", score: 0.16 }],
+    nearest: [
+      { id: "ghost", score: 0.99 },
+      { id: "a1", score: 0.16 },
+    ],
   });
   assert.doesNotMatch(ctx, /undefined/);
   assert.match(ctx, /Arithmetic \(0\.16\)/);
@@ -63,7 +77,10 @@ test("round-trip works against the real openai-compatible adapter with an inject
   const calls = [];
   const fakeFetch = async (url, opts) => {
     calls.push({ url, opts });
-    return { ok: true, json: async () => ({ choices: [{ message: { content: "grounded reply" } }] }) };
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "grounded reply" } }] }),
+    };
   };
   const cfg = { kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "k" };
   const reply = await sendTurn(cfg, [{ role: "user", content: "hi" }], { fetch: fakeFetch });
@@ -75,7 +92,10 @@ test("round-trip works against the real openai-compatible adapter with an inject
 test("a non-ok HTTP response surfaces a graceful error (AC4)", async () => {
   const fakeFetch = async () => ({ ok: false, status: 401, json: async () => ({}) });
   const cfg = { kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "bad" };
-  await assert.rejects(() => sendTurn(cfg, [{ role: "user", content: "hi" }], { fetch: fakeFetch }), /HTTP 401/);
+  await assert.rejects(
+    () => sendTurn(cfg, [{ role: "user", content: "hi" }], { fetch: fakeFetch }),
+    /HTTP 401/,
+  );
 });
 
 test("a thrown fetch (CORS/offline) surfaces distinctly, not an HTTP error (AC4)", async () => {
@@ -83,10 +103,15 @@ test("a thrown fetch (CORS/offline) surfaces distinctly, not an HTTP error (AC4)
     throw new TypeError("Failed to fetch");
   };
   const cfg = { kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "k" };
-  await assert.rejects(() => sendTurn(cfg, [{ role: "user", content: "hi" }], { fetch: fakeFetch }), /CORS\/network/);
+  await assert.rejects(
+    () => sendTurn(cfg, [{ role: "user", content: "hi" }], { fetch: fakeFetch }),
+    /CORS\/network/,
+  );
 });
 
 test("the fake provider is an always-available offline reply", async () => {
-  const reply = await sendTurn({ kind: "fake", model: "offline" }, [{ role: "user", content: "echo me" }]);
+  const reply = await sendTurn({ kind: "fake", model: "offline" }, [
+    { role: "user", content: "echo me" },
+  ]);
   assert.match(reply, /echo me/);
 });

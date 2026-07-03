@@ -17,7 +17,11 @@ test("trailing slash on endpoint is normalized", () => {
 });
 
 test("local endpoint omits the auth header when no key", () => {
-  const cfg = { kind: "openai-compatible", endpoint: "http://localhost:11434/v1", model: "llama3.1" };
+  const cfg = {
+    kind: "openai-compatible",
+    endpoint: "http://localhost:11434/v1",
+    model: "llama3.1",
+  };
   assert.equal("authorization" in buildRequest(cfg, []).headers, false);
 });
 
@@ -41,12 +45,24 @@ test("an unknown provider kind throws (no silent misroute)", () => {
 test("isConfigured gates on endpoint/model and key-when-needed", () => {
   assert.equal(isConfigured(null), false);
   assert.equal(isConfigured({ kind: "fake" }), true); // offline fallback is always usable
-  assert.equal(isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m" }), false); // hosted needs a key
-  assert.equal(isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "k" }), true);
+  assert.equal(
+    isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m" }),
+    false,
+  ); // hosted needs a key
+  assert.equal(
+    isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "k" }),
+    true,
+  );
 });
 
 test("presets offer at least two options including a key-less local one", () => {
   assert.ok(PRESETS.length >= 2);
-  assert.ok(PRESETS.some((p) => p.needsKey === false), "a local, key-less preset exists");
-  assert.ok(PRESETS.some((p) => p.needsKey === true), "a hosted, key-bearing preset exists");
+  assert.ok(
+    PRESETS.some((p) => p.needsKey === false),
+    "a local, key-less preset exists",
+  );
+  assert.ok(
+    PRESETS.some((p) => p.needsKey === true),
+    "a hosted, key-bearing preset exists",
+  );
 });

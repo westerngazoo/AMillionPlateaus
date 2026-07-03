@@ -47,7 +47,13 @@ test("publishedPaths keeps latest per signer and sorts", () => {
       kind: PATH_KIND,
       pubkey: "bb".repeat(32),
       created_at: 2,
-      content: JSON.stringify({ id: "x", title: "New", goal: "g", steps: ["a", "b"], domains: ["d"] }),
+      content: JSON.stringify({
+        id: "x",
+        title: "New",
+        goal: "g",
+        steps: ["a", "b"],
+        domains: ["d"],
+      }),
     },
     {
       kind: PATH_KIND,

@@ -29,7 +29,23 @@ const RADIUS = 16;
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null, focusDomains = new Set() }) {
+export function render(
+  ctx,
+  {
+    plateaus,
+    bridges,
+    view,
+    resources = [],
+    peers = [],
+    focusedId = null,
+    visited = new Set(),
+    mastered = new Set(),
+    community = new Set(),
+    pathSteps = [],
+    pathNext = null,
+    focusDomains = new Set(),
+  },
+) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 

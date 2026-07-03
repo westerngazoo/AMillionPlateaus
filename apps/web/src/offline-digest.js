@@ -78,7 +78,9 @@ export function keyTerms(text = "", n = TERMS) {
   const freq = new Map();
   const seen = new Map();
   let i = 0;
-  for (const raw of plainText(text).toLowerCase().split(/[^a-z0-9]+/)) {
+  for (const raw of plainText(text)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)) {
     if (raw.length < 3 || STOP.has(raw)) continue;
     if (!seen.has(raw)) seen.set(raw, i++);
     freq.set(raw, (freq.get(raw) ?? 0) + 1);
@@ -99,7 +101,10 @@ export function topSentences(body = "", n = SENTS) {
   if (sents.length <= n) return sents;
   const terms = new Set(keyTerms(body));
   const scored = sents.map((s, idx) => {
-    const words = s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const words = s
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
     const hits = words.filter((w) => terms.has(w)).length;
     const density = words.length ? hits / words.length : 0;
     return { s, idx, score: 1 / (idx + 1) + density };
@@ -148,7 +153,10 @@ function doQuiz(body) {
     qs.push(`What is the key idea behind: "${s}"?`);
   }
   if (!qs.length) return THIN;
-  return `Recall check:\n${qs.slice(0, QUIZ).map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+  return `Recall check:\n${qs
+    .slice(0, QUIZ)
+    .map((q, i) => `${i + 1}. ${q}`)
+    .join("\n")}`;
 }
 
 /**

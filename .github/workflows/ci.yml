@@ -72,6 +72,23 @@ jobs:
         working-directory: AMillionPlateaus
         run: node --test apps/web/src/*.test.mjs
 
+  lint:
+    name: Web — Biome (fmt + lint gate)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AMillionPlateaus
+        uses: actions/checkout@v4
+        with:
+          path: AMillionPlateaus
+      # Biome is a single binary — no node_modules, no npm install (issue #34).
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: 2.5.2
+      - name: biome ci apps/web/src
+        working-directory: AMillionPlateaus
+        run: biome ci apps/web/src
+
   wasm:
     name: wasm — wasm-pack build check
     runs-on: ubuntu-latest

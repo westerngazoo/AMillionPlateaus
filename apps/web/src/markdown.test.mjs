@@ -15,8 +15,23 @@ import { renderMarkdown, esc, safeHref } from "./markdown.js";
 // invariant, not an example. Attribute values never contain a literal `"`/`>`
 // (esc() escapes them), so the naive scan is sound for this renderer's output.
 const ALLOWED_TAGS = new Set([
-  "h1", "h2", "h3", "h4", "h5", "h6", "p", "br",
-  "strong", "em", "code", "pre", "ul", "ol", "li", "a", "span",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "p",
+  "br",
+  "strong",
+  "em",
+  "code",
+  "pre",
+  "ul",
+  "ol",
+  "li",
+  "a",
+  "span",
 ]);
 const ALLOWED_ATTRS = new Set(["href", "rel", "target", "class", "data-display", "data-tex"]);
 
@@ -39,7 +54,10 @@ test("renders the supported Markdown subset", () => {
   assert.match(html, /<em>italic<\/em>/);
   assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/);
-  assert.match(html, /<a href="https:\/\/example\.com" rel="noopener noreferrer" target="_blank">site<\/a>/);
+  assert.match(
+    html,
+    /<a href="https:\/\/example\.com" rel="noopener noreferrer" target="_blank">site<\/a>/,
+  );
 });
 
 test("ordered lists and fenced code blocks", () => {
@@ -124,7 +142,7 @@ test("math → inert .mp-math placeholder carrying the ESCAPED tex (AC4)", () =>
 });
 
 test("a script breakout inside $…$ stays inert as an escaped attribute value (AC4, finding 3)", () => {
-  const html = renderMarkdown('$x</span><script>alert(1)</script>$');
+  const html = renderMarkdown("$x</span><script>alert(1)</script>$");
   // The payload is escaped INSIDE the data-tex attribute — never a sibling node.
   assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /<\/span><script/i);

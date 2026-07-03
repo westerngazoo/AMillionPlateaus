@@ -37,7 +37,12 @@ test("the focused plateau outranks an overlapping lit one", () => {
     ["lit", { x: 300, y: 300 }],
     ["foc", { x: 305, y: 300 }],
   ]);
-  const kept = planLabels({ plateaus, points, reachable: new Set(["lit", "foc"]), focusedId: "foc" });
+  const kept = planLabels({
+    plateaus,
+    points,
+    reachable: new Set(["lit", "foc"]),
+    focusedId: "foc",
+  });
   assert.ok(kept.has("foc") && !kept.has("lit"));
 });
 

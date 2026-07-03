@@ -20,7 +20,7 @@ const eventJson = JSON.stringify({ id: "a", pubkey: "me", kind: KIND_TRAVERSAL, 
 
 // ── pure framing helpers ───────────────────────────────────────────────────
 
-test("buildPublish frames an event as [\"EVENT\", e]", () => {
+test('buildPublish frames an event as ["EVENT", e]', () => {
   assert.deepEqual(JSON.parse(buildPublish(eventJson)), ["EVENT", JSON.parse(eventJson)]);
 });
 
@@ -74,7 +74,11 @@ test("on open it subscribes, and reports online (AC7)", () => {
     WebSocketCtor: FakeWS,
   });
   FakeWS.last.fireOpen();
-  assert.deepEqual(JSON.parse(FakeWS.last.sent[0]), ["REQ", "mp-events", { kinds: [KIND_TRAVERSAL, KIND_VOUCH] }]);
+  assert.deepEqual(JSON.parse(FakeWS.last.sent[0]), [
+    "REQ",
+    "mp-events",
+    { kinds: [KIND_TRAVERSAL, KIND_VOUCH] },
+  ]);
   assert.ok(states.includes("online"));
   relay.close();
 });

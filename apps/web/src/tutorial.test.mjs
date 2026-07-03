@@ -59,5 +59,7 @@ test("the tutorial has real, non-empty steps to render (AC4)", () => {
     assert.ok(s.body.length > 0);
   }
   // The career-lens reframing is part of the onboarding copy (AC1 spirit).
-  assert.ok(TUTORIAL_STEPS.some((s) => /career lens/i.test(s.title) || /career lens/i.test(s.body)));
+  assert.ok(
+    TUTORIAL_STEPS.some((s) => /career lens/i.test(s.title) || /career lens/i.test(s.body)),
+  );
 });

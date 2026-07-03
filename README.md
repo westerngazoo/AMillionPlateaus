@@ -44,6 +44,16 @@ million-plateaus/
 
 ---
 
+## Local checks
+
+CI (`.github/workflows/ci.yml`) gates every PR. To run the same checks locally:
+
+- **Rust:** `cargo fmt --all -- --check` · `cargo clippy --workspace --all-targets -- -D warnings` · `cargo test --workspace` (needs a sibling `../garust` checkout).
+- **Web tests:** `node --test apps/web/src/*.test.mjs` (Node ≥ 20, no npm install — plain ES modules).
+- **Web lint/format (Biome):** Biome is a single binary — no `node_modules`. Install it once (`curl -fsSL https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.2/biome-linux-x64 -o biome && chmod +x biome`, or `brew install biome`), then run `biome check apps/web/src` (add `--write` to auto-fix formatting). CI runs `biome ci apps/web/src`, scoped by root `biome.json` to `apps/web/src/**`.
+
+---
+
 ## Philosophy in one sentence
 
 > The graph IS the platform. The 3D world is one renderer. Wizard rank is geometry.

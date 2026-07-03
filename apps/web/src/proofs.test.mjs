@@ -45,7 +45,12 @@ test("publishedProofs: ignores non-proof kinds, malformed content, wrong shape",
   const events = [
     { pubkey: key(1), kind: 30078, created_at: 1, content: JSON.stringify({ plateau: "calc" }) }, // traversal
     { pubkey: key(2), kind: PROOF_KIND, created_at: 1, content: "not json" }, // malformed — skip
-    { pubkey: key(3), kind: PROOF_KIND, created_at: 1, content: JSON.stringify({ plateau: "calc" }) }, // no body/kind — skip
+    {
+      pubkey: key(3),
+      kind: PROOF_KIND,
+      created_at: 1,
+      content: JSON.stringify({ plateau: "calc" }),
+    }, // no body/kind — skip
     proof(key(4), "calc", "proof", "the only valid one"),
   ];
   const out = publishedProofs(events, "calc");

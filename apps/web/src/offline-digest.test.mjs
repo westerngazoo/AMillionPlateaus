@@ -12,7 +12,8 @@ import {
 const HEADER_PREFIX = "Offline digest (no model connected";
 
 test("plainText strips markdown but keeps $…$ and inline-code text verbatim", () => {
-  const md = "# Title\n\n- a *bold* point with `code` and [link](http://x).\n\nEuler: $e^{i\\pi}$ holds.";
+  const md =
+    "# Title\n\n- a *bold* point with `code` and [link](http://x).\n\nEuler: $e^{i\\pi}$ holds.";
   const out = plainText(md);
   assert.ok(!out.includes("#"), "heading hashes gone");
   assert.ok(!out.includes("*"), "emphasis markers gone");
@@ -56,12 +57,22 @@ test("topSentences selects salient sentences and returns them in original order,
   for (const s of top) assert.ok(all.includes(s), "verbatim sentence");
   // original order preserved: indices ascending
   const idx = top.map((s) => all.indexOf(s));
-  assert.deepEqual(idx, [...idx].sort((a, b) => a - b));
+  assert.deepEqual(
+    idx,
+    [...idx].sort((a, b) => a - b),
+  );
 });
 
 const RES = [
   { id: "a", title: "Intro video", kind: "Video", uri: "http://v", state: "Marker", vote_count: 1 },
-  { id: "b", title: "Key paper", kind: "Paper", uri: "http://p", state: "Crystallized", vote_count: 9 },
+  {
+    id: "b",
+    title: "Key paper",
+    kind: "Paper",
+    uri: "http://p",
+    state: "Crystallized",
+    vote_count: 9,
+  },
   { id: "c", title: "A note", kind: "Note", uri: "", state: "Marker", vote_count: 4 },
 ];
 
@@ -81,7 +92,8 @@ test("offlineDigest 'first' suggests a kind when no resources are pinned", () =>
 });
 
 test("offlineDigest 'quiz' asks questions that only interpolate body-derived terms", () => {
-  const body = "Manifolds generalize surfaces. A manifold is locally Euclidean. Charts cover a manifold.";
+  const body =
+    "Manifolds generalize surfaces. A manifold is locally Euclidean. Charts cover a manifold.";
   const out = offlineDigest({ action: "quiz", plateau: { description: body }, resources: [] });
   assert.ok(out.startsWith(HEADER_PREFIX));
   assert.ok(out.toLowerCase().includes("manifold"), "a body-derived key term appears");
@@ -98,7 +110,9 @@ test("empty notes are handled honestly per action (never fabricates)", () => {
 });
 
 test("offlineDigest dispatches the four keys distinctly and is deterministic", () => {
-  const plateau = { description: "# Shape\n\nA derivative is a slope. Integrals sum area. Limits anchor both." };
+  const plateau = {
+    description: "# Shape\n\nA derivative is a slope. Integrals sum area. Limits anchor both.",
+  };
   const args = (action) => ({ action, plateau, resources: RES });
   const outs = ["summary", "model", "first", "quiz"].map((a) => offlineDigest(args(a)));
   assert.equal(new Set(outs).size, 4, "four distinct answers");

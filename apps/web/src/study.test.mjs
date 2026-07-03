@@ -76,13 +76,19 @@ test("buildPlateauStudyContext marks crystallized resources as vouched", () => {
 });
 
 test("buildPlateauStudyContext handles an empty plateau (no body, no resources)", () => {
-  const ctx = buildPlateauStudyContext({ plateau: { name: "Empty", description: "" }, resources: [] });
+  const ctx = buildPlateauStudyContext({
+    plateau: { name: "Empty", description: "" },
+    resources: [],
+  });
   assert.match(ctx, /It has no notes yet\./);
   assert.match(ctx, /No resources pinned yet\./);
 });
 
 test("buildPlateauStudyContext is deterministic", () => {
-  const args = { plateau: { name: "T", description: "body" }, resources: [res("a", 1), res("b", 2)] };
+  const args = {
+    plateau: { name: "T", description: "body" },
+    resources: [res("a", 1), res("b", 2)],
+  };
   assert.equal(buildPlateauStudyContext(args), buildPlateauStudyContext(args));
 });
 
@@ -130,22 +136,44 @@ test("crossLinks: other topics sharing the URL, excludes current, sorted by name
     r("c", "p3", "https://book.test/x/", 2), // trailing slash → same book
     r("d", "p2", "https://other.test/y"), // different book, ignored
   ];
-  const out = crossLinks({ resources, plateaus, uri: "https://book.test/x", currentPlateauId: "p1" });
-  assert.deepEqual(out.map((x) => x.name), ["Algebra", "Motion"]); // sorted by name, current excluded
+  const out = crossLinks({
+    resources,
+    plateaus,
+    uri: "https://book.test/x",
+    currentPlateauId: "p1",
+  });
+  assert.deepEqual(
+    out.map((x) => x.name),
+    ["Algebra", "Motion"],
+  ); // sorted by name, current excluded
   assert.equal(out.find((x) => x.name === "Motion").count, 5);
 });
 
 test("crossLinks: empty/unsafe URL never groups; unique book → []", () => {
-  const plateaus = [{ id: "p1", name: "A" }, { id: "p2", name: "B" }];
-  assert.deepEqual(crossLinks({ resources: [r("a", "p2", "")], plateaus, uri: "", currentPlateauId: "p1" }), []);
+  const plateaus = [
+    { id: "p1", name: "A" },
+    { id: "p2", name: "B" },
+  ];
   assert.deepEqual(
-    crossLinks({ resources: [r("a", "p2", "https://x.test/lonely")], plateaus, uri: "https://x.test/other", currentPlateauId: "p1" }),
+    crossLinks({ resources: [r("a", "p2", "")], plateaus, uri: "", currentPlateauId: "p1" }),
+    [],
+  );
+  assert.deepEqual(
+    crossLinks({
+      resources: [r("a", "p2", "https://x.test/lonely")],
+      plateaus,
+      uri: "https://x.test/other",
+      currentPlateauId: "p1",
+    }),
     [],
   );
 });
 
 test("crossLinks is deterministic across two calls", () => {
-  const plateaus = [{ id: "p2", name: "Motion" }, { id: "p3", name: "Algebra" }];
+  const plateaus = [
+    { id: "p2", name: "Motion" },
+    { id: "p3", name: "Algebra" },
+  ];
   const resources = [r("b", "p2", "https://b.test/x"), r("c", "p3", "https://b.test/x")];
   const args = { resources, plateaus, uri: "https://b.test/x", currentPlateauId: "p1" };
   assert.deepEqual(crossLinks(args), crossLinks(args));
@@ -222,7 +250,10 @@ test("parseVerdict: a body-echoed PASS with NO trailing verdict ⇒ no pass (ech
   const reply = [
     "Quoting your submission:",
     "VERDICT: PASS",
-    "line", "line", "line", "line",
+    "line",
+    "line",
+    "line",
+    "line",
     "The base case is missing, so this is incomplete.",
   ].join("\n");
   assert.equal(parseVerdict(reply).pass, false);

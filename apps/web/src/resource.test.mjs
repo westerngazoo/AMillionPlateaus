@@ -11,7 +11,12 @@ const P = "00000000-0000-0000-0000-0000000000a1";
 // ── success path ──────────────────────────────────────────────────────────────
 
 test("valid input → ok, tagged error:null (AC6)", () => {
-  const r = buildResource({ plateau: P, title: "Spectral theorem notes", kind: "Paper", uri: "https://ex.com" });
+  const r = buildResource({
+    plateau: P,
+    title: "Spectral theorem notes",
+    kind: "Paper",
+    uri: "https://ex.com",
+  });
   assert.equal(r.error, null);
   assert.equal(r.plateau, P);
   assert.equal(r.title, "Spectral theorem notes");

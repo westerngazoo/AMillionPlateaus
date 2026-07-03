@@ -230,7 +230,8 @@ test("stripChallenges: removes EXACTLY the solve blocks (round-trip with parse)"
 });
 
 test("parseChallenges: multiple blocks + CRLF tolerated", () => {
-  const body = "a\r\n```solve\r\nprompt: P1\r\nanswer: x\r\n```\r\nb\r\n```solve\nprompt: P2\nanswer: 2*x\n```\n";
+  const body =
+    "a\r\n```solve\r\nprompt: P1\r\nanswer: x\r\n```\r\nb\r\n```solve\nprompt: P2\nanswer: 2*x\n```\n";
   const cs = parseChallenges(body);
   assert.equal(cs.length, 2);
   assert.equal(cs[0].answer, "x");
