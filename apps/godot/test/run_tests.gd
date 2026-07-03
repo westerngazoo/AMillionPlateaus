@@ -10,6 +10,9 @@ const LabelPlanS := preload("res://src/label_plan.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const WorldS := preload("res://src/world.gd")
 const NativeS := preload("res://src/graph_source_native.gd")
+const FlyCamS := preload("res://src/fly_camera.gd")
+const DomainPaletteS := preload("res://src/domain_palette.gd")
+const MinimapS := preload("res://src/minimap.gd")
 
 var _failures := 0
 
@@ -22,6 +25,12 @@ func _init() -> void:
 	_test_scene_smoke()
 	_test_native_adapter_parse()
 	_test_native_extension_live()
+	_test_frame_position()
+	_test_parse_focus()
+	_test_domain_color()
+	_test_bridge_labels()
+	_test_resource_offset()
+	_test_minimap()
 	if _failures == 0:
 		print("✔ ALL TESTS PASSED")
 	else:
@@ -161,3 +170,66 @@ func _test_native_extension_live() -> void:
 	var plats := adapter.plateaus()
 	_check(plats.size() == 7 and adapter.bridges().size() == 6, "seed_demo → 7 plateaus, 6 bridges via the native core")
 	_check(plats[0].has("e1") and plats[0].has("name"), "native plateaus arrive in the flattened interface shape")
+
+# ── A2 frame_position (fly-to framing math) ──────────────────────────────────────
+func _test_frame_position() -> void:
+	print("frame_position (A2):")
+	# camera at +Z, target at origin → stand off along +Z, lifted by height
+	var pos: Vector3 = FlyCamS.frame_position(Vector3(0, 0, 0), Vector3(0, 0, 10), 6.0, 2.5)
+	_check(pos.is_equal_approx(Vector3(0, 2.5, 6.0)), "frames the topic on the camera's side, lifted")
+	# degenerate (from == target) falls back to +Z so looking_at never breaks
+	var deg: Vector3 = FlyCamS.frame_position(Vector3(1, 1, 1), Vector3(1, 1, 1), 4.0, 1.0)
+	_check(deg.is_equal_approx(Vector3(1, 2, 5)), "coincident from/target → default +Z stand-off")
+
+# ── A2 parse_focus (focus.json contract) ─────────────────────────────────────────
+func _test_parse_focus() -> void:
+	print("parse_focus (A2):")
+	var on: Dictionary = WorldS.parse_focus('{"lens_mode": true, "lens_id": "calc"}')
+	_check(on.lens_mode == true and on.focus_id == "calc", "lens on + id → that focus")
+	var off: Dictionary = WorldS.parse_focus('{"lens_mode": false, "lens_id": "calc"}')
+	_check(off.focus_id == "", "lens off → no focus")
+	var noid: Dictionary = WorldS.parse_focus('{"lens_mode": true}')
+	_check(noid.focus_id == "", "missing lens_id → no focus")
+	var bad: Dictionary = WorldS.parse_focus("not json")
+	_check(bad.lens_mode == true and bad.focus_id == "", "bad JSON → lens on, no focus")
+
+# ── A3 domain_color (deterministic tint) ─────────────────────────────────────────
+func _test_domain_color() -> void:
+	print("domain_color (A3):")
+	_check(DomainPaletteS.domain_color("math") == DomainPaletteS.domain_color("math"), "same domain → same colour (deterministic)")
+	_check(DomainPaletteS.domain_color("music") != DomainPaletteS.domain_color("math"), "different domains → different colour")
+	var e: Color = DomainPaletteS.domain_color("")
+	_check(e.a >= 0.99, "empty domain → a valid opaque colour")
+
+# ── A4 bridge label visibility (focus scope) ─────────────────────────────────────
+func _test_bridge_labels() -> void:
+	print("bridge labels (A4):")
+	var scope: Dictionary = LabelPlanS.focus_scope("calc", {"motion": true})
+	_check(scope.has("calc") and scope.has("motion"), "scope = focus + neighbors")
+	_check(LabelPlanS.bridge_label_visible("calc", "geo", scope), "bridge touching the focus is shown")
+	_check(not LabelPlanS.bridge_label_visible("x", "y", scope), "bridge outside the scope is hidden")
+	_check(LabelPlanS.focus_scope("").is_empty(), "no focus → empty scope (all bridge labels hidden)")
+
+# ── A5 resource_offset (marker ring) ─────────────────────────────────────────────
+func _test_resource_offset() -> void:
+	print("resource_offset (A5):")
+	var o0: Vector3 = PlaceNodeS.resource_offset(0, 1)
+	_check(o0.is_equal_approx(Vector3(1.1, 1.0, 0.0)), "single marker sits on +X ring, lifted")
+	var a: Vector3 = PlaceNodeS.resource_offset(0, 2)
+	var b: Vector3 = PlaceNodeS.resource_offset(1, 2)
+	_check(not a.is_equal_approx(b), "distinct markers spread apart")
+	_check(_approx(Vector2(a.x, a.z).length(), 1.1) and _approx(Vector2(b.x, b.z).length(), 1.1), "markers lie on the ring radius")
+
+# ── A6 minimap projection (e1×e3 inset) ──────────────────────────────────────────
+func _test_minimap() -> void:
+	print("minimap (A6):")
+	var bnd: Dictionary = MinimapS.compute_bounds([Vector2(0, 0), Vector2(10, 10)])
+	_check((bnd.lo as Vector2).is_equal_approx(Vector2(0, 0)) and (bnd.hi as Vector2).is_equal_approx(Vector2(10, 10)), "compute_bounds spans the points")
+	_check((MinimapS.compute_bounds([]).lo as Vector2) == Vector2(-1, -1), "empty → unit box (no /0)")
+	var size := Vector2(100, 100)
+	var lo := Vector2(0, 0)
+	var hi := Vector2(10, 10)
+	_check(MinimapS.project(lo, lo, hi, size, 10.0).is_equal_approx(Vector2(10, 90)), "lo → bottom-left (e3 up is flipped)")
+	_check(MinimapS.project(hi, lo, hi, size, 10.0).is_equal_approx(Vector2(90, 10)), "hi → top-right")
+	_check(MinimapS.project(Vector2(5, 5), lo, hi, size, 10.0).is_equal_approx(Vector2(50, 50)), "centre → centre")
+	_check(MinimapS.project(Vector2(3, 3), Vector2(3, 3), Vector2(3, 3), size, 10.0).is_equal_approx(Vector2(50, 50)), "degenerate span → centre")
