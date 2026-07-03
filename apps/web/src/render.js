@@ -29,7 +29,7 @@ const RADIUS = 16;
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null }) {
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null, focusDomains = new Set() }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -38,6 +38,18 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     raw.set(p.id, project(p.position, view));
   }
   const points = spreadNodes(raw);
+
+  // Focus + context: plateaus in the lens's faced domains — plus anything you've
+  // touched (visited/mastered/focused) — render FULL; the rest render as small dim
+  // "shadow" dots. Context stays visible and clickable, but stops competing with
+  // the region you're actually studying. No focus set ⇒ everything full.
+  const inFocus = (p) =>
+    focusDomains.size === 0 ||
+    focusDomains.has(p.domain_id) ||
+    visited.has(p.id) ||
+    mastered.has(p.id) ||
+    p.id === focusedId;
+  const SHADOW_RADIUS = 9;
 
   // Learning-path route (R-0039): dashed line through followed steps, drawn under discs.
   if (pathSteps.length > 1) {
@@ -63,8 +75,12 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
 
   // Label level-of-detail (R-0024): which plateau names to draw so none overlap
   // (priority focused → in-progress → rest, greedy box-pack). The `visited` set is
-  // the priority tier post-R-0033 (studied topics keep label priority).
-  const labelled = planLabels({ plateaus, points, reachable: visited, focusedId });
+  // the priority tier post-R-0033 (studied topics keep label priority). Shadow
+  // (out-of-focus) plateaus are excluded from labelling entirely — they are
+  // context dots, so suppressing their names is most of the declutter win.
+  const focusPlateaus = plateaus.filter(inFocus);
+  const focusIds = new Set(focusPlateaus.map((p) => p.id));
+  const labelled = planLabels({ plateaus: focusPlateaus, points, reachable: visited, focusedId });
 
   // Caption declutter: bridge concepts + resource titles go through the SAME
   // greedy box-pack as names, with the kept name labels as immovable obstacles —
@@ -78,6 +94,9 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     const a = points.get(b.from);
     const c = points.get(b.to);
     if (!a || !c || !b.concept) continue;
+    // Only caption a connection touching the focus region — a concept between two
+    // shadow (out-of-lens) topics is context, and its label would re-clutter.
+    if (!focusIds.has(b.from) && !focusIds.has(b.to)) continue;
     conceptCandidates.push({
       key: b.id,
       box: captionBox(b.concept, (a.x + c.x) / 2 + 6, (a.y + c.y) / 2 - 6),
@@ -105,9 +124,24 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     }
   }
 
-  // Plateaus — coloured by PROGRESS (R-0033), not earned reach. All full alpha:
-  // nothing is locked, so unexplored discs read as clickable nodes.
+  // Plateaus — coloured by PROGRESS (R-0033), not earned reach. Shadow (context)
+  // nodes draw first at a smaller radius + low alpha, so the focus region reads as
+  // the foreground. Labels + ✓ are drawn ONLY for focus nodes (shadows are dots).
+  // Hit radius is unchanged (see main.js): a context dot is still fully clickable.
   for (const p of plateaus) {
+    if (inFocus(p)) continue;
+    const pt = points.get(p.id);
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, SHADOW_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = mastered.has(p.id) ? MASTERED_FILL : UNEXPLORED;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  for (const p of plateaus) {
+    if (!inFocus(p)) continue; // shadows already drawn above
     const pt = points.get(p.id);
     const done = mastered.has(p.id);
     const studying = !done && visited.has(p.id);
@@ -132,14 +166,6 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
       ctx.stroke();
     }
 
-    if (labelled.has(p.id)) {
-      // Dark text reads on the bright studying/mastered fills; light on unexplored.
-      ctx.fillStyle = done || studying ? "#1b2330" : LABEL;
-      ctx.font = done || studying ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
-    }
-
     // Mastered ✓ (R-0030): a small check at the disc's upper-right. Additive —
     // the disc radius / hit-test is unchanged.
     if (done) {
@@ -148,6 +174,19 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
       ctx.textAlign = "center";
       ctx.fillText("✓", pt.x + RADIUS, pt.y - RADIUS + 4);
     }
+  }
+
+  // Names LAST, so text is never occluded by a neighbouring disc (the mid-cluster
+  // "lgeb…"/"exteric…" clipping). Only focus nodes were labelled.
+  for (const p of focusPlateaus) {
+    if (!labelled.has(p.id)) continue;
+    const pt = points.get(p.id);
+    const done = mastered.has(p.id);
+    const studying = !done && visited.has(p.id);
+    ctx.fillStyle = LABEL;
+    ctx.font = done || studying ? "bold 12px system-ui, sans-serif" : "12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name, pt.x, pt.y + RADIUS + 14);
   }
 
   // Travel focus ring (R-0019): a transient dashed halo around the topic the
@@ -196,7 +235,7 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
     const seen = new Map();
     for (const r of resources) {
       const pt = points.get(r.plateau_id);
-      if (!pt) continue;
+      if (!pt || !focusIds.has(r.plateau_id)) continue; // no captions on shadow plateaus
       const i = seen.get(r.plateau_id) ?? 0;
       seen.set(r.plateau_id, i + 1);
       const text = (r.vote_count ?? 0) > 0 ? `${r.title} · ${Math.round(r.vote_count)}` : r.title;
