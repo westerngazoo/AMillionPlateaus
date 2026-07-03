@@ -20,6 +20,14 @@ const BRIDGES := [
 
 const REACHABLE := ["calc", "geometry"]
 
+# A5: a few cross-cutting resources pinned to plateaus (shape mirrors the mp-wasm DTO
+# `{ id, title, kind, uri, state, vote_count, plateau_id }`). Read-only markers.
+const RESOURCES := [
+	{"id": "r1", "title": "3Blue1Brown: Essence of Calculus", "kind": "video", "uri": "https://example.com/eoc", "state": "checked", "vote_count": 42, "plateau_id": "calc"},
+	{"id": "r2", "title": "Paul's Online Notes", "kind": "article", "uri": "https://example.com/pon", "state": "proposed", "vote_count": 7, "plateau_id": "calc"},
+	{"id": "r3", "title": "Tonal Harmony (Kostka)", "kind": "book", "uri": "https://example.com/th", "state": "checked", "vote_count": 15, "plateau_id": "harmony"},
+]
+
 func plateaus() -> Array:
 	return PLATEAUS.duplicate(true)
 
@@ -27,7 +35,7 @@ func bridges() -> Array:
 	return BRIDGES.duplicate(true)
 
 func resources() -> Array:
-	return []
+	return RESOURCES.duplicate(true)
 
 func reachable(_rep_json: String) -> Array:
 	return REACHABLE.duplicate()

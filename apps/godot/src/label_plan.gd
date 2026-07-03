@@ -43,6 +43,23 @@ static func plan_labels(items: Array, focused: String = "", lit: Dictionary = {}
 		kept.append(entry.it.id)
 	return kept
 
+## The set of ids "in focus scope" — the focus plateau plus its bridge-neighbors.
+## A bridge shows its concept label iff one of its endpoints is in this set (A4).
+## Empty focus → empty scope (all bridge labels hidden). Pure, order-free set.
+static func focus_scope(focus: String, neighbors: Dictionary = {}) -> Dictionary:
+	var scope := {}
+	if focus.is_empty():
+		return scope
+	scope[focus] = true
+	for n in neighbors:
+		scope[n] = true
+	return scope
+
+## Whether a bridge's concept label should be drawn: visible when either endpoint is
+## in the focus scope, hidden otherwise. Pure, unit-testable headless.
+static func bridge_label_visible(from_id: String, to_id: String, scope: Dictionary) -> bool:
+	return scope.has(from_id) or scope.has(to_id)
+
 ## Project a world point to a screen-space label Rect2, or return a sentinel when
 ## it is behind or outside the frustum (caller must skip those before plan_labels).
 ## The camera is a plain `view` (the inverse camera transform, world→view) + a

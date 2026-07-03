@@ -74,3 +74,11 @@ static func spread_positions(positions: Dictionary, min_dist: float = 2.2, itera
 ## Adaptive separation for large graphs (mirrors web layout.js).
 static func adaptive_min_dist(count: int) -> float:
 	return clampf(1.8 + sqrt(float(count)) * 0.35, 2.0, 5.5)
+
+## Local offset for the `index`-th of `count` resource markers orbiting a plateau
+## (A5). Points spread evenly on a horizontal ring of `radius`, lifted by `lift`.
+## Pure, deterministic value (relative to the plateau) — unit-testable headless.
+static func resource_offset(index: int, count: int, radius: float = 1.1, lift: float = 1.0) -> Vector3:
+	var n: int = maxi(count, 1)
+	var ang: float = TAU * float(index) / float(n)
+	return Vector3(cos(ang) * radius, lift, sin(ang) * radius)

@@ -7,14 +7,20 @@ extends Node3D
 const LIT := Color(1.0, 0.82, 0.4)
 const FOGGED := Color(0.18, 0.24, 0.31)
 const FOCUS := Color(0.62, 0.85, 1.0)
+const RESOURCE := Color(0.55, 1.0, 0.72)
 const PlaceNodeS := preload("res://src/place_node.gd")
 const LabelPlanS := preload("res://src/label_plan.gd")
+const DomainPaletteS := preload("res://src/domain_palette.gd")
+const MinimapS := preload("res://src/minimap.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const NativeAdapterS := preload("res://src/graph_source_native.gd")
 
 var source
 var positions_by_id: Dictionary = {}
 var _plateau_nodes: Dictionary = {} # id -> Node3D
+var _bridge_nodes: Dictionary = {} # bridge id -> Node3D
+var _domain_by_id: Dictionary = {} # plateau id -> domain_id
+var _minimap # Minimap CanvasLayer (created only when running in-tree)
 var _bridges: Array = []
 var _focus_id: String = ""
 var _lens_mode: bool = true
@@ -36,6 +42,7 @@ func _ready() -> void:
 
 func _boot() -> void:
 	_sidecar_paths()
+	_ensure_minimap()
 	var native = NativeAdapterS.new()
 	if native.is_available():
 		_load_sidecars()
@@ -68,15 +75,37 @@ func _read_text(path: String, fallback: String) -> String:
 func _apply_focus_file() -> void:
 	if _watch_focus_path.is_empty() or not FileAccess.file_exists(_watch_focus_path):
 		return
-	var data = JSON.parse_string(FileAccess.get_file_as_string(_watch_focus_path))
+	var parsed := parse_focus(FileAccess.get_file_as_string(_watch_focus_path))
+	_lens_mode = parsed.lens_mode
+	_focus_id = parsed.focus_id
+	_apply_focus_visuals()
+	_fly_to_focus()
+
+## Pure: parse a `focus.json` payload → { lens_mode: bool, focus_id: String }. Mirrors
+## the read-only sync contract: `lens_mode` gates whether `lens_id` is the active
+## focus, and a "null"/absent id (or the lens turned off) means no focus. Bad JSON →
+## lens on, no focus. Static + scene-free so it is unit-tested headless.
+static func parse_focus(text: String) -> Dictionary:
+	var data = JSON.parse_string(text)
 	if typeof(data) != TYPE_DICTIONARY:
-		return
-	_lens_mode = bool(data.get("lens_mode", true))
-	var lid = str(data.get("lens_id", ""))
+		return {"lens_mode": true, "focus_id": ""}
+	var lens_mode := bool(data.get("lens_mode", true))
+	var lid := str(data.get("lens_id", ""))
 	if lid == "null":
 		lid = ""
-	_focus_id = lid if _lens_mode else ""
-	_apply_focus_visuals()
+	return {"lens_mode": lens_mode, "focus_id": lid if lens_mode else ""}
+
+# A2: smoothly tween the camera toward the current focus plateau (if any). Guarded on
+# tree membership + a known position so build()/headless callers stay side-effect free.
+func _fly_to_focus() -> void:
+	if not is_inside_tree():
+		return
+	var active := _focus_id if _lens_mode else ""
+	if active.is_empty() or not positions_by_id.has(active):
+		return
+	var cam := get_node_or_null("Camera3D")
+	if cam != null and cam.has_method("fly_to"):
+		cam.fly_to(positions_by_id[active])
 
 func _try_load_blob(native) -> bool:
 	_watch_path = OS.get_environment("MP_WORLD_BLOB")
@@ -103,6 +132,7 @@ func _process(delta: float) -> void:
 	if _label_timer >= 0.25:
 		_label_timer = 0.0
 		_update_labels()
+		_update_minimap_camera()
 	if _watch_path.is_empty():
 		return
 	_watch_timer += delta
@@ -151,6 +181,8 @@ func build(src, rep_json: String = "") -> void:
 		c.queue_free()
 	positions_by_id.clear()
 	_plateau_nodes.clear()
+	_bridge_nodes.clear()
+	_domain_by_id.clear()
 	_bridges = src.bridges()
 
 	var plats: Array = src.plateaus()
@@ -171,18 +203,24 @@ func build(src, rep_json: String = "") -> void:
 	for p in plats:
 		var world_pos: Vector3 = spread[p.id]
 		positions_by_id[p.id] = world_pos
+		_domain_by_id[p.id] = str(p.get("domain_id", ""))
 		var node := _make_plateau(p, world_pos, _lit_ids.has(p.id))
 		graph.add_child(node)
 		_plateau_nodes[p.id] = node
 
 	for b in _bridges:
 		if positions_by_id.has(b.from) and positions_by_id.has(b.to):
-			graph.add_child(_make_bridge(b, positions_by_id[b.from], positions_by_id[b.to]))
+			var bnode := _make_bridge(b, positions_by_id[b.from], positions_by_id[b.to])
+			graph.add_child(bnode)
+			_bridge_nodes[b.id] = bnode
+
+	_attach_resources(src)
 
 	_ensure_environment()
 	_frame_camera()
 	_apply_focus_file()
 	_apply_focus_visuals()
+	_feed_minimap_points()
 	if is_inside_tree():
 		_update_labels()
 
@@ -216,6 +254,7 @@ func _pick_plateau(screen_pos: Vector2) -> bool:
 		return false
 	_focus_id = best_id
 	_apply_focus_visuals()
+	_fly_to_focus()
 	print("Focus: %s" % best_id)
 	return true
 
@@ -247,6 +286,75 @@ func _update_labels() -> void:
 		var label := node.get_child(1) as Label3D
 		if label:
 			label.visible = kept_set.has(id)
+
+# A6: create the minimap once, in-tree only (build()-from-test callers skip it, so the
+# minimap stays fully isolated from the headless scene smoke).
+func _ensure_minimap() -> void:
+	if _minimap != null or not is_inside_tree():
+		return
+	_minimap = MinimapS.new()
+	_minimap.name = "Minimap"
+	add_child(_minimap)
+
+# Feed the minimap the plateau dots on the e1×e3 plane (world x×y), tinted by domain.
+func _feed_minimap_points() -> void:
+	if _minimap == null:
+		return
+	var pts: Dictionary = {}
+	var cols: Dictionary = {}
+	for id in positions_by_id:
+		var wp: Vector3 = positions_by_id[id]
+		pts[id] = Vector2(wp.x, wp.y)
+		cols[id] = DomainPaletteS.domain_color(str(_domain_by_id.get(id, "")))
+	_minimap.set_points(pts, cols)
+
+# Push the current camera pose (position + forward) onto the minimap, projected to
+# the same e1×e3 plane so the compass arrow tracks where you are looking.
+func _update_minimap_camera() -> void:
+	if _minimap == null:
+		return
+	var cam := get_node_or_null("Camera3D") as Camera3D
+	if cam == null:
+		return
+	var pos := cam.global_position
+	var fwd := -cam.global_transform.basis.z
+	_minimap.set_camera(Vector2(pos.x, pos.y), Vector2(fwd.x, fwd.y))
+
+# A5: render read-only resource orbs, parented to their plateau node so they inherit
+# its world position + focus-lens scale (and never change the Graph child count, which
+# the scene smoke test guards). Resources whose plateau is absent are skipped.
+func _attach_resources(src) -> void:
+	var res: Array = src.resources() if src.has_method("resources") else []
+	var by_plateau: Dictionary = {}
+	for r in res:
+		var pid := str(r.get("plateau_id", ""))
+		if not _plateau_nodes.has(pid):
+			continue
+		if not by_plateau.has(pid):
+			by_plateau[pid] = []
+		by_plateau[pid].append(r)
+	for pid in by_plateau:
+		var list: Array = by_plateau[pid]
+		var node: Node3D = _plateau_nodes[pid]
+		for i in list.size():
+			node.add_child(_make_resource_marker(list[i], i, list.size()))
+
+func _make_resource_marker(r: Dictionary, index: int, count: int) -> MeshInstance3D:
+	var orb := MeshInstance3D.new()
+	orb.name = "Resource_%s" % str(r.get("id", index))
+	orb.set_meta("resource_id", str(r.get("id", "")))
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.12
+	sphere.height = 0.24
+	orb.mesh = sphere
+	orb.position = PlaceNodeS.resource_offset(index, count)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = RESOURCE
+	mat.emission_enabled = true
+	mat.emission = RESOURCE
+	mat.emission_energy_multiplier = 1.2
+	orb.material_override = mat
+	return orb
 
 func _neighbor_ids(id: String) -> Dictionary:
 	var out := {}
@@ -304,6 +412,20 @@ func _apply_focus_visuals() -> void:
 				mat.emission_enabled = is_lit
 				mat.emission = LIT if is_lit else FOGGED
 				mat.emission_energy_multiplier = 1.6 if is_lit else 0.0
+	_update_bridge_labels(active_focus, neighbors)
+
+# A4: show a bridge's concept label only when one endpoint is in the focus scope
+# (the focus plateau or one of its bridge-neighbors); hidden otherwise.
+func _update_bridge_labels(active_focus: String, neighbors: Dictionary) -> void:
+	var scope := LabelPlanS.focus_scope(active_focus, neighbors)
+	for bid in _bridge_nodes:
+		var bnode: Node3D = _bridge_nodes[bid]
+		var label := bnode.get_node_or_null("Concept") as Label3D
+		if label == null:
+			continue
+		var from_id := str(bnode.get_meta("from", ""))
+		var to_id := str(bnode.get_meta("to", ""))
+		label.visible = LabelPlanS.bridge_label_visible(from_id, to_id, scope)
 
 func _ensure_environment() -> void:
 	if get_node_or_null("WorldEnvironment") != null:
@@ -341,7 +463,11 @@ func _make_plateau(p: Dictionary, world_pos: Vector3, is_lit: bool) -> Node3D:
 	sphere.height = 1.4
 	mesh.mesh = sphere
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = LIT if is_lit else FOGGED
+	# A3: tint the base material by a stable hash of the domain (read-only DTO). The
+	# lit/fogged emission below is unchanged; fogged nodes just get a dimmer band so
+	# the fog still reads against the void.
+	var band := DomainPaletteS.domain_color(str(p.get("domain_id", "")))
+	mat.albedo_color = band if is_lit else band.darkened(0.55)
 	mat.emission_enabled = is_lit
 	mat.emission = LIT
 	mat.emission_energy_multiplier = 1.6
@@ -370,4 +496,19 @@ func _make_bridge(b: Dictionary, a: Vector3, c: Vector3) -> Node3D:
 		if forward.length_squared() > 0.0001:
 			root.basis = Basis.looking_at(forward, Vector3.UP)
 	root.add_child(mesh)
+
+	# A4: billboard the bridge's concept at the midpoint. Endpoints are stored on the
+	# node so visibility can be recomputed from the focus scope without re-reading the
+	# DTO. Hidden by default — shown only when an endpoint is the focus or a neighbor.
+	root.set_meta("from", b.from)
+	root.set_meta("to", b.to)
+	var label := Label3D.new()
+	label.name = "Concept"
+	label.text = str(b.get("concept", ""))
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 28
+	label.modulate = Color(0.75, 0.85, 1.0)
+	label.outline_size = 6
+	label.visible = false
+	root.add_child(label)
 	return root
