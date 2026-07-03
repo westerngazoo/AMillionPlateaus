@@ -94,4 +94,16 @@ impl GraphSourceNative {
             .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
+
+    /// Saved learning paths (C1) as PathDto JSON, decoded from the signed event
+    /// log the client holds (paths are `KIND_PATH` artifacts, not CRDT state).
+    #[func]
+    fn paths_json(&self, events_json: GString) -> GString {
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.paths_json(events_json.to_string().as_str()))
+            .unwrap_or_else(|| "[]".to_string());
+        GString::from(s.as_str())
+    }
 }

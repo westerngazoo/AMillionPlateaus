@@ -641,6 +641,17 @@ pub fn path_kind() -> u32 {
     mp_identity::KIND_PATH
 }
 
+/// C1 / R-0039 — saved learning paths decoded from a signed event log, as a JS
+/// array of `PathDto` (`{ id, title, goal, steps, domains }`). Only verified
+/// `KIND_PATH` events are surfaced. Read-only; mirrors the native binding's
+/// `paths_json` so the web and Godot clients render the identical shape.
+#[wasm_bindgen]
+pub fn paths(events_json: &str) -> Result<JsValue, JsError> {
+    Ok(serde_wasm_bindgen::to_value(&convert::path_dtos(
+        events_json,
+    )?)?)
+}
+
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`
 /// mapping reputation and discovery use (`mp_identity::wizard_id_of`). Exposed so
 /// a vote is keyed by the wizard's real identity, not a parallel/truncated id —

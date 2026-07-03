@@ -7,6 +7,7 @@
 //! value-marshalled from the plateau's grade-1 coefficients, exactly as `mp-wasm` does.
 
 use mp_domain::{Bridge, PlateauNode, Resource, ResourceKind, ResourceState};
+use mp_identity::{verify, NostrEvent, PathDoc, KIND_PATH};
 
 #[derive(serde::Serialize)]
 pub struct PositionDto {
@@ -60,6 +61,37 @@ pub fn path_dto(id: &str, title: &str, goal: &str, steps: &[String], domains: &[
         steps: steps.to_vec(),
         domains: domains.to_vec(),
     }
+}
+
+/// Shape a signed event log into read-only Path DTOs (C1 / R-0039). Paths are
+/// `KIND_PATH` signed artifacts (never in the CRDT — CLAUDE.md §7), so they are
+/// sourced from the same event log the client already holds, NOT from the doc.
+/// Only **verified** path events are surfaced (the same trust gate
+/// [`mp_identity::recompute`] applies); an unverifiable, non-path, or malformed
+/// event contributes nothing rather than erroring — one bad entry never blocks
+/// the good ones. The emitted shape is identical to `mp-wasm`'s path DTO
+/// (`{ id, title, goal, steps, domains }`, ids marshalled to strings).
+pub fn path_dtos_from_events(events_json: &str) -> Result<Vec<PathDto>, serde_json::Error> {
+    let events: Vec<NostrEvent> = serde_json::from_str(events_json)?;
+    let mut out = Vec::new();
+    for ev in events {
+        if ev.kind != KIND_PATH || !verify(&ev) {
+            continue;
+        }
+        let Ok(doc) = serde_json::from_str::<PathDoc>(&ev.content) else {
+            continue; // a malformed path payload is skipped, never fatal
+        };
+        let steps: Vec<String> = doc.steps.iter().map(|s| s.to_string()).collect();
+        let domains: Vec<String> = doc.domains.iter().map(|d| d.to_string()).collect();
+        out.push(path_dto(
+            &doc.id.to_string(),
+            &doc.title,
+            &doc.goal,
+            &steps,
+            &domains,
+        ));
+    }
+    Ok(out)
 }
 
 /// Map a `PlateauNode` to its DTO. `position` is the grade-1 part `(e1,e2,e3)` of the

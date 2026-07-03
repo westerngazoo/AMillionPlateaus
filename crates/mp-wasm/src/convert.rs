@@ -242,6 +242,44 @@ pub fn nearest_dtos(
         .collect())
 }
 
+/// C1 / R-0039 — read-only view of a saved learning path. Mirrors the native
+/// binding's PathDto exactly (`{ id, title, goal, steps, domains }`, ids as
+/// strings), so the web and Godot clients render the same shape.
+#[derive(serde::Serialize)]
+pub struct PathDto {
+    pub id: String,
+    pub title: String,
+    pub goal: String,
+    pub steps: Vec<String>,
+    pub domains: Vec<String>,
+}
+
+/// C1 / R-0039 — shape verified `KIND_PATH` events from a signed log into
+/// read-only PathDtos. Only **verified** path events are surfaced (the same
+/// trust gate [`recompute_reputation_json`] applies); an unverifiable, non-path,
+/// or malformed event contributes nothing rather than erroring — one bad entry
+/// never blocks the good ones. Marshalling only, no GA.
+pub fn path_dtos(events_json: &str) -> Result<Vec<PathDto>, EventError> {
+    let events: Vec<NostrEvent> = serde_json::from_str(events_json)?;
+    let mut out = Vec::new();
+    for ev in events {
+        if ev.kind != KIND_PATH || !mp_identity::verify(&ev) {
+            continue;
+        }
+        let Ok(doc) = serde_json::from_str::<PathDoc>(&ev.content) else {
+            continue; // a malformed path payload is skipped, never fatal
+        };
+        out.push(PathDto {
+            id: doc.id.to_string(),
+            title: doc.title,
+            goal: doc.goal,
+            steps: doc.steps.iter().map(|s| s.to_string()).collect(),
+            domains: doc.domains.iter().map(|d| d.to_string()).collect(),
+        });
+    }
+    Ok(out)
+}
+
 /// AC3 — single-plateau fog query by id string. A malformed id or unknown
 /// plateau is an error, never a silent `false`.
 pub fn is_reachable_by_id(
@@ -869,6 +907,68 @@ mod tests {
         let rep_without = recompute_reputation_json(&without, &kp.pubkey_hex()).unwrap();
         let rep_with = recompute_reputation_json(&with, &kp.pubkey_hex()).unwrap();
         assert_eq!(rep_without, rep_with, "path must not change reputation");
+    }
+
+    // ── C1 / R-0039 — path_dtos (read-only paths from the signed log) ────
+
+    #[test]
+    fn path_dtos_surfaces_verified_paths_and_skips_the_rest() {
+        let kp = Keypair::generate();
+        let path_id = Uuid::new_v4();
+        let step = Uuid::new_v4();
+        let domain = Uuid::new_v4();
+        let path = sign_path_json(
+            &kp,
+            &path_id.to_string(),
+            "Path to Mastery",
+            "Learn things",
+            &[step.to_string()],
+            &[domain.to_string()],
+            1,
+        )
+        .unwrap();
+        // A non-path event (traversal) and a tampered path must be ignored.
+        let trav =
+            sign_traversal_json(&kp, &domain.to_string(), [0.9, 0.1, 0.0], 1.0, None, 2).unwrap();
+        let mut tampered: NostrEvent = serde_json::from_str(&path).unwrap();
+        tampered.content = tampered.content.replace("Mastery", "Forgery");
+        let tampered = serde_json::to_string(&tampered).unwrap();
+
+        let log = format!("[{path},{trav},{tampered}]");
+        let dtos = path_dtos(&log).expect("parse");
+        assert_eq!(dtos.len(), 1, "only the verified path survives");
+        assert_eq!(dtos[0].id, path_id.to_string());
+        assert_eq!(dtos[0].title, "Path to Mastery");
+        assert_eq!(dtos[0].steps, vec![step.to_string()]);
+        assert_eq!(dtos[0].domains, vec![domain.to_string()]);
+    }
+
+    #[test]
+    fn path_dtos_shape_matches_the_contract() {
+        let kp = Keypair::generate();
+        let path = sign_path_json(
+            &kp,
+            &Uuid::new_v4().to_string(),
+            "T",
+            "G",
+            &[Uuid::new_v4().to_string()],
+            &[Uuid::new_v4().to_string()],
+            1,
+        )
+        .unwrap();
+        let v = serde_json::to_value(path_dtos(&format!("[{path}]")).unwrap()).unwrap();
+        let obj = v[0].as_object().expect("object");
+        let mut keys: Vec<String> = obj.keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["domains", "goal", "id", "steps", "title"]);
+    }
+
+    #[test]
+    fn path_dtos_rejects_malformed_log() {
+        assert!(matches!(
+            path_dtos("{ not an array"),
+            Err(EventError::Json(_))
+        ));
     }
 
     #[test]
