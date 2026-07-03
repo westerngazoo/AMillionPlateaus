@@ -1,0 +1,35 @@
+# A Million Plateaus — dev compose (D7).
+#
+#   docker compose up web           # serve the 2D client → http://localhost:8145
+#   docker compose run --rm test    # run the JS lint + test gate
+#   docker compose run --rm godot-test   # run the Godot headless tests
+#
+# The repo is bind-mounted so edits are picked up without a rebuild. The Rust
+# GDExtension build (mp-godot) additionally needs the sibling garust source; see
+# the Dockerfile note.
+
+services:
+  web:
+    build: .
+    image: amp-dev
+    ports:
+      - "8145:8145"
+    volumes:
+      - .:/app
+    command: ["python3", "scripts/serve.py", "8145"]
+
+  test:
+    build: .
+    image: amp-dev
+    working_dir: /app/apps/web
+    volumes:
+      - .:/app
+    command: ["sh", "-c", "npm ci && npm run lint && npm test"]
+
+  godot-test:
+    build: .
+    image: amp-dev
+    volumes:
+      - .:/app
+    command:
+      ["godot", "--headless", "--path", "apps/godot", "--script", "res://test/run_tests.gd"]
