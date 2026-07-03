@@ -11,6 +11,9 @@
 
 mod convert;
 mod error;
+// C5 — structural DTO parity with the native binding (`mp-godot`). Test-only.
+#[cfg(test)]
+mod parity;
 
 use mp_crdt::{CrdtDoc, SyncSession};
 use mp_domain::{Bridge, KnowledgeGraph, PlateauNode, Resource};
@@ -146,6 +149,35 @@ impl WasmGraph {
             &self.inner,
             wizard_rep_json,
             k,
+        )?)?)
+    }
+
+    /// RFC-0002 Phase 2 (C3) — the overlap between two domains: the meet line
+    /// where their fitted planes intersect and the plateaus on the shared island
+    /// (near both planes within `tolerance`). Returns an `OverlapDto`
+    /// (`{ has_overlap, shared_line{e1,e2,e3}, plateaus }`). All GA is delegated
+    /// to `mp-domain` (`domain_plane`/`shared_line`/`membership`); this is a
+    /// read-only query that leaves the projection fog untouched (RFC-0002 §6.4).
+    ///
+    /// `tolerance` is the out-of-plane membership band (0 = on the plane, 1 =
+    /// orthogonal); pass [`membership_tolerance`] for the default. A non-finite or
+    /// negative `tolerance` is a thrown `Error` so no panic crosses the FFI.
+    pub fn domain_overlap(
+        &self,
+        domain_a: &str,
+        domain_b: &str,
+        tolerance: f64,
+    ) -> Result<JsValue, JsError> {
+        if !tolerance.is_finite() || tolerance < 0.0 {
+            return Err(JsError::new(
+                "tolerance must be a finite, non-negative number",
+            ));
+        }
+        Ok(serde_wasm_bindgen::to_value(&convert::domain_overlap(
+            &self.inner,
+            domain_a,
+            domain_b,
+            tolerance as f32,
         )?)?)
     }
 }
@@ -620,6 +652,15 @@ pub fn crystallize_threshold() -> f32 {
     mp_domain::CRYSTALLIZE_THRESHOLD
 }
 
+/// RFC-0002 Phase 2 (C3) — the default domain-membership tolerance band (the
+/// out-of-plane fraction below which a topic counts as "on" a domain plane).
+/// Exposed so the web app passes it to [`WasmGraph::domain_overlap`] without
+/// hardcoding the constant.
+#[wasm_bindgen]
+pub fn membership_tolerance() -> f32 {
+    mp_domain::MEMBERSHIP_TOLERANCE
+}
+
 /// R-0030 — the mastery event kind. Exposed so the web app can pin its
 /// `MASTERY_KIND` constant to the Rust source (one source of truth).
 #[wasm_bindgen]
@@ -639,6 +680,17 @@ pub fn proof_kind() -> u32 {
 #[wasm_bindgen]
 pub fn path_kind() -> u32 {
     mp_identity::KIND_PATH
+}
+
+/// C1 / R-0039 — saved learning paths decoded from a signed event log, as a JS
+/// array of `PathDto` (`{ id, title, goal, steps, domains }`). Only verified
+/// `KIND_PATH` events are surfaced. Read-only; mirrors the native binding's
+/// `paths_json` so the web and Godot clients render the identical shape.
+#[wasm_bindgen]
+pub fn paths(events_json: &str) -> Result<JsValue, JsError> {
+    Ok(serde_wasm_bindgen::to_value(&convert::path_dtos(
+        events_json,
+    )?)?)
 }
 
 /// R-0015 — the canonical wizard id for a Nostr pubkey: the SAME `Uuid::new_v5`

@@ -94,4 +94,29 @@ impl GraphSourceNative {
             .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
+
+    /// Saved learning paths (C1) as PathDto JSON, decoded from the signed event
+    /// log the client holds (paths are `KIND_PATH` artifacts, not CRDT state).
+    #[func]
+    fn paths_json(&self, events_json: GString) -> GString {
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.paths_json(events_json.to_string().as_str()))
+            .unwrap_or_else(|| "[]".to_string());
+        GString::from(s.as_str())
+    }
+
+    /// Top-`k` plateaus nearest a reputation JSON (C6 / R-0007) as NearestDto
+    /// JSON — the graph-grounded retrieval ranking. A negative `k` clamps to 0.
+    #[func]
+    fn nearest_plateaus_json(&self, rep_json: GString, k: i64) -> GString {
+        let k = k.max(0) as usize;
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.nearest_plateaus_json(rep_json.to_string().as_str(), k))
+            .unwrap_or_else(|| "[]".to_string());
+        GString::from(s.as_str())
+    }
 }

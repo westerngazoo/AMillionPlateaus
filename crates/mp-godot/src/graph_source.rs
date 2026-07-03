@@ -6,8 +6,8 @@
 
 use mp_crdt::{CrdtDoc, CrdtError};
 
-use crate::dto::{bridge_dto, plateau_dto, resource_dto};
-use crate::reputation::reachable_ids;
+use crate::dto::{bridge_dto, path_dtos_from_events, plateau_dto, resource_dto};
+use crate::reputation::{nearest_dtos, reachable_ids};
 
 /// A loaded world the immersive client reads. Owns the CRDT doc; every accessor
 /// re-derives the `KnowledgeGraph` and serialises the DTOs (POC-simple; the doc is
@@ -100,6 +100,33 @@ impl GraphData {
                 serde_json::to_string(&g.resources.values().map(resource_dto).collect::<Vec<_>>())
                     .unwrap_or_else(|_| "[]".to_string())
             }
+            Err(_) => "[]".to_string(),
+        }
+    }
+
+    /// Saved learning paths as a DTO-JSON array (C1 / R-0039) — the SAME shape
+    /// `mp-wasm` shapes a path into (`{ id, title, goal, steps, domains }`). Paths
+    /// are `KIND_PATH` signed artifacts, never in the CRDT (CLAUDE.md §7), so they
+    /// come from the signed event log the client holds — hence the `events_json`
+    /// argument rather than `self.doc`. Only verified path events are surfaced; a
+    /// bad log degrades to `"[]"` (no `unwrap` in library code).
+    pub fn paths_json(&self, events_json: &str) -> String {
+        match path_dtos_from_events(events_json) {
+            Ok(paths) => serde_json::to_string(&paths).unwrap_or_else(|_| "[]".to_string()),
+            Err(_) => "[]".to_string(),
+        }
+    }
+
+    /// Top-`k` plateaus nearest a reputation JSON as a `NearestDto` array (C6 /
+    /// R-0007) — the SAME shape `mp-wasm`'s `nearest_plateaus` emits
+    /// (`{ id, name, score }`). GA ranking is delegated to `mp-domain`; a bad log
+    /// or projection degrades to `"[]"` (no `unwrap` in library code).
+    pub fn nearest_plateaus_json(&self, rep_json: &str, k: usize) -> String {
+        match self.doc.to_graph() {
+            Ok(g) => match nearest_dtos(&g, rep_json, k) {
+                Ok(rows) => serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_string()),
+                Err(_) => "[]".to_string(),
+            },
             Err(_) => "[]".to_string(),
         }
     }
@@ -235,5 +262,157 @@ mod tests {
             serde_json::from_str(&data.reachable_plateaus_json(&json)).expect("json");
         let arr = ids.as_array().expect("array");
         assert!(!arr.is_empty());
+    }
+
+    // ── C1 — paths_json (read-only Path DTOs from the signed log) ────────
+
+    /// Sign a real `KIND_PATH` event carrying a `PathDoc` payload.
+    fn signed_path_event(
+        kp: &mp_identity::Keypair,
+        id: Uuid,
+        title: &str,
+        goal: &str,
+        steps: &[Uuid],
+        domains: &[Uuid],
+        created_at: u64,
+    ) -> String {
+        let content = serde_json::to_string(&mp_identity::PathDoc {
+            id,
+            title: title.to_string(),
+            goal: goal.to_string(),
+            steps: steps.to_vec(),
+            domains: domains.to_vec(),
+        })
+        .expect("serialise PathDoc");
+        let ev = mp_identity::sign(kp, mp_identity::KIND_PATH, vec![], &content, created_at)
+            .expect("sign path event");
+        serde_json::to_string(&ev).expect("serialise event")
+    }
+
+    #[test]
+    fn paths_json_surfaces_verified_paths() {
+        let kp = mp_identity::Keypair::generate();
+        let data = GraphData::new().expect("new");
+        let path_id = Uuid::new_v4();
+        let step = Uuid::new_v4();
+        let domain = Uuid::new_v4();
+        let ev = signed_path_event(
+            &kp,
+            path_id,
+            "Path to Mastery",
+            "Learn things",
+            &[step],
+            &[domain],
+            1,
+        );
+        let log = format!("[{ev}]");
+
+        let paths: serde_json::Value =
+            serde_json::from_str(&data.paths_json(&log)).expect("json");
+        let arr = paths.as_array().expect("array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], path_id.to_string());
+        assert_eq!(arr[0]["title"], "Path to Mastery");
+        assert_eq!(arr[0]["goal"], "Learn things");
+        assert_eq!(arr[0]["steps"][0], step.to_string());
+        assert_eq!(arr[0]["domains"][0], domain.to_string());
+    }
+
+    // The path DTO carries EXACTLY the contract keys mp-wasm's path DTO emits
+    // (id/title/goal/steps/domains) — structural parity, not shared struct identity.
+    #[test]
+    fn path_dto_shape_matches_the_contract() {
+        let kp = mp_identity::Keypair::generate();
+        let data = GraphData::new().expect("new");
+        let ev = signed_path_event(
+            &kp,
+            Uuid::new_v4(),
+            "T",
+            "G",
+            &[Uuid::new_v4()],
+            &[Uuid::new_v4()],
+            1,
+        );
+        let paths: serde_json::Value =
+            serde_json::from_str(&data.paths_json(&format!("[{ev}]"))).expect("json");
+        let obj = paths[0].as_object().expect("object");
+        let mut keys: Vec<String> = obj.keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["domains", "goal", "id", "steps", "title"]);
+    }
+
+    #[test]
+    fn paths_json_ignores_non_path_and_unverified_events() {
+        let kp = mp_identity::Keypair::generate();
+        let data = GraphData::new().expect("new");
+        // A verified path event…
+        let good = signed_path_event(
+            &kp,
+            Uuid::new_v4(),
+            "Real",
+            "goal",
+            &[Uuid::new_v4()],
+            &[Uuid::new_v4()],
+            1,
+        );
+        // …plus a tampered copy (mutated content ⇒ id/sig no longer verify).
+        let mut tampered: mp_identity::NostrEvent =
+            serde_json::from_str(&good).expect("parse");
+        tampered.content = tampered.content.replace("Real", "Forged");
+        let tampered = serde_json::to_string(&tampered).expect("serialise");
+        let log = format!("[{good},{tampered}]");
+
+        let paths: serde_json::Value =
+            serde_json::from_str(&data.paths_json(&log)).expect("json");
+        let arr = paths.as_array().expect("array");
+        assert_eq!(arr.len(), 1, "only the verified path survives the trust gate");
+        assert_eq!(arr[0]["title"], "Real");
+    }
+
+    #[test]
+    fn paths_json_empty_or_malformed_log_is_empty_array() {
+        let data = GraphData::new().expect("new");
+        assert_eq!(data.paths_json("[]"), "[]");
+        assert_eq!(data.paths_json("{ not json"), "[]");
+    }
+
+    // ── C6 / R-0007 — nearest_plateaus_json retrieval ranking ────────────
+
+    #[test]
+    fn nearest_json_ranks_plateaus_and_truncates() {
+        let mut doc = doc_with_fixture();
+        let math = {
+            let g = doc.to_graph().expect("graph");
+            g.plateaus().next().expect("plateau").domain_id
+        };
+        let data = GraphData::from_doc(doc);
+        // A reputation facing e1 in the math domain ranks both fixture plateaus.
+        let json = format!(
+            r#"{{ "domain_reps": {{ "{math}": [0.0, 0.95, 0.1, 0.0, 0.05, 0.0, 0.0, 0.0] }} }}"#
+        );
+        let rows: serde_json::Value =
+            serde_json::from_str(&data.nearest_plateaus_json(&json, 10)).expect("json");
+        let arr = rows.as_array().expect("array");
+        assert_eq!(arr.len(), 2);
+        // Each row carries the contract keys (id/name/score) — mp-wasm parity.
+        let obj = arr[0].as_object().expect("object");
+        let mut keys: Vec<String> = obj.keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["id", "name", "score"]);
+        // Descending by score.
+        let s0 = arr[0]["score"].as_f64().expect("s0");
+        let s1 = arr[1]["score"].as_f64().expect("s1");
+        assert!(s0 >= s1, "scores are descending");
+        // k truncates to the top of the ranking.
+        let top1: serde_json::Value =
+            serde_json::from_str(&data.nearest_plateaus_json(&json, 1)).expect("json");
+        assert_eq!(top1.as_array().expect("array").len(), 1);
+    }
+
+    #[test]
+    fn nearest_json_empty_or_bad_is_empty_array() {
+        let data = GraphData::new().expect("new");
+        assert_eq!(data.nearest_plateaus_json("{}", 5), "[]");
+        assert_eq!(data.nearest_plateaus_json("{ broken", 5), "[]");
     }
 }
