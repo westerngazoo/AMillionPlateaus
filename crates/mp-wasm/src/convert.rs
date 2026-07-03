@@ -295,6 +295,97 @@ pub fn is_reachable_by_id(
     Ok(g.is_reachable(plateau, &rep))
 }
 
+// ─── RFC-0002 Phase 2 (C3) — domain overlap markers ─────────────────────────
+//
+// Surface the bivector-domain *meet* to the web binding: where two domains'
+// fitted planes intersect (`shared_line`) and which plateaus sit on that shared
+// island (near BOTH planes within a tolerance). All GA is delegated to the
+// `mp_domain` primitives (`domain_plane`/`shared_line`/`membership`,
+// RFC-0002 §9 Phase 1); this only gathers each domain's topics and marshals the
+// result. Additive, read-side geometry — the projection fog is untouched (§6.4).
+
+/// JS-facing view of the overlap between two domains (RFC-0002 Phase 2).
+#[derive(serde::Serialize)]
+pub struct OverlapDto {
+    /// `true` when the two fitted planes have a non-degenerate meet (not parallel).
+    pub has_overlap: bool,
+    /// The grade-1 shared line `(e1,e2,e3)` — the meet of the two planes; all-zero
+    /// when the planes are parallel / one domain has no topics.
+    pub shared_line: PositionDto,
+    /// Plateau ids lying on the shared island: near BOTH domain planes within
+    /// `tolerance` (the grounded strand of topics the two domains share).
+    pub plateaus: Vec<String>,
+}
+
+/// Grade-1 coefficients `(e1,e2,e3)` of a multivector — blade order puts e3 at
+/// index 4. Shared by [`OverlapDto`]; keeps the marshalling in one place.
+fn grade1_position(mv: &Mv) -> PositionDto {
+    let c = mv.coeffs;
+    PositionDto {
+        e1: c[1],
+        e2: c[2],
+        e3: c[4],
+    }
+}
+
+/// RFC-0002 Phase 2 (C3) — the overlap between two domains against a graph: the
+/// meet line of their fitted planes plus the plateaus on the shared island.
+///
+/// Each domain's plane is fitted from its member plateaus' grade-1 positions
+/// (`domain_plane`); a sparse (<2 topic) domain falls back to `dual` of its first
+/// topic (or e1 when it has none) — the R-0038 lens role (RFC-0002 §6.2). A
+/// plateau is "on the island" when its out-of-plane fraction (`membership`) is
+/// `<= tolerance` for BOTH planes, i.e. it lies near their meet line. A malformed
+/// domain UUID is an error, never a silent empty result.
+pub fn domain_overlap(
+    g: &KnowledgeGraph,
+    domain_a: &str,
+    domain_b: &str,
+    tolerance: f32,
+) -> Result<OverlapDto, ReputationParseError> {
+    let da = Uuid::parse_str(domain_a)?;
+    let db = Uuid::parse_str(domain_b)?;
+
+    let topics_of = |domain: Uuid| -> Vec<&Mv> {
+        g.plateaus()
+            .filter(|p| p.domain_id == domain)
+            .map(|p| p.position())
+            .collect()
+    };
+    let topics_a = topics_of(da);
+    let topics_b = topics_of(db);
+
+    // Fallback lens axis for a sparse domain: its first topic, else e1.
+    let default_axis = mp_domain::ga::vector(1.0, 0.0, 0.0);
+    let fallback_a = topics_a.first().map(|m| **m).unwrap_or(default_axis);
+    let fallback_b = topics_b.first().map(|m| **m).unwrap_or(default_axis);
+
+    let plane_a = mp_domain::domain_plane(&topics_a, &fallback_a);
+    let plane_b = mp_domain::domain_plane(&topics_b, &fallback_b);
+
+    let has_overlap = mp_domain::has_domain_overlap(&plane_a, &plane_b);
+    let shared_line = mp_domain::shared_line(&plane_a, &plane_b);
+
+    // The island: plateaus near BOTH planes (only meaningful when the planes meet).
+    let mut plateaus = Vec::new();
+    if has_overlap {
+        for p in g.plateaus() {
+            let v = p.position();
+            if mp_domain::membership(v, &plane_a) <= tolerance
+                && mp_domain::membership(v, &plane_b) <= tolerance
+            {
+                plateaus.push(p.id.to_string());
+            }
+        }
+    }
+
+    Ok(OverlapDto {
+        has_overlap,
+        shared_line: grade1_position(&shared_line),
+        plateaus,
+    })
+}
+
 // ─── SPEC-0010 — signed events → reputation marshalling ──────
 //
 // All branching/marshalling lives here (host-testable); `lib.rs` only sources
@@ -665,6 +756,93 @@ mod tests {
         assert!(matches!(
             nearest_dtos(&g, "{ broken", 5),
             Err(ReputationParseError::Json(_))
+        ));
+    }
+
+    // ── RFC-0002 Phase 2 (C3) — domain overlap markers ───────
+
+    /// Two domains whose fitted planes are e12 (Math on e1,e2) and e23 (Physics
+    /// on e2,e3) meet on the e2 axis; the shared island is exactly the two topics
+    /// that sit on e2, not the off-axis ones.
+    #[test]
+    fn domain_overlap_finds_meet_line_and_island() {
+        let dm = Uuid::new_v4();
+        let dp = Uuid::new_v4();
+        let mut g = KnowledgeGraph::new();
+        let a = PlateauNode::new("A", dm, 1.0, 0.0, 0.0); // e1
+        let b = PlateauNode::new("B", dm, 0.0, 1.0, 0.0); // e2 (shared axis)
+        let c = PlateauNode::new("C", dp, 0.0, 1.0, 0.0); // e2 (shared axis)
+        let d = PlateauNode::new("D", dp, 0.0, 0.0, 1.0); // e3
+        let (a_id, b_id, c_id, d_id) = (a.id, b.id, c.id, d.id);
+        g.add_plateau(a);
+        g.add_plateau(b);
+        g.add_plateau(c);
+        g.add_plateau(d);
+
+        let dto =
+            domain_overlap(&g, &dm.to_string(), &dp.to_string(), mp_domain::MEMBERSHIP_TOLERANCE)
+                .expect("overlap");
+        assert!(dto.has_overlap, "e12 and e23 planes meet on e2");
+        // The meet line is (approximately) the e2 axis.
+        assert!(dto.shared_line.e2.abs() > ga::EPSILON);
+        assert!(dto.shared_line.e1.abs() < ga::EPSILON);
+        assert!(dto.shared_line.e3.abs() < ga::EPSILON);
+        // The island is exactly the two e2 topics (B, C), not the off-axis ones.
+        let mut got = dto.plateaus.clone();
+        got.sort();
+        let mut want = vec![b_id.to_string(), c_id.to_string()];
+        want.sort();
+        assert_eq!(got, want);
+        assert!(!dto.plateaus.contains(&a_id.to_string()));
+        assert!(!dto.plateaus.contains(&d_id.to_string()));
+    }
+
+    #[test]
+    fn domain_overlap_none_for_parallel_domains() {
+        let d1 = Uuid::new_v4();
+        let d2 = Uuid::new_v4();
+        let mut g = KnowledgeGraph::new();
+        // Both domains lie in the e1–e2 plane ⇒ parallel planes, no meaningful meet.
+        g.add_plateau(PlateauNode::new("A", d1, 1.0, 0.0, 0.0));
+        g.add_plateau(PlateauNode::new("B", d1, 0.0, 1.0, 0.0));
+        g.add_plateau(PlateauNode::new("C", d2, 0.9, 0.1, 0.0));
+        g.add_plateau(PlateauNode::new("D", d2, 0.8, 0.2, 0.0));
+        let dto =
+            domain_overlap(&g, &d1.to_string(), &d2.to_string(), mp_domain::MEMBERSHIP_TOLERANCE)
+                .expect("overlap");
+        assert!(!dto.has_overlap, "parallel planes have no meet");
+        assert!(dto.plateaus.is_empty(), "no island without a meet");
+    }
+
+    #[test]
+    fn domain_overlap_dto_shape() {
+        let dm = Uuid::new_v4();
+        let dp = Uuid::new_v4();
+        let mut g = KnowledgeGraph::new();
+        g.add_plateau(PlateauNode::new("A", dm, 1.0, 0.0, 0.0));
+        g.add_plateau(PlateauNode::new("B", dm, 0.0, 1.0, 0.0));
+        g.add_plateau(PlateauNode::new("C", dp, 0.0, 1.0, 0.0));
+        g.add_plateau(PlateauNode::new("D", dp, 0.0, 0.0, 1.0));
+        let dto =
+            domain_overlap(&g, &dm.to_string(), &dp.to_string(), mp_domain::MEMBERSHIP_TOLERANCE)
+                .unwrap();
+        let v = serde_json::to_value(dto).unwrap();
+        let obj = v.as_object().unwrap();
+        let mut keys: Vec<String> = obj.keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["has_overlap", "plateaus", "shared_line"]);
+        let sl = obj["shared_line"].as_object().expect("shared_line object");
+        let mut sk: Vec<String> = sl.keys().cloned().collect();
+        sk.sort();
+        assert_eq!(sk, ["e1", "e2", "e3"]);
+    }
+
+    #[test]
+    fn domain_overlap_rejects_bad_uuid() {
+        let g = KnowledgeGraph::new();
+        assert!(matches!(
+            domain_overlap(&g, "not-a-uuid", &Uuid::new_v4().to_string(), 0.35),
+            Err(ReputationParseError::DomainId(_))
         ));
     }
 
