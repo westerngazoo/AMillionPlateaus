@@ -1,0 +1,19 @@
+{
+  "name": "amp-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Million Plateaus — web client (vanilla ES modules). Tooling for lint/format/test only; the app itself is served statically, no build step.",
+  "scripts": {
+    "lint": "eslint \"src/**/*.{js,mjs}\"",
+    "lint:fix": "eslint --fix \"src/**/*.{js,mjs}\"",
+    "format": "prettier --write \"src/**/*.{js,mjs}\"",
+    "format:check": "prettier --check \"src/**/*.{js,mjs}\"",
+    "test": "node --test \"src/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.0.0"
+  }
+}

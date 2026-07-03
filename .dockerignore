@@ -1,0 +1,12 @@
+# Keep the build context small and reproducible — never ship local build output,
+# deps, or the gitignored Godot editor into the image.
+.git
+target
+**/target
+node_modules
+**/node_modules
+**/pkg
+tools/godot
+apps/web/export/world.bin
+*.redb
+.DS_Store

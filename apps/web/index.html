@@ -16,6 +16,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>A Million Plateaus — fog world</title>
+    <!-- PWA (D6): installable offline shell. Additive; the service worker only
+         registers on non-localhost secure origins (see the script below), so the
+         dev no-cache flow in scripts/serve.py is never shadowed by a cache. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#11161d" />
     <style>
       :root { color-scheme: dark; }
       body {
@@ -907,5 +913,19 @@
       channel + the relay.
     </p>
     <script type="module" src="./src/main.js"></script>
+    <script>
+      // PWA (D6): register the offline-shell service worker — but ONLY on a
+      // deployed secure origin. On localhost/127.0.0.1 dev we deliberately skip
+      // it so scripts/serve.py's no-cache flow keeps serving fresh modules/wasm.
+      if ("serviceWorker" in navigator) {
+        const host = location.hostname;
+        const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+        if (location.protocol === "https:" && !isLocalhost) {
+          window.addEventListener("load", () => {
+            navigator.serviceWorker.register("./sw.js").catch(() => {});
+          });
+        }
+      }
+    </script>
   </body>
 </html>

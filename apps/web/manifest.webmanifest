@@ -1,0 +1,19 @@
+{
+  "name": "A Million Plateaus — fog world",
+  "short_name": "Plateaus",
+  "description": "A decentralized spatial learning world — knowledge as geometry.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#11161d",
+  "theme_color": "#11161d",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

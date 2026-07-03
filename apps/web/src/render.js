@@ -7,7 +7,7 @@ import { project } from "./project.js";
 import { planLabels } from "./labels.js";
 import { layoutGraph, bridgeNeighbors, DISC_RADIUS } from "./layout.js";
 
-export const RADIUS = DISC_RADIUS;
+const RADIUS = DISC_RADIUS;
 
 const LENS_RADIUS = 20;
 const NEIGHBOR_RADIUS = 13;

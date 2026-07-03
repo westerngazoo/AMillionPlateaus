@@ -39,6 +39,24 @@ if [[ "${BUILD_GODOT:-1}" != "0" ]]; then
   esac
 fi
 
+# ── Health check (D4): the native GDExtension must be present ────────────────
+# After the (optional) auto-build above, the cdylib still may be missing — e.g.
+# BUILD_GODOT=0 was set, or the build was skipped. Fail fast with a pointer
+# rather than launching into a half-wired scene. (macOS/Linux only; the cdylib
+# name is platform-specific.)
+case "$(uname -s)" in
+  Linux)  EXT_LIB="$GODOT_PROJECT/bin/libmp_godot.so" ;;
+  Darwin) EXT_LIB="$GODOT_PROJECT/bin/libmp_godot.dylib" ;;
+  *)      EXT_LIB="" ;;
+esac
+if [[ -n "$EXT_LIB" && ! -f "$EXT_LIB" ]]; then
+  echo "✖ GDExtension not found: $EXT_LIB" >&2
+  echo "  Build it with:  ./scripts/build-godot-ext.sh" >&2
+  echo "  (needs the Rust toolchain and the sibling garust checkout at ../garust)" >&2
+  echo "  Or re-run without BUILD_GODOT=0 to auto-build it." >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$MP_WORLD_BLOB")"
 
 echo "Godot 3D world"
