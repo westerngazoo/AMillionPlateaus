@@ -59,6 +59,14 @@
       button:hover { background: #34495f; }
       .note { font-size: 12px; color: #8aa0b4; max-width: 760px; text-align: center; }
       #hud { font-size: 12px; color: #b7c6d6; font-variant-numeric: tabular-nums; }
+      /* Path next-step chip (Track B2): a persistent, glanceable "Next" pill. */
+      .path-chip {
+        font-size: 12px; padding: 4px 10px; border-radius: 999px;
+        background: #1b2b3d; color: #9fd0ff; border: 1px solid #34557f; cursor: pointer;
+        max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .path-chip:hover { background: #22374e; }
+      .path-chip[hidden] { display: none; }
 
       /* Identity + relay row (SPEC-0010). The pubkey/relay status are monospace
          chips; the relay URL is a slim local-only input. */
@@ -275,6 +283,13 @@
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
       }
       .detail-study button:hover { background: #345780; }
+      /* Download study digest (Track B7). */
+      .detail-digest { margin-top: 6px; }
+      .detail-digest button {
+        font-size: 12px; padding: 5px 10px; border-radius: 8px;
+        background: #1b2735; color: #9fd0b4; border: 1px solid #34495f; cursor: pointer;
+      }
+      .detail-digest button:hover { background: #223346; }
       .detail-reply {
         font-size: 13px; line-height: 1.5; color: #d6e0ea; white-space: pre-wrap;
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
@@ -479,6 +494,7 @@
       <button id="change-persona">Change lens</button>
       <button id="travel-toggle">Travel</button>
       <button id="lens-toggle" title="Focus lens: current topic full size, neighbors medium, rest as shadows">Focus lens</button>
+      <button id="layout-preset" title="Dense-graph layout density: compact / study / overview">Layout: study</button>
       <button id="open-3d" title="Open the Godot 3D world (native)">3D world</button>
       <button id="paths-toggle">Paths</button>
       <button id="model-setup">Model setup</button>
@@ -492,6 +508,9 @@
       <button id="reset-fog">Reset my history</button>
       <button id="tour">Tour</button>
       <span id="hud">loading…</span>
+      <!-- Path next-step HUD (R-0039 / Track B2): the next unmastered step on the
+           followed path; click to focus that plateau. Hidden unless following. -->
+      <button id="path-next-hud" class="path-chip" hidden title="Jump to the next step on your followed path"></button>
       <span id="import-status" class="idhud" hidden></span>
       <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
            (or any WasmCrdtDoc.save() blob) and MERGE it into the current world. -->
@@ -505,6 +524,9 @@
       <input id="relay-url" type="text" placeholder="wss://relay… (optional)" autocomplete="off" />
       <button id="relay-connect">Connect relay</button>
       <span id="relay-hud" class="idhud">relay ○ offline</span>
+      <!-- Godot export-sync status (Track B6): last successful PUT of the
+           world.bin / focus.json / reputation.json mirror. Non-blocking readout. -->
+      <span id="sync-status" class="idhud" title="Godot 3D sync — world.bin · focus.json · reputation.json">sync ○ idle</span>
     </div>
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
          domain select is populated from DOMAINS at init. Position sliders use
@@ -803,6 +825,9 @@
            resources, via the bring-your-own model (R-0007). Buttons filled by main.js. -->
       <h3 class="detail-res-title">Study with your companion</h3>
       <div id="detail-study" class="detail-study"><!-- action buttons, by main.js --></div>
+      <!-- Offline study digest (Track B7 / R-0026): download this topic + its
+           neighbors + resources as a self-contained Markdown file. -->
+      <div class="detail-digest"><button id="detail-digest" type="button">⬇ Download study digest</button></div>
       <div id="detail-reply" class="detail-reply" hidden><!-- study answer, by main.js --></div>
       <!-- Mark this topic mastered (R-0030): self-test via Quiz me, then confirm.
            A model-gated "Prove it" toggle (R-0032) is appended here by main.js. -->

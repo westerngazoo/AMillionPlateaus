@@ -22,6 +22,8 @@ import init, {
   path_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
+import { LAYOUT_PRESET_ORDER, bridgeNeighbors } from "./layout.js";
+import { subgraphDigest, digestFilename } from "./digest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -53,6 +55,7 @@ import {
   buildPlateauStudyContext,
   STUDY_ACTIONS,
   crossLinks,
+  pinCandidates,
   bridgeResources,
   buildProofGrading,
   parseVerdict,
@@ -73,10 +76,14 @@ import {
   buildPath,
   pathDomains,
   nextPathStep,
+  nextStepInfo,
   pathProgress,
   publishedPaths,
+  rankPublishedPaths,
   PATH_KIND,
 } from "./paths.js";
+import { graphIds, importSummary, formatImportSummary } from "./import.js";
+import { formatSyncStatus } from "./sync-status.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -253,6 +260,19 @@ async function main() {
   // plateau scores reputation under its OWN domain, not a fallback (AC5).
   for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
 
+  // Export-sync status readout (Track B6): record the last SUCCESSFUL Godot-sync
+  // PUT and surface a "synced ✓ …ago" chip. Purely observational — it never blocks
+  // or alters the PUT (same method/headers/body), just taps the resolved promise.
+  let lastSyncAt = 0;
+  function updateSyncStatus() {
+    const el = document.getElementById("sync-status");
+    if (el) el.textContent = formatSyncStatus(lastSyncAt);
+  }
+  function markSynced() {
+    lastSyncAt = Date.now();
+    updateSyncStatus();
+  }
+
   // Persist the whole converged doc to IndexedDB; debounced inside the store
   // (AC3). Called after every local edit and inbound sync.
   let lastDevFocus = "";
@@ -264,20 +284,26 @@ async function main() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: payload,
-    }).catch(() => {});
+    })
+      .then(markSynced)
+      .catch(() => {});
   }
   function syncDevReputation() {
     fetch("/dev/reputation.json", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(reputation),
-    }).catch(() => {});
+    })
+      .then(markSynced)
+      .catch(() => {});
   }
   function persist() {
     const bytes = doc.save();
     snapshots.save(bytes);
     // Dev: mirror CRDT + lens + reputation for the Godot 3D client (start-dev.sh).
-    fetch("/dev/world.bin", { method: "PUT", body: bytes }).catch(() => {});
+    fetch("/dev/world.bin", { method: "PUT", body: bytes })
+      .then(markSynced)
+      .catch(() => {});
     syncDevFocus();
     syncDevReputation();
   }
@@ -408,6 +434,9 @@ async function main() {
   let lensId = null; // R-0025 lens: active topic while studying (persistent focus)
   let lensMode = localStorage.getItem("mp.lensMode") !== "0"; // Obsidian-style focus (default on)
   let followPathId = null; // R-0039: local path being followed (camera/UI only)
+  // Dense-graph layout preset (Track B4): compact / study / overview. LOCAL only —
+  // a view setting, never synced. `study` is the historical default.
+  let layoutPreset = localStorage.getItem("mp.layoutPreset") || "study";
   const PATHS_KEY = "mp.paths";
   function loadPaths() {
     try {
@@ -430,6 +459,39 @@ async function main() {
   function followNext() {
     return nextPathStep(followSteps(), mastered);
   }
+
+  // Path next-step HUD (Track B2 / R-0039): a persistent toolbar chip showing the
+  // next unmastered step on the followed path. Pure `nextStepInfo` decides content;
+  // clicking focuses that plateau (camera-only, like Travel). Hidden when not
+  // following or the path is complete. Refreshed from draw() so it always tracks.
+  const pathNextHud = document.getElementById("path-next-hud");
+  let pathHudTimer = null;
+  function updatePathHud() {
+    const info = nextStepInfo(followSteps(), mastered);
+    if (!info) {
+      pathNextHud.hidden = true;
+      return;
+    }
+    const name = doc.to_graph().plateaus().find((p) => p.id === info.id)?.name ?? "next step";
+    pathNextHud.textContent = `→ Next: ${name} (${info.position}/${info.total})`;
+    pathNextHud.hidden = false;
+  }
+  pathNextHud.addEventListener("click", () => {
+    const info = nextStepInfo(followSteps(), mastered);
+    if (!info) return;
+    const p = doc.to_graph().plateaus().find((x) => x.id === info.id);
+    if (!p) return;
+    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    VIEW.cx = cx;
+    VIEW.cy = cy;
+    focusedId = p.id; // transient highlight ring (render.js)
+    draw();
+    if (pathHudTimer) clearTimeout(pathHudTimer);
+    pathHudTimer = setTimeout(() => {
+      focusedId = null;
+      draw();
+    }, 1800);
+  });
 
   // Show the PUBLIC half of the key (safe to display). The secret is never shown.
   identityHud.textContent = `🔑 ${shortKey(myPubkey)}`;
@@ -468,11 +530,14 @@ async function main() {
       community, // crowd-approved set — bedrock ring (R-0031)
       pathSteps: followSteps(),
       pathNext: followNext(),
+      layoutPreset, // Track B4: compact / study / overview density
     });
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
     hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
+    updatePathHud(); // Track B2: keep the next-step chip in sync every frame
+    updateSyncStatus(); // Track B6: refresh the "synced ✓ …ago" readout
     syncDevFocus();
   }
 
@@ -1610,11 +1675,7 @@ async function main() {
   const alsoPinList = document.getElementById("detail-add-also-list");
   function renderAlsoPin(currentId) {
     alsoPinList.replaceChildren();
-    const others = doc
-      .to_graph()
-      .plateaus()
-      .filter((p) => p.id !== currentId)
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const others = pinCandidates(doc.to_graph().plateaus(), currentId); // R-0028 (pure)
     for (const p of others) {
       const label = document.createElement("label");
       label.className = "also-pin-item";
@@ -1709,6 +1770,32 @@ async function main() {
     btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
   }
+
+  // Download study digest (Track B7 / R-0026): the focused subgraph (this topic +
+  // its bridge-neighbors + its resources) as a Markdown file, built by the pure
+  // `subgraphDigest` and saved via an object-URL. Offline — no model, no network.
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  document.getElementById("detail-digest").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    const g = doc.to_graph();
+    const bridges = g.bridges();
+    const neighborIds = bridgeNeighbors(studyPlateau.id, bridges);
+    const neighbors = g.plateaus().filter((p) => neighborIds.has(p.id));
+    const touching = bridges.filter((b) => b.from === studyPlateau.id || b.to === studyPlateau.id);
+    const own = g.resources().filter((r) => r.plateau_id === studyPlateau.id);
+    const md = subgraphDigest({ plateau: studyPlateau, neighbors, bridges: touching, resources: own });
+    downloadText(md, digestFilename(studyPlateau.name));
+  });
 
   // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
   // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS
@@ -1910,6 +1997,24 @@ async function main() {
       /* ignore */
     }
     syncLensBtn();
+    draw();
+  });
+
+  // Dense-graph layout preset toggle (Track B4): cycle compact → study → overview.
+  const presetBtn = document.getElementById("layout-preset");
+  function syncPresetBtn() {
+    presetBtn.textContent = `Layout: ${layoutPreset}`;
+  }
+  syncPresetBtn();
+  presetBtn.addEventListener("click", () => {
+    const i = LAYOUT_PRESET_ORDER.indexOf(layoutPreset);
+    layoutPreset = LAYOUT_PRESET_ORDER[(i + 1) % LAYOUT_PRESET_ORDER.length];
+    try {
+      localStorage.setItem("mp.layoutPreset", layoutPreset);
+    } catch {
+      /* quota — the preset still applies this session */
+    }
+    syncPresetBtn();
     draw();
   });
 
@@ -2266,11 +2371,20 @@ async function main() {
     importStatus.style.color = ok ? "#9fd0b4" : "#ffb4a8";
     importStatus.hidden = false;
   }
+  // Snapshot the current graph's id sets (Track B3): the BEFORE side of the import
+  // overlap/summary diff. Pure `graphIds` — the merge is wasm's job, the accounting
+  // is JS.
+  function graphSnapshot() {
+    const g = doc.to_graph();
+    return graphIds({ plateaus: g.plateaus(), bridges: g.bridges(), resources: g.resources() });
+  }
   document.getElementById("import-world").addEventListener("click", () => importFile.click());
   importFile.addEventListener("change", async () => {
     const file = importFile.files?.[0];
     if (!file) return;
+    importNote(`importing "${file.name}"…`, true); // progress indicator (Track B3)
     try {
+      const before = graphSnapshot();
       const bytes = new Uint8Array(await file.arrayBuffer());
       doc.merge_bytes(bytes); // CRDT union; throws on a corrupt/non-Automerge blob
       // Imported plateaus carry their own domain — register it for traversal scoring.
@@ -2279,7 +2393,9 @@ async function main() {
       pumpPeer(); // …and a connected P2P peer (R-0018)
       persist(); // durable snapshot (R-0012)
       draw();
-      importNote(`imported "${file.name}" — explore the new islands`, true);
+      // Overlap/summary preview: counts of plateaus/bridges/resources added (R-0021).
+      const summary = importSummary(before, graphSnapshot());
+      importNote(formatImportSummary(summary, file.name), true);
     } catch (e) {
       importNote(`could not import: ${e}`, false);
     } finally {
@@ -2384,13 +2500,41 @@ async function main() {
     renderDraftPathSteps();
   }
 
+  // Each published path's author reach = the sum of their GA grade-1 reach across
+  // the path's domains (R-0035), read from the SAME rank_wizards the fog/discovery
+  // path uses — so a Sybil-ring author (grade-0, reach ≈ 0) sinks to the bottom and
+  // reach-bearing authors surface first. One rank_wizards call per distinct domain.
+  function buildPathReach(paths) {
+    const logJson = JSON.stringify(log.all());
+    const byDomain = new Map(); // domainId → Map<pubkey, reach>
+    const domains = new Set();
+    for (const p of paths) for (const d of p.domains ?? []) domains.add(d);
+    for (const domain of domains) {
+      try {
+        const rows = rank_wizards(logJson, domain, MASTER_K); // [{ pubkey, reach }]
+        byDomain.set(domain, new Map(rows.map((r) => [r.pubkey, r.reach])));
+      } catch (err) {
+        console.error("[mp] rank_wizards (path reach) failed:", err);
+      }
+    }
+    return (path) => {
+      let sum = 0;
+      for (const d of path.domains ?? []) sum += byDomain.get(d)?.get(path.pubkey) ?? 0;
+      return sum;
+    };
+  }
+
   function renderPublishedPaths() {
     pathPublished.replaceChildren();
-    for (const p of publishedPaths(log.all())) {
+    const paths = publishedPaths(log.all());
+    const reachOf = buildPathReach(paths); // R-0035 author-reach weighting
+    for (const p of rankPublishedPaths(paths, reachOf)) {
       const row = document.createElement("div");
       row.className = "path-published-item";
       const who = p.pubkey === myPubkey ? "you" : shortKey(p.pubkey);
-      row.textContent = `${p.title} — ${who} (${p.steps.length} steps)`;
+      const reach = reachOf(p);
+      const reachTag = reach > 0 ? ` · reach ${reach.toFixed(1)}` : "";
+      row.textContent = `${p.title} — ${who} (${p.steps.length} steps${reachTag})`;
       const followBtn = document.createElement("button");
       followBtn.type = "button";
       followBtn.textContent = "Follow";

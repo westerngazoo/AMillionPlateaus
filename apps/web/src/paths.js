@@ -41,6 +41,18 @@ export function nextPathStep(stepIds, mastered = new Set()) {
   return null;
 }
 
+/**
+ * The next-step HUD payload (R-0039): the first not-yet-mastered step plus its
+ * 1-based position and the total. `null` when the path is empty or fully mastered
+ * (the chip then hides). Pure — the DOM chip in main.js is a thin view over this.
+ */
+export function nextStepInfo(stepIds = [], mastered = new Set()) {
+  const total = stepIds.length;
+  const id = nextPathStep(stepIds, mastered);
+  if (id === null) return null;
+  return { id, position: stepIds.indexOf(id) + 1, total };
+}
+
 /** Progress along a path: mastered count / total. */
 export function pathProgress(stepIds, mastered = new Set()) {
   if (!stepIds.length) return { done: 0, total: 0 };
@@ -81,4 +93,25 @@ export function publishedPaths(events = []) {
   return [...latest.values()].sort((a, b) =>
     a.pubkey < b.pubkey ? -1 : a.pubkey > b.pubkey ? 1 : 0,
   );
+}
+
+/**
+ * Rank published paths by their author's EARNED REACH (R-0035), best-first.
+ * `reachOf(path)` maps a published-path object (which carries `pubkey` + `domains`)
+ * to a numeric reach — the grade-1 reputation magnitude the app reads from the GA
+ * core; the trust-weighting stays in Rust/wasm, this only orders by it. The default
+ * gives every author reach 0, so ranking reduces to `publishedPaths`' pubkey order
+ * (back-compatible). Non-mutating. Total order: reach desc → step-count desc →
+ * pubkey asc, so equal-reach authors stay deterministic.
+ */
+export function rankPublishedPaths(paths = [], reachOf = () => 0) {
+  return [...paths]
+    .map((p) => ({ p, reach: Number(reachOf(p)) || 0 }))
+    .sort(
+      (a, b) =>
+        b.reach - a.reach ||
+        (b.p.steps?.length ?? 0) - (a.p.steps?.length ?? 0) ||
+        (a.p.pubkey < b.p.pubkey ? -1 : a.p.pubkey > b.p.pubkey ? 1 : 0),
+    )
+    .map((x) => x.p);
 }

@@ -122,14 +122,48 @@ export function forceLayout(points, { bridges = [], minDist = 52, iterations = 4
 }
 
 /**
- * Full layout pipeline: project GA → Obsidian-style spread.
+ * Dense-graph layout presets (Track B4). Each preset scales the adaptive minimum
+ * distance and sets the force-iteration budget, trading tightness for spread:
+ *   compact  — pull topics close for a bird's-eye of a big vault
+ *   study    — the default balance (identity: 1.0× distance, 56 iterations)
+ *   overview — push topics apart for reading a dense region
+ * `minScale` multiplies `adaptiveMinDist`; `iterations` is the forceLayout budget.
  */
-export function layoutGraph(rawPoints, { bridges = [], mode = "obsidian" } = {}) {
-  const minDist = adaptiveMinDist(rawPoints.size);
-  if (mode === "spread" || rawPoints.size < 4) {
-    return spreadNodes(rawPoints, { minDist, iterations: 30 });
+export const LAYOUT_PRESETS = {
+  compact: { minScale: 0.72, iterations: 44 },
+  study: { minScale: 1.0, iterations: 56 },
+  overview: { minScale: 1.45, iterations: 72 },
+};
+
+/** Ordered preset names — for a UI toggle to cycle through. */
+export const LAYOUT_PRESET_ORDER = ["compact", "study", "overview"];
+
+/**
+ * Resolve a preset name + node count to concrete layout params. An unknown/missing
+ * preset falls back to `study`, whose scale of 1.0 reproduces the prior default —
+ * so `presetParams(undefined, n)` === the historical `{ adaptiveMinDist(n), 56 }`.
+ * Pure + deterministic.
+ */
+export function presetParams(preset, nodeCount, { mode = "obsidian" } = {}) {
+  const cfg = LAYOUT_PRESETS[preset] ?? LAYOUT_PRESETS.study;
+  return {
+    minDist: adaptiveMinDist(nodeCount) * cfg.minScale,
+    iterations: cfg.iterations,
+    mode,
+  };
+}
+
+/**
+ * Full layout pipeline: project GA → Obsidian-style spread. `preset` (Track B4)
+ * selects the compact/study/overview density; omitting it keeps the study default,
+ * identical to the historical behaviour.
+ */
+export function layoutGraph(rawPoints, { bridges = [], mode = "obsidian", preset } = {}) {
+  const params = presetParams(preset, rawPoints.size, { mode });
+  if (params.mode === "spread" || rawPoints.size < 4) {
+    return spreadNodes(rawPoints, { minDist: params.minDist, iterations: 30 });
   }
-  return forceLayout(rawPoints, { bridges, minDist, iterations: 56 });
+  return forceLayout(rawPoints, { bridges, minDist: params.minDist, iterations: params.iterations });
 }
 
 /** @deprecated use adaptiveMinDist */
