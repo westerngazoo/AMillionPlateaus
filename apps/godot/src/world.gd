@@ -11,6 +11,7 @@ const RESOURCE := Color(0.55, 1.0, 0.72)
 const PlaceNodeS := preload("res://src/place_node.gd")
 const LabelPlanS := preload("res://src/label_plan.gd")
 const DomainPaletteS := preload("res://src/domain_palette.gd")
+const MinimapS := preload("res://src/minimap.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const NativeAdapterS := preload("res://src/graph_source_native.gd")
 
@@ -18,6 +19,8 @@ var source
 var positions_by_id: Dictionary = {}
 var _plateau_nodes: Dictionary = {} # id -> Node3D
 var _bridge_nodes: Dictionary = {} # bridge id -> Node3D
+var _domain_by_id: Dictionary = {} # plateau id -> domain_id
+var _minimap # Minimap CanvasLayer (created only when running in-tree)
 var _bridges: Array = []
 var _focus_id: String = ""
 var _lens_mode: bool = true
@@ -39,6 +42,7 @@ func _ready() -> void:
 
 func _boot() -> void:
 	_sidecar_paths()
+	_ensure_minimap()
 	var native = NativeAdapterS.new()
 	if native.is_available():
 		_load_sidecars()
@@ -128,6 +132,7 @@ func _process(delta: float) -> void:
 	if _label_timer >= 0.25:
 		_label_timer = 0.0
 		_update_labels()
+		_update_minimap_camera()
 	if _watch_path.is_empty():
 		return
 	_watch_timer += delta
@@ -177,6 +182,7 @@ func build(src, rep_json: String = "") -> void:
 	positions_by_id.clear()
 	_plateau_nodes.clear()
 	_bridge_nodes.clear()
+	_domain_by_id.clear()
 	_bridges = src.bridges()
 
 	var plats: Array = src.plateaus()
@@ -197,6 +203,7 @@ func build(src, rep_json: String = "") -> void:
 	for p in plats:
 		var world_pos: Vector3 = spread[p.id]
 		positions_by_id[p.id] = world_pos
+		_domain_by_id[p.id] = str(p.get("domain_id", ""))
 		var node := _make_plateau(p, world_pos, _lit_ids.has(p.id))
 		graph.add_child(node)
 		_plateau_nodes[p.id] = node
@@ -213,6 +220,7 @@ func build(src, rep_json: String = "") -> void:
 	_frame_camera()
 	_apply_focus_file()
 	_apply_focus_visuals()
+	_feed_minimap_points()
 	if is_inside_tree():
 		_update_labels()
 
@@ -278,6 +286,39 @@ func _update_labels() -> void:
 		var label := node.get_child(1) as Label3D
 		if label:
 			label.visible = kept_set.has(id)
+
+# A6: create the minimap once, in-tree only (build()-from-test callers skip it, so the
+# minimap stays fully isolated from the headless scene smoke).
+func _ensure_minimap() -> void:
+	if _minimap != null or not is_inside_tree():
+		return
+	_minimap = MinimapS.new()
+	_minimap.name = "Minimap"
+	add_child(_minimap)
+
+# Feed the minimap the plateau dots on the e1×e3 plane (world x×y), tinted by domain.
+func _feed_minimap_points() -> void:
+	if _minimap == null:
+		return
+	var pts: Dictionary = {}
+	var cols: Dictionary = {}
+	for id in positions_by_id:
+		var wp: Vector3 = positions_by_id[id]
+		pts[id] = Vector2(wp.x, wp.y)
+		cols[id] = DomainPaletteS.domain_color(str(_domain_by_id.get(id, "")))
+	_minimap.set_points(pts, cols)
+
+# Push the current camera pose (position + forward) onto the minimap, projected to
+# the same e1×e3 plane so the compass arrow tracks where you are looking.
+func _update_minimap_camera() -> void:
+	if _minimap == null:
+		return
+	var cam := get_node_or_null("Camera3D") as Camera3D
+	if cam == null:
+		return
+	var pos := cam.global_position
+	var fwd := -cam.global_transform.basis.z
+	_minimap.set_camera(Vector2(pos.x, pos.y), Vector2(fwd.x, fwd.y))
 
 # A5: render read-only resource orbs, parented to their plateau node so they inherit
 # its world position + focus-lens scale (and never change the Graph child count, which
