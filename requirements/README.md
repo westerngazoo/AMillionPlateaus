@@ -72,3 +72,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0037](0037-mobile-web.md) | Mobile web: the fog-world works on a phone (responsive + touch) | POC — Reach | Met |
 | [R-0038](0038-author-your-own-domain.md) | Author your own domain: more lenses than Math/Physics/Music (name + place a custom lens) | POC — Knowledge content | Met |
 | [R-0039](0039-learning-paths.md) | Learning paths: author/follow/publish a route through the islands; paths intersect over grounded ground | POC — Knowledge content | Accepted |
+| [R-0043](0043-view-pipeline-phase1.md) | View pipeline, Phase 1: extract the injectable render seam (pure view-model/Frame + canvasRenderer + pure hit-test), behaviour-preserving (RFC-0003) | Infra / DX | Accepted |
