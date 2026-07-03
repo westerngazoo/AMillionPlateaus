@@ -1,0 +1,56 @@
+name: Godot
+
+# CI for the immersive 3D client (apps/godot) and its native binding (crates/mp-godot).
+#
+#   * godot-headless-tests — runs the self-contained SceneTree test runner
+#     (apps/godot/test/run_tests.gd). It quit()s with the failure count, so a
+#     non-zero exit fails the job.
+#
+# Godot is installed with scripts/install-godot.sh (same script devs use locally),
+# which fetches Godot_v4.4-stable_linux.x86_64 into tools/godot/Godot.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Keep only the latest run per branch/PR.
+concurrency:
+  group: godot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  godot-headless-tests:
+    name: Godot headless tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The stock Godot linux build is dynamically linked; even in --headless mode
+      # it needs these to load. unzip/curl back scripts/install-godot.sh.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl unzip libfontconfig1 libgl1
+
+      # Reuse the repo's installer so CI and local dev stay in lockstep on the
+      # exact Godot version. It no-ops if a godot binary is already on PATH.
+      - name: Install Godot 4.4 (headless)
+        run: |
+          chmod +x scripts/install-godot.sh
+          ./scripts/install-godot.sh
+
+      # First headless launch imports resources; do it once up front so the test
+      # run's output is just the test results. Import glitches must not fail CI.
+      - name: Import project (warm-up)
+        continue-on-error: true
+        run: |
+          ./tools/godot/Godot --headless --path apps/godot --import
+
+      - name: Run headless tests
+        run: |
+          ./tools/godot/Godot --headless \
+            --path apps/godot \
+            --script res://test/run_tests.gd
