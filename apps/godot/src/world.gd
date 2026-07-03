@@ -16,6 +16,7 @@ const NativeAdapterS := preload("res://src/graph_source_native.gd")
 var source
 var positions_by_id: Dictionary = {}
 var _plateau_nodes: Dictionary = {} # id -> Node3D
+var _bridge_nodes: Dictionary = {} # bridge id -> Node3D
 var _bridges: Array = []
 var _focus_id: String = ""
 var _lens_mode: bool = true
@@ -174,6 +175,7 @@ func build(src, rep_json: String = "") -> void:
 		c.queue_free()
 	positions_by_id.clear()
 	_plateau_nodes.clear()
+	_bridge_nodes.clear()
 	_bridges = src.bridges()
 
 	var plats: Array = src.plateaus()
@@ -200,7 +202,9 @@ func build(src, rep_json: String = "") -> void:
 
 	for b in _bridges:
 		if positions_by_id.has(b.from) and positions_by_id.has(b.to):
-			graph.add_child(_make_bridge(b, positions_by_id[b.from], positions_by_id[b.to]))
+			var bnode := _make_bridge(b, positions_by_id[b.from], positions_by_id[b.to])
+			graph.add_child(bnode)
+			_bridge_nodes[b.id] = bnode
 
 	_ensure_environment()
 	_frame_camera()
@@ -328,6 +332,20 @@ func _apply_focus_visuals() -> void:
 				mat.emission_enabled = is_lit
 				mat.emission = LIT if is_lit else FOGGED
 				mat.emission_energy_multiplier = 1.6 if is_lit else 0.0
+	_update_bridge_labels(active_focus, neighbors)
+
+# A4: show a bridge's concept label only when one endpoint is in the focus scope
+# (the focus plateau or one of its bridge-neighbors); hidden otherwise.
+func _update_bridge_labels(active_focus: String, neighbors: Dictionary) -> void:
+	var scope := LabelPlanS.focus_scope(active_focus, neighbors)
+	for bid in _bridge_nodes:
+		var bnode: Node3D = _bridge_nodes[bid]
+		var label := bnode.get_node_or_null("Concept") as Label3D
+		if label == null:
+			continue
+		var from_id := str(bnode.get_meta("from", ""))
+		var to_id := str(bnode.get_meta("to", ""))
+		label.visible = LabelPlanS.bridge_label_visible(from_id, to_id, scope)
 
 func _ensure_environment() -> void:
 	if get_node_or_null("WorldEnvironment") != null:
@@ -398,4 +416,19 @@ func _make_bridge(b: Dictionary, a: Vector3, c: Vector3) -> Node3D:
 		if forward.length_squared() > 0.0001:
 			root.basis = Basis.looking_at(forward, Vector3.UP)
 	root.add_child(mesh)
+
+	# A4: billboard the bridge's concept at the midpoint. Endpoints are stored on the
+	# node so visibility can be recomputed from the focus scope without re-reading the
+	# DTO. Hidden by default — shown only when an endpoint is the focus or a neighbor.
+	root.set_meta("from", b.from)
+	root.set_meta("to", b.to)
+	var label := Label3D.new()
+	label.name = "Concept"
+	label.text = str(b.get("concept", ""))
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 28
+	label.modulate = Color(0.75, 0.85, 1.0)
+	label.outline_size = 6
+	label.visible = false
+	root.add_child(label)
 	return root
