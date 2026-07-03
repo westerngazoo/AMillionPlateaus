@@ -9,6 +9,7 @@ const FOGGED := Color(0.18, 0.24, 0.31)
 const FOCUS := Color(0.62, 0.85, 1.0)
 const PlaceNodeS := preload("res://src/place_node.gd")
 const LabelPlanS := preload("res://src/label_plan.gd")
+const DomainPaletteS := preload("res://src/domain_palette.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const NativeAdapterS := preload("res://src/graph_source_native.gd")
 
@@ -364,7 +365,11 @@ func _make_plateau(p: Dictionary, world_pos: Vector3, is_lit: bool) -> Node3D:
 	sphere.height = 1.4
 	mesh.mesh = sphere
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = LIT if is_lit else FOGGED
+	# A3: tint the base material by a stable hash of the domain (read-only DTO). The
+	# lit/fogged emission below is unchanged; fogged nodes just get a dimmer band so
+	# the fog still reads against the void.
+	var band := DomainPaletteS.domain_color(str(p.get("domain_id", "")))
+	mat.albedo_color = band if is_lit else band.darkened(0.55)
 	mat.emission_enabled = is_lit
 	mat.emission = LIT
 	mat.emission_energy_multiplier = 1.6
