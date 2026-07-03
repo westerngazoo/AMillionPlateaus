@@ -7,6 +7,7 @@
 use mp_crdt::{CrdtDoc, CrdtError};
 
 use crate::dto::{bridge_dto, plateau_dto, resource_dto};
+use crate::reputation::reachable_ids;
 
 /// A loaded world the immersive client reads. Owns the CRDT doc; every accessor
 /// re-derives the `KnowledgeGraph` and serialises the DTOs (POC-simple; the doc is
@@ -99,6 +100,17 @@ impl GraphData {
                 serde_json::to_string(&g.resources.values().map(resource_dto).collect::<Vec<_>>())
                     .unwrap_or_else(|_| "[]".to_string())
             }
+            Err(_) => "[]".to_string(),
+        }
+    }
+
+    /// Plateau ids reachable for `rep_json` — same fog query as `mp-wasm` (AC2).
+    pub fn reachable_plateaus_json(&self, rep_json: &str) -> String {
+        match self.doc.to_graph() {
+            Ok(g) => match reachable_ids(&g, rep_json) {
+                Ok(ids) => serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_string()),
+                Err(_) => "[]".to_string(),
+            },
             Err(_) => "[]".to_string(),
         }
     }
@@ -205,5 +217,23 @@ mod tests {
         assert_eq!(data.plateaus_json(), "[]");
         assert_eq!(data.bridges_json(), "[]");
         assert_eq!(data.resources_json(), "[]");
+        assert_eq!(data.reachable_plateaus_json("{}"), "[]");
+    }
+
+    #[test]
+    fn reachable_json_matches_fog() {
+        let mut doc = doc_with_fixture();
+        let math = {
+            let g = doc.to_graph().expect("graph");
+            g.plateaus().next().expect("plateau").domain_id
+        };
+        let data = GraphData::from_doc(doc);
+        let json = format!(
+            r#"{{ "domain_reps": {{ "{math}": [0.0, 0.95, 0.1, 0.0, 0.05, 0.0, 0.0, 0.0] }} }}"#
+        );
+        let ids: serde_json::Value =
+            serde_json::from_str(&data.reachable_plateaus_json(&json)).expect("json");
+        let arr = ids.as_array().expect("array");
+        assert!(!arr.is_empty());
     }
 }

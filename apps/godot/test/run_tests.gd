@@ -16,6 +16,7 @@ var _failures := 0
 func _init() -> void:
 	_test_place_node()
 	_test_compute_fit()
+	_test_spread_positions()
 	_test_plan_labels()
 	_test_project_to_rect()
 	_test_scene_smoke()
@@ -62,6 +63,12 @@ func _test_compute_fit() -> void:
 	_check(_approx(a.x, -6.0) and _approx(b.x, 6.0), "fitted endpoints are centred & scaled")
 	var empty: Dictionary = PlaceNodeS.compute_fit([], 12.0)
 	_check(_approx(empty.scale, 1.0) and (empty.offset as Vector3) == Vector3.ZERO, "empty → identity fit")
+
+func _test_spread_positions() -> void:
+	print("spread_positions:")
+	var raw := {"a": Vector3(0, 0, 0), "b": Vector3(0.1, 0, 0.1)}
+	var out: Dictionary = PlaceNodeS.spread_positions(raw, 2.0, 16)
+	_check(out["a"].distance_to(out["b"]) >= 1.99, "overlapping nodes are pushed apart")
 
 # ── plan_labels (AC3) — port of R-0024 planLabels ────────────────────────────────
 func _test_plan_labels() -> void:

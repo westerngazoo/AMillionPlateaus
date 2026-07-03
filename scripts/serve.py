@@ -17,6 +17,8 @@ import sys
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8143
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apps", "web")
 EXPORT_PATH = os.path.join(ROOT, "export", "world.bin")
+FOCUS_PATH = os.path.join(ROOT, "export", "focus.json")
+REPUTATION_PATH = os.path.join(ROOT, "export", "reputation.json")
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -37,22 +39,32 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_PUT(self):
-        if self.path != "/dev/world.bin":
-            self.send_error(404, "not found")
+        if self.path == "/dev/world.bin":
+            self._put_file(EXPORT_PATH)
             return
+        if self.path == "/dev/focus.json":
+            self._put_file(FOCUS_PATH)
+            return
+        if self.path == "/dev/reputation.json":
+            self._put_file(REPUTATION_PATH)
+            return
+        self.send_error(404, "not found")
+
+    def _put_file(self, dest: str) -> None:
         length = int(self.headers.get("Content-Length", 0))
         data = self.rfile.read(length)
-        os.makedirs(os.path.dirname(EXPORT_PATH), exist_ok=True)
-        with open(EXPORT_PATH, "wb") as f:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "wb") as f:
             f.write(data)
         self.send_response(204)
         self.end_headers()
-        print(f"[dev] world.bin updated ({len(data)} bytes) → Godot can reload")
+        print(f"[dev] {os.path.basename(dest)} updated ({len(data)} bytes) → Godot can reload")
 
 
 if __name__ == "__main__":
     os.makedirs(os.path.dirname(EXPORT_PATH), exist_ok=True)
     with http.server.ThreadingHTTPServer(("", PORT), NoCacheHandler) as httpd:
         print(f"fog-world → http://localhost:{PORT}  (serving {os.path.abspath(ROOT)}, no-cache)")
-        print(f"Godot sync → {EXPORT_PATH}  (PUT /dev/world.bin from the browser)")
+        print(f"Godot sync → {os.path.dirname(EXPORT_PATH)}/")
+        print("  world.bin · focus.json · reputation.json  (PUT /dev/* from the browser)")
         httpd.serve_forever()

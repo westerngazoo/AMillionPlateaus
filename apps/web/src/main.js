@@ -255,11 +255,31 @@ async function main() {
 
   // Persist the whole converged doc to IndexedDB; debounced inside the store
   // (AC3). Called after every local edit and inbound sync.
+  let lastDevFocus = "";
+  function syncDevFocus() {
+    const payload = JSON.stringify({ lens_id: lensId, lens_mode: lensMode });
+    if (payload === lastDevFocus) return;
+    lastDevFocus = payload;
+    fetch("/dev/focus.json", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    }).catch(() => {});
+  }
+  function syncDevReputation() {
+    fetch("/dev/reputation.json", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reputation),
+    }).catch(() => {});
+  }
   function persist() {
     const bytes = doc.save();
     snapshots.save(bytes);
-    // Dev: mirror CRDT bytes for the Godot 3D client (parallel ./scripts/start-dev.sh).
+    // Dev: mirror CRDT + lens + reputation for the Godot 3D client (start-dev.sh).
     fetch("/dev/world.bin", { method: "PUT", body: bytes }).catch(() => {});
+    syncDevFocus();
+    syncDevReputation();
   }
 
   // AC5 — the synced doc carries exactly the four data maps, no reputation key.
@@ -282,6 +302,7 @@ async function main() {
   let reputation = log.reputation();
   function recompute() {
     reputation = log.reputation();
+    syncDevReputation();
   }
   // Trusted-master weighting (R-0035): community approval sums each master's EARNED
   // REACH (grade-1 reputation magnitude in the topic's domain) and clears a bar — so
@@ -452,6 +473,7 @@ async function main() {
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
     hud.textContent = `${who}${mastered.size} mastered · ${studying} studying · ${plateaus.length} topics · ${bridges.length} bridges${canonical}`;
+    syncDevFocus();
   }
 
   // ── Ephemeral presence (SPEC-0016 / R-0016) ─────────────────────────────────

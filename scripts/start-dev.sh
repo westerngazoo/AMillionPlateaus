@@ -32,7 +32,7 @@ echo ""
 echo "  2D map:  http://localhost:${PORT}"
 echo "  3D world: Godot window (same CRDT blob via export/world.bin)"
 echo ""
-echo "  Edit in the browser → world auto-syncs to Godot (~1s reload)"
+echo "  Edit in the browser → world + lens + reputation sync to Godot (~1s reload)"
 echo "  Ctrl+C stops both"
 echo ""
 

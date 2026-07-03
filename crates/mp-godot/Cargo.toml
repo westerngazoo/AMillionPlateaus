@@ -20,6 +20,7 @@ mp-identity = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+thiserror = { workspace = true }
 
 # The gdext binding (godot-rust). OPTIONAL + feature-gated so `cargo test --workspace`
 # stays green WITHOUT pulling the engine crate; the GDExtension cdylib is built with

@@ -83,4 +83,15 @@ impl GraphSourceNative {
             .unwrap_or_else(|| "[]".to_string());
         GString::from(s.as_str())
     }
+
+    /// Reachable plateau ids for reputation JSON (fog / emission lit set).
+    #[func]
+    fn reachable_plateaus_json(&self, rep_json: GString) -> GString {
+        let s = self
+            .data
+            .as_ref()
+            .map(|d| d.reachable_plateaus_json(rep_json.to_string().as_str()))
+            .unwrap_or_else(|| "[]".to_string());
+        GString::from(s.as_str())
+    }
 }

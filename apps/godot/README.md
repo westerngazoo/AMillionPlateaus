@@ -17,7 +17,15 @@ This starts:
 | **2D web** | http://localhost:8145 |
 | **3D Godot** | desktop window |
 
-**Sync:** every graph edit in the browser `PUT`s the CRDT blob to `apps/web/export/world.bin`. Godot watches that file and reloads ~every second.
+**Sync:** every graph edit in the browser `PUT`s to `apps/web/export/`:
+
+| File | Source |
+|------|--------|
+| `world.bin` | CRDT blob |
+| `focus.json` | active study topic + lens toggle |
+| `reputation.json` | persona reputation (fog / lit set) |
+
+Godot watches these files and reloads ~every second.
 
 ### First-time setup
 
@@ -60,8 +68,11 @@ godot --headless --path apps/godot --script res://test/run_tests.gd
 ## Status
 
 - ✅ Slice 1: flat-3D scene, fixture + native binding, fly camera
-- ✅ Parallel dev: web → `world.bin` → Godot hot-reload
-- ✅ 3D focus lens (click plateau)
+- ✅ Parallel dev: web → `export/` (world + focus + reputation) → Godot hot-reload
+- ✅ 3D focus lens (click plateau + web study sync)
+- ✅ Label declutter (R-0024 port)
+- ✅ Native reachable/fog via reputation JSON
 - 🔜 Web Godot export embed
 - 🔜 OpenXR rig (VR)
 - 🔜 Worldspace study panel
+- 🔜 Path render/follow (R-0039 slice 6)

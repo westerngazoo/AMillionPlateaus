@@ -70,12 +70,29 @@ signed-event-log ingestion** (no proof/mastery/path DTO there yet); slice 6 must
 
 ---
 
+## Front 3 — R-0025: 3D Godot (parallel with web)
+
+The **immersive explorer** for dense imported worlds — e2 is real depth, not collapsed.
+Runs **in parallel** with the 2D web app via `./scripts/start-dev.sh`. Spec
+[`0025`](../specs/0025-vr-immersive-visualization.md).
+
+| Slice | Task | Status |
+|-------|------|--------|
+| 1 | Flat-3D scene, place_node, fixture, fly camera | ✅ |
+| 2 | Native GDExtension + CRDT load + parallel dev sync | ✅ world/focus/reputation |
+| 2b | Reachable/fog from reputation JSON | ✅ `reachable_plateaus_json` |
+| 2c | Label declutter + web lens sync | ✅ |
+| 3 | Path render/follow (R-0039 slice 6) | ⬜ #28 |
+| 4 | Signed-event-log ingestion in Godot | ⬜ #28 |
+| 5 | OpenXR rig | 🔜 |
+| 6 | Worldspace study panel | 🔜 |
+
+---
+
 ## Parked / known gaps (not on an active front)
 
-- **R-0025 (VR / immersive, Godot)** — Accepted, slice 1 landed; remaining: native
-  reachable/fog, vote/sign in-world, cross-binding parity, the OpenXR rig (AC4), worldspace
-  study (AC5), a native sync transport (AC7). Parked in favour of mobile+web + the
-  bivector/paths work.
+- **R-0025 remaining** — vote/sign in-world, web Godot WASM embed, OpenXR (AC4),
+  worldspace study (AC5). Core parallel workflow is live; see Front 3 above.
 - **JS static-analysis gate** — `apps/web` has no lint/format gate (only Rust has
   `cargo fmt`/`clippy`); the growing JS surface is unenforced. Candidate infra task.
 - **PWA** — suggested over Electron for an installable desktop build; not yet ticketed.

@@ -13,6 +13,7 @@
 
 pub mod dto;
 pub mod graph_source;
+pub mod reputation;
 
 pub use graph_source::GraphData;
 

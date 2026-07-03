@@ -8,6 +8,7 @@ const LIT := Color(1.0, 0.82, 0.4)
 const FOGGED := Color(0.18, 0.24, 0.31)
 const FOCUS := Color(0.62, 0.85, 1.0)
 const PlaceNodeS := preload("res://src/place_node.gd")
+const LabelPlanS := preload("res://src/label_plan.gd")
 const FixtureS := preload("res://src/graph_source_fixture.gd")
 const NativeAdapterS := preload("res://src/graph_source_native.gd")
 
@@ -16,9 +17,17 @@ var positions_by_id: Dictionary = {}
 var _plateau_nodes: Dictionary = {} # id -> Node3D
 var _bridges: Array = []
 var _focus_id: String = ""
+var _lens_mode: bool = true
+var _rep_json: String = "{}"
+var _lit_ids: Dictionary = {}
 var _watch_path: String = ""
+var _watch_rep_path: String = ""
+var _watch_focus_path: String = ""
 var _watch_mtime: int = 0
+var _watch_rep_mtime: int = 0
+var _watch_focus_mtime: int = 0
 var _watch_timer: float = 0.0
+var _label_timer: float = 0.0
 
 func _ready() -> void:
 	if source != null:
@@ -26,15 +35,48 @@ func _ready() -> void:
 	_boot()
 
 func _boot() -> void:
+	_sidecar_paths()
 	var native = NativeAdapterS.new()
 	if native.is_available():
+		_load_sidecars()
 		if _try_load_blob(native):
-			build(native)
+			build(native, _rep_json)
 			return
 		native.seed_demo()
-		build(native)
+		build(native, _rep_json)
 	else:
 		build(FixtureS.new())
+
+func _sidecar_paths() -> void:
+	_watch_path = OS.get_environment("MP_WORLD_BLOB")
+	if _watch_path.is_empty():
+		return
+	var dir := _watch_path.get_base_dir()
+	_watch_rep_path = dir.path_join("reputation.json")
+	_watch_focus_path = dir.path_join("focus.json")
+
+func _load_sidecars() -> void:
+	_rep_json = _read_text(_watch_rep_path, "{}")
+	_apply_focus_file()
+
+func _read_text(path: String, fallback: String) -> String:
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return fallback
+	var text := FileAccess.get_file_as_string(path)
+	return text if not text.is_empty() else fallback
+
+func _apply_focus_file() -> void:
+	if _watch_focus_path.is_empty() or not FileAccess.file_exists(_watch_focus_path):
+		return
+	var data = JSON.parse_string(FileAccess.get_file_as_string(_watch_focus_path))
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	_lens_mode = bool(data.get("lens_mode", true))
+	var lid = str(data.get("lens_id", ""))
+	if lid == "null":
+		lid = ""
+	_focus_id = lid if _lens_mode else ""
+	_apply_focus_visuals()
 
 func _try_load_blob(native) -> bool:
 	_watch_path = OS.get_environment("MP_WORLD_BLOB")
@@ -49,28 +91,57 @@ func _try_load_blob(native) -> bool:
 		push_warning("MP_WORLD_BLOB failed to load: %s" % _watch_path)
 		return false
 	_watch_mtime = FileAccess.get_modified_time(_watch_path)
+	if FileAccess.file_exists(_watch_rep_path):
+		_watch_rep_mtime = FileAccess.get_modified_time(_watch_rep_path)
+	if FileAccess.file_exists(_watch_focus_path):
+		_watch_focus_mtime = FileAccess.get_modified_time(_watch_focus_path)
 	print("Loaded world from %s (%d bytes)" % [_watch_path, bytes.size()])
 	return true
 
 func _process(delta: float) -> void:
-	if _watch_path.is_empty() or not FileAccess.file_exists(_watch_path):
+	_label_timer += delta
+	if _label_timer >= 0.25:
+		_label_timer = 0.0
+		_update_labels()
+	if _watch_path.is_empty():
 		return
 	_watch_timer += delta
 	if _watch_timer < 1.0:
 		return
 	_watch_timer = 0.0
-	var mtime := FileAccess.get_modified_time(_watch_path)
-	if mtime == _watch_mtime:
+	_poll_sidecars()
+
+func _poll_sidecars() -> void:
+	var world_changed := false
+	if FileAccess.file_exists(_watch_path):
+		var mtime := FileAccess.get_modified_time(_watch_path)
+		if mtime != _watch_mtime:
+			_watch_mtime = mtime
+			world_changed = true
+	if FileAccess.file_exists(_watch_rep_path):
+		var rm := FileAccess.get_modified_time(_watch_rep_path)
+		if rm != _watch_rep_mtime:
+			_watch_rep_mtime = rm
+			_rep_json = _read_text(_watch_rep_path, "{}")
+			world_changed = true
+	if FileAccess.file_exists(_watch_focus_path):
+		var fm := FileAccess.get_modified_time(_watch_focus_path)
+		if fm != _watch_focus_mtime:
+			_watch_focus_mtime = fm
+			_apply_focus_file()
+	if not world_changed:
 		return
-	_watch_mtime = mtime
-	print("world.bin changed — reloading…")
+	print("world sync changed — reloading…")
 	var native = NativeAdapterS.new()
 	if native.is_available() and _try_load_blob(native):
-		build(native)
+		build(native, _rep_json)
 
 func build(src, rep_json: String = "") -> void:
 	source = src
+	if not rep_json.is_empty():
+		_rep_json = rep_json
 	_focus_id = ""
+	_lens_mode = true
 	var graph := get_node_or_null("Graph")
 	if graph == null:
 		graph = Node3D.new()
@@ -84,9 +155,9 @@ func build(src, rep_json: String = "") -> void:
 
 	var plats: Array = src.plateaus()
 	var fit: Dictionary = PlaceNodeS.compute_fit(plats, _fit_span(plats.size()))
-	var lit := {}
-	for id in src.reachable(rep_json):
-		lit[id] = str(id)
+	_lit_ids = {}
+	for id in src.reachable(_rep_json):
+		_lit_ids[str(id)] = true
 
 	var raw: Dictionary = {}
 	for p in plats:
@@ -100,7 +171,7 @@ func build(src, rep_json: String = "") -> void:
 	for p in plats:
 		var world_pos: Vector3 = spread[p.id]
 		positions_by_id[p.id] = world_pos
-		var node := _make_plateau(p, world_pos, lit.has(p.id))
+		var node := _make_plateau(p, world_pos, _lit_ids.has(p.id))
 		graph.add_child(node)
 		_plateau_nodes[p.id] = node
 
@@ -110,7 +181,10 @@ func build(src, rep_json: String = "") -> void:
 
 	_ensure_environment()
 	_frame_camera()
+	_apply_focus_file()
 	_apply_focus_visuals()
+	if is_inside_tree():
+		_update_labels()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -145,6 +219,35 @@ func _pick_plateau(screen_pos: Vector2) -> bool:
 	print("Focus: %s" % best_id)
 	return true
 
+func _update_labels() -> void:
+	if _plateau_nodes.is_empty() or not is_inside_tree():
+		return
+	var cam := get_node_or_null("Camera3D") as Camera3D
+	if cam == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var view := cam.global_transform.affine_inverse()
+	var proj := cam.get_camera_projection()
+	var label_size := Vector2(96, 16)
+	var items: Array = []
+	for id in _plateau_nodes:
+		var node: Node3D = _plateau_nodes[id]
+		var rect: Rect2 = LabelPlanS.project_to_rect(node.global_position, view, proj, vp, label_size)
+		if LabelPlanS.is_visible(rect):
+			items.append({"id": id, "rect": rect})
+	var active_focus := _focus_id if _lens_mode else ""
+	var kept: Array = LabelPlanS.plan_labels(items, active_focus, _lit_ids)
+	var kept_set := {}
+	for kid in kept:
+		kept_set[kid] = true
+	for id in _plateau_nodes:
+		var node: Node3D = _plateau_nodes[id]
+		if node.get_child_count() < 2:
+			continue
+		var label := node.get_child(1) as Label3D
+		if label:
+			label.visible = kept_set.has(id)
+
 func _neighbor_ids(id: String) -> Dictionary:
 	var out := {}
 	for b in _bridges:
@@ -155,19 +258,21 @@ func _neighbor_ids(id: String) -> Dictionary:
 	return out
 
 func _apply_focus_visuals() -> void:
-	var neighbors := _neighbor_ids(_focus_id) if not _focus_id.is_empty() else {}
+	var active_focus := _focus_id if _lens_mode else ""
+	var neighbors := _neighbor_ids(active_focus) if not active_focus.is_empty() else {}
 	for id in _plateau_nodes:
 		var node: Node3D = _plateau_nodes[id]
 		var mesh := node.get_child(0) as MeshInstance3D
 		if mesh == null:
 			continue
-		var tier := "context"
-		if _focus_id.is_empty():
-			tier = "full"
-		elif id == _focus_id:
-			tier = "lens"
-		elif neighbors.has(id):
-			tier = "neighbor"
+		var tier := "full"
+		if _lens_mode and not active_focus.is_empty():
+			if id == active_focus:
+				tier = "lens"
+			elif neighbors.has(id):
+				tier = "neighbor"
+			else:
+				tier = "context"
 
 		var scale := 1.0
 		var alpha := 1.0
@@ -190,10 +295,15 @@ func _apply_focus_visuals() -> void:
 		if mat:
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if alpha < 0.99 else BaseMaterial3D.TRANSPARENCY_DISABLED
 			mat.albedo_color.a = alpha
+			var is_lit := _lit_ids.has(id)
 			if tier == "lens":
 				mat.emission_enabled = true
 				mat.emission = FOCUS
 				mat.emission_energy_multiplier = 2.0
+			else:
+				mat.emission_enabled = is_lit
+				mat.emission = LIT if is_lit else FOGGED
+				mat.emission_energy_multiplier = 1.6 if is_lit else 0.0
 
 func _ensure_environment() -> void:
 	if get_node_or_null("WorldEnvironment") != null:
@@ -256,6 +366,8 @@ func _make_bridge(b: Dictionary, a: Vector3, c: Vector3) -> Node3D:
 	mesh.mesh = box
 	root.position = (a + c) * 0.5
 	if span > 0.0001:
-		root.look_at_from_position(root.position, c, Vector3.UP)
+		var forward := (c - a).normalized()
+		if forward.length_squared() > 0.0001:
+			root.basis = Basis.looking_at(forward, Vector3.UP)
 	root.add_child(mesh)
 	return root

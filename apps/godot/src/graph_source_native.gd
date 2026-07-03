@@ -33,6 +33,12 @@ func bridges() -> Array:
 func resources() -> Array:
 	return parse_resources(_native.resources_json()) if _native != null else []
 
+func reachable(rep_json: String) -> Array:
+	if _native == null:
+		return []
+	var arr = JSON.parse_string(_native.reachable_plateaus_json(rep_json))
+	return arr if typeof(arr) == TYPE_ARRAY else []
+
 # ── pure JSON → interface mapping (contract-tested) ──────────────────────────────
 ## DTO plateau `{id,name,description,domain_id,position:{e1,e2,e3}}` → interface
 ## `{id,name,description,domain_id,e1,e2,e3}` (flattened). Bad JSON → [].

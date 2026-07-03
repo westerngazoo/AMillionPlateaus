@@ -704,6 +704,7 @@ dependencies = [
  "mp-identity",
  "serde",
  "serde_json",
+ "thiserror",
  "uuid",
 ]
 
