@@ -17,6 +17,8 @@ import assert from "node:assert/strict";
 import { render } from "./render.js";
 import { project } from "./project.js";
 import { spreadNodes } from "./layout.js";
+import { viewModel } from "./viewpipeline.js";
+import { canvasRenderer, PALETTE, FILL, RING } from "./renderers/canvas.js";
 
 // ── The recording mock `ctx` ────────────────────────────────────────────────
 // Records method calls and style-property sets as plain-data ops. Imported by
@@ -177,6 +179,17 @@ export function captureLog(drawInto) {
 
 export function captureRender(state) {
   return captureLog((ctx) => render(ctx, renderArgs(state)));
+}
+
+// Drive the extracted seam directly through its PUBLIC API — viewModel builds the
+// Frame, canvasRenderer replays it — over the same placement render.js computes.
+export function captureSeam(state) {
+  return captureLog((ctx) => {
+    const positions = placeFixture();
+    const frame = viewModel({ ...FIXTURE }, positions, state);
+    const canvas = { width: 900, height: 600, getContext: () => ctx };
+    canvasRenderer(canvas).draw(frame);
+  });
 }
 
 export { FIXTURE, PEERS, VIEW, STATES, renderArgs };
@@ -747,3 +760,49 @@ for (const key of Object.keys(STATES)) {
     assert.deepEqual(captureRender(STATES[key]), BASELINE[key]);
   });
 }
+
+// The load-bearing parity proof (SPEC-0043 §5.3): the extracted seam
+// (viewModel + canvasRenderer), driven through its public API, produces the
+// IDENTICAL op-log — so the split is behaviour-preserving.
+for (const key of Object.keys(STATES)) {
+  test(`viewModel + canvasRenderer op-log matches the baseline — ${key} state`, () => {
+    assert.deepEqual(captureSeam(STATES[key]), BASELINE[key]);
+  });
+}
+
+// The seam and the transitional render.js shim must agree op-for-op.
+for (const key of Object.keys(STATES)) {
+  test(`render.js shim and the seam agree op-for-op — ${key} state`, () => {
+    assert.deepEqual(captureRender(STATES[key]), captureSeam(STATES[key]));
+  });
+}
+
+// Colours stay 1:1 tokens (SPEC-0043 §2.3): the renderer's palette must equal the
+// 12 hex constants render.js:11-22 held, byte-for-byte, and the token→hex tables
+// must map to exactly those constants (no widened parity surface).
+test("token→hex palette equals render.js's 12 constants byte-for-byte", () => {
+  assert.deepEqual(PALETTE, {
+    UNEXPLORED: "#2f3e50",
+    UNEXPLORED_RING: "#4a5d72",
+    STUDYING: "#e0a64a",
+    MASTERED_FILL: "#ffd166",
+    LIT_RING: "#fff3c4",
+    COVERED: "#6fb6e0",
+    CANONICAL: "#bfe3ff",
+    BRIDGE: "rgba(180, 200, 220, 0.5)",
+    LABEL: "rgba(220, 230, 240, 0.85)",
+    MARKER: "#7fd0a0",
+    MARKER_SOLID: "#ffd166",
+    MASTERED: "#5dcaa5",
+  });
+  // The fill/ring token maps are exactly render.js's inline ternaries, named.
+  assert.deepEqual(FILL, {
+    unexplored: "#2f3e50",
+    studying: "#e0a64a",
+    mastered: "#ffd166",
+  });
+  assert.deepEqual(RING, {
+    unexplored: "#4a5d72",
+    lit: "#fff3c4",
+  });
+});
