@@ -16,6 +16,18 @@ export MP_WORLD_BLOB="$ROOT/apps/web/export/world.bin"
 
 mkdir -p "$ROOT/apps/web/export"
 
+# ── Preflight health check (D4) ─────────────────────────────────────────────
+# Fail fast with a helpful pointer if Godot is missing, instead of starting the
+# web server and only discovering the problem when we try to launch Godot.
+if [[ ! -x "$ROOT/tools/godot/Godot" ]] \
+    && ! command -v godot4 >/dev/null 2>&1 \
+    && ! command -v godot >/dev/null 2>&1; then
+  echo "✖ Godot 4 not found — cannot start the 3D client." >&2
+  echo "  Install it with:  ./scripts/install-godot.sh" >&2
+  echo "  (or install Godot 4.4 yourself and put 'godot' / 'godot4' on PATH)" >&2
+  exit 1
+fi
+
 cleanup() {
   echo ""
   echo "Stopping dev servers…"
