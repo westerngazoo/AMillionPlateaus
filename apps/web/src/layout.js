@@ -2,8 +2,11 @@
 // After the isometric projection, nearby topics can overlap visually; this spreads
 // them apart while preserving relative structure. Pure + node-testable.
 
-/** Minimum centre-to-centre distance between two plateau discs. */
-export const DEFAULT_MIN_DIST = 40; // 2×RADIUS(16) + label gap
+/** Minimum centre-to-centre distance between two plateau discs. Wider than the
+ *  disc diameter (2×RADIUS = 32) so focus discs get Obsidian-style breathing room
+ *  and their labels have somewhere to sit; the focus/context tier (render.js) does
+ *  the rest of the decluttering by shrinking out-of-lens nodes to shadow dots. */
+export const DEFAULT_MIN_DIST = 56;
 
 /**
  * Iteratively separate overlapping nodes. Returns a new Map<id, {x,y}>.

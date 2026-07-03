@@ -445,6 +445,10 @@ async function main() {
       community, // crowd-approved set — bedrock ring (R-0031)
       pathSteps: followSteps(),
       pathNext: followNext(),
+      // Focus + context: your lens's domains render full; the rest fade to small
+      // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
+      // all-shadow world renders everything full — fading ALL nodes helps nobody.
+      focusDomains: facedDomains(),
     });
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
