@@ -346,14 +346,16 @@ pub fn domain_overlap(
     let da = Uuid::parse_str(domain_a)?;
     let db = Uuid::parse_str(domain_b)?;
 
-    let topics_of = |domain: Uuid| -> Vec<&Mv> {
-        g.plateaus()
-            .filter(|p| p.domain_id == domain)
-            .map(|p| p.position())
-            .collect()
-    };
-    let topics_a = topics_of(da);
-    let topics_b = topics_of(db);
+    let topics_a: Vec<&Mv> = g
+        .plateaus()
+        .filter(|p| p.domain_id == da)
+        .map(|p| p.position())
+        .collect();
+    let topics_b: Vec<&Mv> = g
+        .plateaus()
+        .filter(|p| p.domain_id == db)
+        .map(|p| p.position())
+        .collect();
 
     // Fallback lens axis for a sparse domain: its first topic, else e1.
     let default_axis = mp_domain::ga::vector(1.0, 0.0, 0.0);
