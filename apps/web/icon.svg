@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="A Million Plateaus">
+  <rect width="512" height="512" rx="96" fill="#11161d"/>
+  <g fill="none" stroke="#7fb0e0" stroke-width="14" stroke-linejoin="round" opacity="0.95">
+    <path d="M256 96 L400 176 L256 256 L112 176 Z"/>
+    <path d="M256 216 L400 296 L256 376 L112 296 Z" opacity="0.7"/>
+    <path d="M256 336 L400 416 L256 496 L112 416 Z" opacity="0.45"/>
+  </g>
+  <g fill="#e6eef6">
+    <circle cx="256" cy="176" r="16"/>
+    <circle cx="400" cy="296" r="12" opacity="0.8"/>
+    <circle cx="112" cy="416" r="10" opacity="0.6"/>
+  </g>
+</svg>
