@@ -169,6 +169,18 @@ export function crossLinks({ resources = [], plateaus = [], uri, currentPlateauI
 }
 
 /**
+ * The plateaus offered in the "also pin to other topics" multi-pin checklist
+ * (R-0028 AC3): every plateau EXCEPT the one being edited, sorted by name then id
+ * for a stable, deterministic order. Pure — the checkbox DOM in main.js is a thin
+ * view over this. Non-mutating.
+ */
+export function pinCandidates(plateaus = [], currentId) {
+  return [...plateaus]
+    .filter((p) => p.id !== currentId)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
  * Resources whose URL appears on BOTH endpoints of a bridge — the books that
  * span the connection (R-0029). One row per shared URL with a representative
  * title/kind/uri, sorted by title then uri. Pure.

@@ -12,6 +12,7 @@ import {
   STUDY_ACTIONS,
   normalizeUrl,
   crossLinks,
+  pinCandidates,
   bridgeResources,
   buildProofGrading,
   parseVerdict,
@@ -262,4 +263,23 @@ test("buildProofGrading: caps the proof length (token safety) and tolerates miss
   const bare = buildProofGrading();
   assert.match(bare, /this topic/);
   assert.match(bare, /VERDICT: PASS/);
+});
+
+test("pinCandidates excludes the current plateau, sorted by name then id", () => {
+  const plateaus = [
+    { id: "p3", name: "Beta" },
+    { id: "p1", name: "Alpha" },
+    { id: "p2", name: "Alpha" }, // same name → id tiebreak
+    { id: "cur", name: "Current" },
+  ];
+  const out = pinCandidates(plateaus, "cur");
+  assert.deepEqual(out.map((p) => p.id), ["p1", "p2", "p3"]); // "cur" dropped, Alpha(p1)<Alpha(p2)<Beta
+});
+
+test("pinCandidates is non-mutating and handles empty input", () => {
+  const plateaus = [{ id: "b", name: "B" }, { id: "a", name: "A" }];
+  const before = [...plateaus];
+  pinCandidates(plateaus, "x");
+  assert.deepEqual(plateaus, before);
+  assert.deepEqual(pinCandidates([], "x"), []);
 });

@@ -55,6 +55,7 @@ import {
   buildPlateauStudyContext,
   STUDY_ACTIONS,
   crossLinks,
+  pinCandidates,
   bridgeResources,
   buildProofGrading,
   parseVerdict,
@@ -1674,11 +1675,7 @@ async function main() {
   const alsoPinList = document.getElementById("detail-add-also-list");
   function renderAlsoPin(currentId) {
     alsoPinList.replaceChildren();
-    const others = doc
-      .to_graph()
-      .plateaus()
-      .filter((p) => p.id !== currentId)
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const others = pinCandidates(doc.to_graph().plateaus(), currentId); // R-0028 (pure)
     for (const p of others) {
       const label = document.createElement("label");
       label.className = "also-pin-item";
