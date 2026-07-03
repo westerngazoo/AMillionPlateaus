@@ -79,6 +79,7 @@ import {
   rankPublishedPaths,
   PATH_KIND,
 } from "./paths.js";
+import { graphIds, importSummary, formatImportSummary } from "./import.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -2302,11 +2303,20 @@ async function main() {
     importStatus.style.color = ok ? "#9fd0b4" : "#ffb4a8";
     importStatus.hidden = false;
   }
+  // Snapshot the current graph's id sets (Track B3): the BEFORE side of the import
+  // overlap/summary diff. Pure `graphIds` — the merge is wasm's job, the accounting
+  // is JS.
+  function graphSnapshot() {
+    const g = doc.to_graph();
+    return graphIds({ plateaus: g.plateaus(), bridges: g.bridges(), resources: g.resources() });
+  }
   document.getElementById("import-world").addEventListener("click", () => importFile.click());
   importFile.addEventListener("change", async () => {
     const file = importFile.files?.[0];
     if (!file) return;
+    importNote(`importing "${file.name}"…`, true); // progress indicator (Track B3)
     try {
+      const before = graphSnapshot();
       const bytes = new Uint8Array(await file.arrayBuffer());
       doc.merge_bytes(bytes); // CRDT union; throws on a corrupt/non-Automerge blob
       // Imported plateaus carry their own domain — register it for traversal scoring.
@@ -2315,7 +2325,9 @@ async function main() {
       pumpPeer(); // …and a connected P2P peer (R-0018)
       persist(); // durable snapshot (R-0012)
       draw();
-      importNote(`imported "${file.name}" — explore the new islands`, true);
+      // Overlap/summary preview: counts of plateaus/bridges/resources added (R-0021).
+      const summary = importSummary(before, graphSnapshot());
+      importNote(formatImportSummary(summary, file.name), true);
     } catch (e) {
       importNote(`could not import: ${e}`, false);
     } finally {
