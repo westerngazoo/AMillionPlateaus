@@ -28,3 +28,7 @@ pkg/
 
 # Backups
 *.bak
+
+# Godot dev tools + live world sync (parallel start-dev.sh)
+tools/godot/
+apps/web/export/world.bin

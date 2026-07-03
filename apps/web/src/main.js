@@ -256,7 +256,10 @@ async function main() {
   // Persist the whole converged doc to IndexedDB; debounced inside the store
   // (AC3). Called after every local edit and inbound sync.
   function persist() {
-    snapshots.save(doc.save());
+    const bytes = doc.save();
+    snapshots.save(bytes);
+    // Dev: mirror CRDT bytes for the Godot 3D client (parallel ./scripts/start-dev.sh).
+    fetch("/dev/world.bin", { method: "PUT", body: bytes }).catch(() => {});
   }
 
   // AC5 — the synced doc carries exactly the four data maps, no reputation key.
@@ -1890,7 +1893,7 @@ async function main() {
 
   document.getElementById("open-3d").addEventListener("click", () => {
     importNote(
-      "3D world: run `godot --path apps/godot` (Godot 4). Uses true e2 depth — dense imports separate naturally. See apps/godot/README.md.",
+      "Parallel dev: run ./scripts/start-dev.sh from the repo root — web (8145) + Godot 3D together. Edits in the browser auto-sync to the 3D world.",
       true,
     );
   });

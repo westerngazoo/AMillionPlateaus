@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Start the fog-world dev server (apps/web).
+# Start the fog-world dev server (apps/web) only.
+#
+# For web + Godot 3D in parallel, use:
+#   ./scripts/start-dev.sh
 #
 # Usage (from repo root):
 #   ./scripts/start-web.sh          # http://localhost:8145
-#   ./scripts/start-web.sh 9000   # custom port
+#   ./scripts/start-web.sh 9000     # custom port
 #
 # Uses scripts/serve.py (no-cache headers) so wasm/JS reloads stay fresh after rebuilds.
 

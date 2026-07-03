@@ -1,46 +1,67 @@
-# apps/godot — immersive client (R-0025 / SPEC-0025)
+# apps/godot — immersive 3D client (R-0025)
 
-A Godot 4 client that renders the world as a 3D/immersive scene, **stopping the
-empirical-axis collapse** the 2D map projects away. It is a **pure consumer** of the
-unchanged GA/CRDT core: it places a plateau at its `{e1,e2,e3}` position and does
-**no GA**.
+The **3D explorer** for A Million Plateaus. Plateaus sit at real `(e1, e2, e3)` positions with **e2 as depth** — the axis the 2D map collapses. This is the long-term goal for dense imported worlds (Obsidian vaults, 50+ topics).
 
-## Status — Slice 1 (Track A foundation) + dense-graph spacing
+## Parallel dev with the web app
 
-This slice ships the binding-agnostic, GPU-free foundation:
+From the **repo root**:
 
-- `src/place_node.gd` — pure `place_node(e1,e2,e3,fit)` + `compute_fit(positions)`
-  (axes `x=e1, y=e3, z=e2`; "up" is the Creative axis). **AC1.**
-  Also `spread_positions` + `adaptive_min_dist` — Obsidian-style 3D separation for
-  imported vaults (many topics sharing similar GA coords).
-- `src/label_plan.gd` — pure `plan_labels(rects, focused, lit)` (a port of R-0024's
-  `planLabels`) + `project_to_rect(pos, view, proj, viewport, size)` (the
-  camera-dependent surface, modelled with a plain `Transform3D`+`Projection` so it is
-  testable headless). **AC3.**
-- `src/graph_source.gd` — the binding-agnostic interface the scene talks to (§2.1/§3).
-- `src/graph_source_fixture.gd` — an in-memory fixture so the scene + tests run with no
-  binding yet (the §3.1 parity fixture for later slices).
-- `src/world.gd` + `scenes/World3D.tscn` — a flat-3D scene built from a `GraphSource`:
-  plateaus placed, bridges drawn, the **reachable set emission-lit** (fog, **AC2** — the
-  same set the 2D map lights, never recomputed here).
-
-**Deferred to later slices:** the native `crates/mp-godot` GDExtension + the web
-`mp-wasm` JS-interop binding (real data + the parity test, AC2/AC7); the `XROrigin3D`
-OpenXR rig + teleport/travel (Track B, AC4); worldspace study (AC5); the native sync
-transport (Track D, AC7). No core or `apps/web` change — additive only (AC6).
-
-## Run
-
-Requires Godot 4.x on `PATH` (`godot`).
-
-```sh
-# headless tests (pure place/label functions + flat-3D scene smoke)
-godot --headless --path apps/godot --script res://test/run_tests.gd   # exit 0 = pass
-
-# the flat-3D demo scene (builds from the fixture)
-godot --path apps/godot
+```bash
+./scripts/start-dev.sh
 ```
 
-The `--script` runner is self-contained (no GUT dependency this slice) and exits
-non-zero on any failure, so it drops straight into CI. GUT can replace it when the
-binding slices land.
+This starts:
+
+| Client | URL / window |
+|--------|----------------|
+| **2D web** | http://localhost:8145 |
+| **3D Godot** | desktop window |
+
+**Sync:** every graph edit in the browser `PUT`s the CRDT blob to `apps/web/export/world.bin`. Godot watches that file and reloads ~every second.
+
+### First-time setup
+
+```bash
+./scripts/install-godot.sh      # Linux x86_64 — or install Godot 4.4 yourself
+./scripts/build-godot-ext.sh    # native GDExtension (GraphSourceNative)
+```
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `./scripts/start-dev.sh` | **Web + Godot in parallel** (recommended) |
+| `./scripts/start-web.sh` | 2D only |
+| `./scripts/start-godot.sh` | 3D only |
+| `./scripts/build-godot-ext.sh` | Build `libmp_godot.so` / `.dylib` |
+
+### 3D controls
+
+- **Right-drag** — look around
+- **WASD** — fly
+- **E / Q** — up / down
+- **Wheel** — zoom
+- **Shift** — faster
+- **Left-click plateau** — focus lens (current topic full size, neighbors medium, rest dim)
+
+## Architecture
+
+- `src/place_node.gd` — `x=e1, y=e3, z=e2` + `spread_positions` for dense graphs
+- `src/world.gd` — scene builder, blob hot-reload, focus lens
+- `src/graph_source_native.gd` — wraps `mp-godot` GDExtension
+- `crates/mp-godot` — Rust core → JSON DTOs (same shapes as `mp-wasm`)
+
+## Tests
+
+```bash
+godot --headless --path apps/godot --script res://test/run_tests.gd
+```
+
+## Status
+
+- ✅ Slice 1: flat-3D scene, fixture + native binding, fly camera
+- ✅ Parallel dev: web → `world.bin` → Godot hot-reload
+- ✅ 3D focus lens (click plateau)
+- 🔜 Web Godot export embed
+- 🔜 OpenXR rig (VR)
+- 🔜 Worldspace study panel
