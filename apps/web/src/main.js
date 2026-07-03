@@ -22,6 +22,7 @@ import init, {
   path_kind,
 } from "../pkg/mp_wasm.js";
 import { render, RADIUS } from "./render.js";
+import { LAYOUT_PRESET_ORDER } from "./layout.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -411,6 +412,9 @@ async function main() {
   let lensId = null; // R-0025 lens: active topic while studying (persistent focus)
   let lensMode = localStorage.getItem("mp.lensMode") !== "0"; // Obsidian-style focus (default on)
   let followPathId = null; // R-0039: local path being followed (camera/UI only)
+  // Dense-graph layout preset (Track B4): compact / study / overview. LOCAL only —
+  // a view setting, never synced. `study` is the historical default.
+  let layoutPreset = localStorage.getItem("mp.layoutPreset") || "study";
   const PATHS_KEY = "mp.paths";
   function loadPaths() {
     try {
@@ -504,6 +508,7 @@ async function main() {
       community, // crowd-approved set — bedrock ring (R-0031)
       pathSteps: followSteps(),
       pathNext: followNext(),
+      layoutPreset, // Track B4: compact / study / overview density
     });
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
@@ -1947,6 +1952,24 @@ async function main() {
       /* ignore */
     }
     syncLensBtn();
+    draw();
+  });
+
+  // Dense-graph layout preset toggle (Track B4): cycle compact → study → overview.
+  const presetBtn = document.getElementById("layout-preset");
+  function syncPresetBtn() {
+    presetBtn.textContent = `Layout: ${layoutPreset}`;
+  }
+  syncPresetBtn();
+  presetBtn.addEventListener("click", () => {
+    const i = LAYOUT_PRESET_ORDER.indexOf(layoutPreset);
+    layoutPreset = LAYOUT_PRESET_ORDER[(i + 1) % LAYOUT_PRESET_ORDER.length];
+    try {
+      localStorage.setItem("mp.layoutPreset", layoutPreset);
+    } catch {
+      /* quota — the preset still applies this session */
+    }
+    syncPresetBtn();
     draw();
   });
 

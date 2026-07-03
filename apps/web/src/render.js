@@ -49,7 +49,7 @@ function discRadius(tier) {
 /// of plateau ids that drive the progress colours + covered trail (R-0033/R-0030).
 /// Returns the per-plateau screen points for hit-testing — peers are NOT added to
 /// it, so silhouettes are unclickable and never affect hit-testing.
-export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, lensId = null, lensMode = false, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null }) {
+export function render(ctx, { plateaus, bridges, view, resources = [], peers = [], focusedId = null, lensId = null, lensMode = false, visited = new Set(), mastered = new Set(), community = new Set(), pathSteps = [], pathNext = null, layoutPreset = "study" }) {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -57,7 +57,7 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
   for (const p of plateaus) {
     raw.set(p.id, project(p.position, view));
   }
-  const points = layoutGraph(raw, { bridges });
+  const points = layoutGraph(raw, { bridges, preset: layoutPreset });
   const activeLens = lensMode && lensId ? lensId : null;
   const neighbors = activeLens ? bridgeNeighbors(activeLens, bridges) : new Set();
 
