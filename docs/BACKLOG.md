@@ -7,7 +7,8 @@ says *where we're going*; this file says *what's left on the active fronts and w
 on what*.
 
 Implementation is dispatched to the dev team as GitHub issues; Claude authors the
-RFCs / requirements / specs and the dev-ready tickets. Last synced: 2026-07-02.
+RFCs / requirements / specs and the dev-ready tickets. **Parallel task dispatch (Ready
+/ Blocked):** [`PARALLEL_DEV_TASKS.md`](PARALLEL_DEV_TASKS.md). Last synced: 2026-07-03.
 
 ---
 
