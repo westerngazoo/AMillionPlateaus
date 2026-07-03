@@ -21,7 +21,10 @@ import init, {
   proof_kind,
   path_kind,
 } from "../pkg/mp_wasm.js";
-import { render } from "./render.js";
+import { canvasRenderer } from "./renderers/canvas.js";
+import { viewModel } from "./viewpipeline.js";
+import { spreadNodes as spreadLayout } from "./layout.js";
+import { project as place } from "./project.js";
 import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
@@ -373,7 +376,10 @@ async function main() {
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
-  const ctx = canvas.getContext("2d");
+  // The view pipeline is injected here (RFC-0003 §4): a layout strategy, a
+  // renderer backend, and a pure hit-test. Swapping any of them (force layout,
+  // WebGL, raycast) is a constructor choice — no change to the draw loop.
+  const renderer = canvasRenderer(canvas);
   const hud = document.getElementById("hud");
   const identityHud = document.getElementById("identity-hud");
   const relayHud = document.getElementById("relay-hud");
@@ -431,26 +437,30 @@ async function main() {
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
+    // place → layout: project each plateau to screen, then declutter. The SAME
+    // placement drives the draw AND hit-testing (stored in `points`).
+    const raw = new Map();
+    for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
+    points = spreadLayout(raw);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
-    // discovery, R-0010); it just no longer gates or colours the map.
-    points = render(ctx, {
-      plateaus,
-      bridges,
-      view: VIEW,
-      resources,
-      peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
-      focusedId, // transient travel highlight (R-0019); null most of the time
-      visited, // studying set (R-0033)
-      mastered, // mastered set — ✓ + gold (R-0030)
-      community, // crowd-approved set — bedrock ring (R-0031)
-      pathSteps: followSteps(),
-      pathNext: followNext(),
-      // Focus + context: your lens's domains render full; the rest fade to small
-      // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
-      // all-shadow world renders everything full — fading ALL nodes helps nobody.
-      focusDomains: facedDomains(),
-    });
+    // discovery, R-0010); it just no longer gates or colours the map. The
+    // viewModel owns emphasis (focus/context, PR #42); the renderer just replays.
+    renderer.draw(
+      viewModel({ plateaus, bridges, resources }, points, {
+        visited, // studying set (R-0033)
+        mastered, // mastered set — ✓ + gold (R-0030)
+        community, // crowd-approved set — bedrock ring (R-0031)
+        focusedId, // transient travel highlight (R-0019); null most of the time
+        // Focus + context: your lens's domains render full; the rest fade to small
+        // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
+        // all-shadow world renders everything full — fading ALL nodes helps nobody.
+        focusDomains: facedDomains(),
+        pathSteps: followSteps(),
+        pathNext: followNext(),
+        peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+      }),
+    );
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";

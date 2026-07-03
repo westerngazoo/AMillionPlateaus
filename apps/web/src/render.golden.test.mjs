@@ -4,9 +4,10 @@
 // Instead we snapshot the DRAW-CALL SEQUENCE: a ~40-line recording mock `ctx`
 // records each op as plain data (`["arc", x, y, r, …]`, `["set globalAlpha", 0.4]`,
 // …). We capture the op-log from the renderer across four states — (a) no persona,
-// (b) a Constructivist lens, (c) a followed path, (d) a mastered node — pin it as a
-// committed BASELINE, and assert both today's `render.js` AND the extracted
-// `viewModel + canvasRenderer` reproduce it byte-for-byte. It is dependency-free,
+// (b) a Constructivist lens, (c) a followed path, (d) a mastered node — pinned as a
+// committed BASELINE (frozen from pre-refactor render.js in migration step 1), and
+// assert the extracted `viewModel + canvasRenderer` reproduces it byte-for-byte.
+// It is dependency-free,
 // deterministic (records intent, not glyphs), and catches z-order/alpha/radius/
 // colour-token/text-position drift — exactly what a behaviour-preserving refactor
 // must not change. Run: `node --test apps/web/src/*.test.mjs`.
@@ -14,7 +15,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { render } from "./render.js";
 import { project } from "./project.js";
 import { spreadNodes } from "./layout.js";
 import { viewModel } from "./viewpipeline.js";
@@ -144,25 +144,7 @@ const STATES = {
   },
 };
 
-// Build the argument object `render.js` expects for a given state.
-function renderArgs(state) {
-  return {
-    plateaus: FIXTURE.plateaus,
-    bridges: FIXTURE.bridges,
-    view: VIEW,
-    resources: FIXTURE.resources,
-    peers: state.peers,
-    focusedId: state.focusedId,
-    visited: state.visited,
-    mastered: state.mastered,
-    community: state.community,
-    pathSteps: state.pathSteps,
-    pathNext: state.pathNext,
-    focusDomains: state.focusDomains,
-  };
-}
-
-// The same placement `render.js` computes internally, so the seam draws over an
+// The same placement `render.js` computed internally, so the seam draws over an
 // identical geometry (project → spreadNodes).
 export function placeFixture() {
   const raw = new Map();
@@ -177,10 +159,6 @@ export function captureLog(drawInto) {
   return ctx.__log;
 }
 
-export function captureRender(state) {
-  return captureLog((ctx) => render(ctx, renderArgs(state)));
-}
-
 // Drive the extracted seam directly through its PUBLIC API — viewModel builds the
 // Frame, canvasRenderer replays it — over the same placement render.js computes.
 export function captureSeam(state) {
@@ -192,7 +170,7 @@ export function captureSeam(state) {
   });
 }
 
-export { FIXTURE, PEERS, VIEW, STATES, renderArgs };
+export { FIXTURE, PEERS, VIEW, STATES };
 
 // ── The committed baseline (captured from pre-refactor render.js, SPEC-0043 §3) ──
 // Regenerate ONLY on an intentional visual change; a diff here is a pixel change.
@@ -755,25 +733,13 @@ const BASELINE = {
   ],
 };
 
-for (const key of Object.keys(STATES)) {
-  test(`render.js op-log matches the committed baseline — ${key} state`, () => {
-    assert.deepEqual(captureRender(STATES[key]), BASELINE[key]);
-  });
-}
-
-// The load-bearing parity proof (SPEC-0043 §5.3): the extracted seam
+// The load-bearing parity proof (SPEC-0043 §3/§5.3): the extracted seam
 // (viewModel + canvasRenderer), driven through its public API, produces the
-// IDENTICAL op-log — so the split is behaviour-preserving.
+// IDENTICAL op-log to the committed pre-refactor baseline — so the split is
+// behaviour-preserving. A diff here is a pixel change.
 for (const key of Object.keys(STATES)) {
-  test(`viewModel + canvasRenderer op-log matches the baseline — ${key} state`, () => {
+  test(`viewModel + canvasRenderer op-log matches the committed baseline — ${key} state`, () => {
     assert.deepEqual(captureSeam(STATES[key]), BASELINE[key]);
-  });
-}
-
-// The seam and the transitional render.js shim must agree op-for-op.
-for (const key of Object.keys(STATES)) {
-  test(`render.js shim and the seam agree op-for-op — ${key} state`, () => {
-    assert.deepEqual(captureRender(STATES[key]), captureSeam(STATES[key]));
   });
 }
 
