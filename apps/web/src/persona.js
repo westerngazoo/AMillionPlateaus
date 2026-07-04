@@ -33,6 +33,14 @@ export const PHYSICS_DOMAIN = "33333333-3333-3333-3333-333333333333";
 export const CLASSICAL_DOMAIN = "44444444-4444-4444-4444-444444444444";
 export const INTUITIONISTIC_DOMAIN = "55555555-5555-5555-5555-555555555555";
 
+// The Computation curriculum's lens (cs-curriculum.js). Code is proof AND craft,
+// so the direction blends Formal→Creative — (0.8, 0, 0.6) is a UNIT vector, so
+// the SEED=0.16 projection on the trailhead ("The REPL & S-expressions", placed
+// exactly on this direction) is 0.16 > the 0.15 fog threshold, float-exact.
+// Distinct enough from the two near-e1 foundations lenses that neither lights
+// the other's trailhead.
+export const COMPUTATION_DOMAIN = "66666666-6666-6666-6666-666666666666";
+
 // grade-1 blade indices in [1, e1, e2, e12, e3, e13, e23, e123]
 const E1 = 1;
 const E2 = 2;
@@ -98,6 +106,16 @@ export const ARCHETYPES = [
     blurb: "Wakes facing the intuitionistic branch — begins at Intuitionistic Logic.",
     orient: [{ domain: INTUITIONISTIC_DOMAIN, dir: { e1: 0.95, e2: 0, e3: 0.3 } }],
   },
+  // The Computation curriculum's entry lens (cs-curriculum.js): Formal→Creative,
+  // code as proof and craft. Begins at the REPL and can walk, via Curry–Howard,
+  // straight into the intuitionistic mathematics island.
+  {
+    id: "programmer",
+    name: "The Programmer",
+    domainLabel: "Computation",
+    blurb: "Wakes facing Computation — begins at The REPL & S-expressions.",
+    orient: [{ domain: COMPUTATION_DOMAIN, dir: { e1: 0.8, e2: 0, e3: 0.6 } }],
+  },
 ];
 
 // ── Visitor-authored personas (SPEC-0009 / R-0009) ─────────────────────────
@@ -118,6 +136,8 @@ export const DOMAINS = [
   // the e1 axis — the shared infinitesimal-calculus/algebra spine both target.
   { id: CLASSICAL_DOMAIN, label: "Classical Foundations", canonical: { e1: 0.95, e2: 0.3, e3: 0 } },
   { id: INTUITIONISTIC_DOMAIN, label: "Intuitionistic Foundations", canonical: { e1: 0.95, e2: 0, e3: 0.3 } },
+  // The CS curriculum's lens (cs-curriculum.js): Formal×Creative, unit-length.
+  { id: COMPUTATION_DOMAIN, label: "Computation", canonical: { e1: 0.8, e2: 0, e3: 0.6 } },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
