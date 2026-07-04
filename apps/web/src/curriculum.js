@@ -367,3 +367,23 @@ export const QC_RESOURCES = [
     uri: "https://quantum.country/qcvc",
   },
 ];
+
+// ── The flagship learning PATH (R-0039): the whole rebuild, in build order ─────
+// A ready-to-FOLLOW route through the 22 plateaus above, in dependency order:
+// Logic → set theory / topos → the real tower → infinitesimals → algebra →
+// Clifford / GA → physics → quantum → GA-equivariant AI. Fixed id in a reserved
+// 4… namespace (disjoint from user paths, which mint random uuids), upserted into
+// the local path store on load exactly like the seed plateaus. Following it lights
+// every step regardless of lens (render.js inFocus), so the journey a learner
+// chose is never dimmed to context by the persona they happen to hold — and
+// `nextPathStep` rings the first not-yet-mastered stop as "you are here → next".
+export const SEED_PATHS = [
+  {
+    id: "40000000-0000-0000-0000-000000000001",
+    title: "Reconstruct Mathematics on LEM-free Foundations",
+    goal:
+      "Rebuild mathematics, physics, and quantum computing from the logic up — " +
+      "the ground-up curriculum, in dependency order, one masterable plateau at a time.",
+    steps: QC_PLATEAUS.map((p) => p.id),
+  },
+];

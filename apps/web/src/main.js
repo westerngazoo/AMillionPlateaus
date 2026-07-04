@@ -41,7 +41,8 @@ import {
   PHYSICS_DOMAIN,
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
-import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES } from "./curriculum.js";
+import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
+import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
@@ -402,6 +403,17 @@ async function main() {
       /* quota */
     }
   }
+  // Seed the flagship curriculum path(s) (R-0039) — an idempotent upsert on their
+  // fixed 4… ids, the same convergent seed contract the plateaus use. User paths
+  // mint random uuids, so re-seeding the canonical route never clobbers an
+  // authored one. This is why "Paths" is never empty: there is always a journey
+  // to follow the moment the world loads.
+  (function seedPaths() {
+    const all = loadPaths();
+    for (const p of SEED_PATHS) all[p.id] = { ...p };
+    savePaths(all);
+  })();
+  const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;
   function followSteps() {
     if (!followPathId) return [];
     return loadPaths()[followPathId]?.steps ?? [];
@@ -1341,7 +1353,31 @@ async function main() {
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
+    renderSearchLinks(p); // deep-links to look this topic up elsewhere
     detail.hidden = false;
+  }
+
+  // "Look it up" — external search deep-links prefilled with the plateau name.
+  // Each opens in a new tab (rel=noopener); the learner chooses to click. The
+  // name is URL-encoded and set via textContent — never interpolated as HTML.
+  const detailSearch = document.getElementById("detail-search");
+  const SEARCH_ENGINES = [
+    { label: "Perplexity", url: (q) => `https://www.perplexity.ai/search?q=${q}` },
+    { label: "Wikipedia", url: (q) => `https://en.wikipedia.org/w/index.php?search=${q}` },
+    { label: "Scholar", url: (q) => `https://scholar.google.com/scholar?q=${q}` },
+  ];
+  function renderSearchLinks(p) {
+    const q = encodeURIComponent(String(p?.name ?? "").slice(0, 200));
+    detailSearch.replaceChildren(
+      ...SEARCH_ENGINES.map((e) => {
+        const a = document.createElement("a");
+        a.href = e.url(q);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = e.label;
+        return a;
+      }),
+    );
   }
 
   // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
@@ -1688,6 +1724,140 @@ async function main() {
     btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
   }
+
+  // ── Rhizome drill-down (R-0044) ──────────────────────────────────────────────
+  // Select a term inside a plateau's body → a floating menu offers a quick inline
+  // gloss (Define / Example, through the companion) OR the rhizome move: GROW the
+  // term into a brand-new plateau, placed next to its parent, BRIDGED to it by the
+  // term itself, and opened so you can drill in and grow further — as deep as you
+  // like. Not a dictionary popup: a durable, syncable, masterable node in the graph.
+  const rhizMenu = document.createElement("div");
+  rhizMenu.id = "rhizome-menu";
+  rhizMenu.hidden = true;
+  let rhizTerm = "";
+  function hideRhizMenu() {
+    rhizMenu.hidden = true;
+    rhizTerm = "";
+  }
+  function rhizBtn(label, cls, fn) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (cls) b.className = cls;
+    // mousedown-preventDefault keeps the text selection alive through the click.
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => {
+      const t = rhizTerm;
+      hideRhizMenu();
+      fn(t);
+    });
+    return b;
+  }
+  rhizMenu.append(
+    rhizBtn("Define", "", (t) => askInline(t, "define")),
+    rhizBtn("Example", "", (t) => askInline(t, "example")),
+    rhizBtn("🌱 Grow a plateau", "grow", (t) => growPlateau(t)),
+  );
+  document.body.append(rhizMenu);
+
+  // A quick inline gloss — routed through the SAME plateau-scoped companion turn
+  // as the study actions (R-0023 trust boundary). No plateau is created.
+  function askInline(term, mode) {
+    const parent = studyPlateau;
+    if (!parent || !activePersona) return;
+    const prompt = inlinePrompt(term, parent.name, mode);
+    companion.hidden = false;
+    appendMessage("user", prompt);
+    if (modelConfig.kind === "fake") {
+      const msg = `Connect a model (Model setup) for a live answer — or 🌱 grow “${term}” into a plateau to explore it yourself.`;
+      appendMessage("bot", msg);
+      showStudyReply(msg);
+      return;
+    }
+    showStudyReply("…");
+    const rs = doc.to_graph().resources().filter((r) => r.plateau_id === parent.id);
+    const groundPlateau = { name: parent.name, description: stripChallenges(parent.description || "") };
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        appendMessage("bot", reply);
+        showStudyReply(reply);
+        history.push({ role: "user", content: prompt }, { role: "assistant", content: reply });
+      })
+      .catch((err) => {
+        appendMessage("error", `⚠ ${err.message}`);
+        showStudyReply(`⚠ ${err.message}`);
+      });
+  }
+
+  // The rhizome move: grow the selected term into a nested, bridged plateau.
+  async function growPlateau(term) {
+    const parent = studyPlateau;
+    if (!parent || !activePersona) return;
+    // Inherit the parent's domain so the child lands on the same island; fall back
+    // to the persona's first faced domain for an authored, domain-less parent.
+    const domain = DOMAIN_OF.get(parent.id) ?? parent.domain_id ?? activePersona.orient?.[0]?.domain;
+    if (!domain) return;
+    const pos = childPosition(parent.position, term);
+    let body = starterBody(term, parent.name); // offline default; a model fleshes it out
+    if (modelConfig.kind !== "fake") {
+      showStudyReply(`🌱 Growing “${term}”…`);
+      try {
+        const rs = doc.to_graph().resources().filter((r) => r.plateau_id === parent.id);
+        const groundPlateau = { name: parent.name, description: stripChallenges(parent.description || "") };
+        const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+        const messages = assembleMessages(voiceFor(activePersona), grounding, history, draftPlateauPrompt(term, parent.name));
+        const draft = await sendTurn(modelConfig, messages);
+        if (draft && draft.trim()) body = `# ${term}\n\n${draft.trim()}`;
+      } catch {
+        /* keep the honest offline stub */
+      }
+    }
+    let childId;
+    try {
+      childId = doc.add_plateau(term, domain, pos.e1, pos.e2, pos.e3, body);
+    } catch (err) {
+      console.error("[mp] grow plateau:", err);
+      return;
+    }
+    DOMAIN_OF.set(childId, domain); // register for traversal scoring
+    try {
+      doc.add_bridge(parent.id, childId, term); // the term IS the bridge concept
+    } catch (err) {
+      console.error("[mp] grow bridge:", err);
+    }
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    const child = doc.to_graph().plateaus().find((p) => p.id === childId);
+    if (child) openPlateau(child); // drill straight in — grow further from here
+  }
+
+  // Show the menu when a term is selected inside the plateau body; hide on scroll
+  // or an outside click. Desktop pointer path (mouseup); touch is a follow-up.
+  function showRhizMenu(term, rect) {
+    rhizTerm = term;
+    rhizMenu.hidden = false;
+    const mx = Math.min(Math.max(rect.left, 8), window.innerWidth - rhizMenu.offsetWidth - 8);
+    const above = rect.top - rhizMenu.offsetHeight - 8;
+    rhizMenu.style.left = `${mx}px`;
+    rhizMenu.style.top = `${above < 8 ? rect.bottom + 8 : above}px`;
+  }
+  detailBody.addEventListener("mouseup", () => {
+    const sel = window.getSelection();
+    const term = sel && !sel.isCollapsed ? sel.toString().trim() : "";
+    if (!isGrowable(term)) {
+      hideRhizMenu();
+      return;
+    }
+    showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
+  });
+  detail.addEventListener("scroll", hideRhizMenu);
+  document.addEventListener("mousedown", (e) => {
+    if (!rhizMenu.contains(e.target)) hideRhizMenu();
+  });
 
   // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
   // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS
@@ -2366,6 +2536,11 @@ async function main() {
       pathsPanel.open = true;
       refreshPathTopics();
       refreshPathPick();
+      // Land on the flagship curriculum route so the panel opens on a real
+      // journey to Follow, not the blank "— new path —" authoring form.
+      if (!pathPick.value && FLAGSHIP_PATH_ID && loadPaths()[FLAGSHIP_PATH_ID]) {
+        pathPick.value = FLAGSHIP_PATH_ID;
+      }
       renderPublishedPaths();
       loadDraftFromPick();
     }
@@ -2543,6 +2718,15 @@ async function main() {
   });
   document.getElementById("tutorial-gotit").addEventListener("click", dismissTutorial);
   document.getElementById("tour").addEventListener("click", () => showTutorial(0)); // replay (AC4)
+
+  // Map legend: a static key of what each line/dot means. Pure toggle, no state.
+  const legendPanel = document.getElementById("legend");
+  document.getElementById("legend-toggle").addEventListener("click", () => {
+    legendPanel.hidden = !legendPanel.hidden;
+  });
+  document.getElementById("legend-close").addEventListener("click", () => {
+    legendPanel.hidden = true;
+  });
 
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.

@@ -40,12 +40,17 @@ export function render(ctx, { plateaus, bridges, view, resources = [], peers = [
   const points = spreadNodes(raw);
 
   // Focus + context: plateaus in the lens's faced domains — plus anything you've
-  // touched (visited/mastered/focused) — render FULL; the rest render as small dim
-  // "shadow" dots. Context stays visible and clickable, but stops competing with
-  // the region you're actually studying. No focus set ⇒ everything full.
+  // touched (visited/mastered/focused) OR any step of the path you're following —
+  // render FULL; the rest render as small dim "shadow" dots. Context stays visible
+  // and clickable, but stops competing with the region you're actually studying.
+  // A followed path lights its whole route regardless of lens, so the journey a
+  // learner chose is never dimmed to context by the persona they happen to hold.
+  // No focus set ⇒ everything full.
+  const pathStepSet = new Set(pathSteps);
   const inFocus = (p) =>
     focusDomains.size === 0 ||
     focusDomains.has(p.domain_id) ||
+    pathStepSet.has(p.id) ||
     visited.has(p.id) ||
     mastered.has(p.id) ||
     p.id === focusedId;
