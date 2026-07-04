@@ -7,7 +7,7 @@
 - **Depends on:** R-0011 (plateau authoring), R-0013 (bridge authoring), R-0020 (plateau content
   + read view), R-0023 (plateau-scoped companion), R-0007 (companion), R-0004/R-0012 (CRDT sync +
   durability). Composes existing primitives — no new core capability.
-- **Realized by:** SPEC-0044 (pending) — **Slice 1 already implemented** (`rhizome.js` + wiring)
+- **Realized by:** SPEC-0044 (Accepted, architect-reviewed) — **Slice 1 implemented** (`rhizome.js` + wiring, on `main`)
 - **QA:** `qa` agent run scoped to this requirement
 
 ## 1. Statement
