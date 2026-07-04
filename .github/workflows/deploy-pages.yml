@@ -1,0 +1,77 @@
+name: Deploy web MVP to GitHub Pages
+
+# Publishes apps/web (the fog-world client) to GitHub Pages.
+# The wasm bundle is a build artifact (pkg/ is gitignored), so CI builds it
+# with wasm-pack. garust is the only math layer and lives in a sibling repo;
+# it is checked out next to the app so the `garust = { path = "../garust" }`
+# workspace dependency resolves exactly as it does on a developer machine.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+# Least privilege: read the code, write the Pages deployment, mint the OIDC token.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One live deploy at a time; a newer push supersedes an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout garust (the `../garust` path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: westerngazoo/garust
+          path: garust
+
+      - name: Cache cargo + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('app/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build the wasm bundle into apps/web/pkg
+        working-directory: app
+        run: wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
+
+      - name: Upload the site (apps/web, with the freshly built pkg/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/apps/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
