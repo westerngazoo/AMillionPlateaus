@@ -75,3 +75,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0043](0043-view-pipeline-phase1.md) | View pipeline, Phase 1: extract the injectable render seam (pure view-model/Frame + canvasRenderer + pure hit-test), behaviour-preserving (RFC-0003) | Infra / DX | Accepted |
 | [R-0044](0044-rhizome-drilldown.md) | Rhizome drill-down: select a term while reading → grow a nested, bridged, drillable plateau (companion-drafted); go as deep as you want | POC — Knowledge content | Draft |
 | [R-0045](0045-rich-note-capture.md) | Rich note capture: external search deep-links (done) + QR-paired mobile photo of handwritten notes → attach + OCR via the connected multimodal companion | POC — Knowledge content | Draft |
+| [R-0046](0046-in-browser-compute-cell.md) | In-browser compute cell: run real Python (Pyodide, numpy/sympy) on a plateau, offline & self-hosted; save a cell as a shareable "Notebook" resource | POC — Knowledge content | Accepted |
