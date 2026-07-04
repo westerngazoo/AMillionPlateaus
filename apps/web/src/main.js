@@ -49,6 +49,7 @@ import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.
 import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
+import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
 import { assembleMessages, sendTurn } from "./companion.js";
@@ -2868,3 +2869,30 @@ main().catch((err) => {
   const hud = document.getElementById("hud");
   if (hud) hud.textContent = `error: ${err}`;
 });
+
+// Installable offline PWA (SPEC-0047 / R-0047): register the module service
+// worker AFTER boot kicked off — never blocking, silent where unsupported
+// (the app then simply works online, exactly as before). "./sw.js" resolves
+// against the DOCUMENT, so it is subpath-safe under /AMillionPlateaus/.
+// NOT registered on localhost (shouldRegister) unless ?sw=1 — serve.py's
+// no-cache dev contract must keep beating the SW cache during development.
+//
+// The warm pass: the SW was born after boot, so every module/wasm request
+// this load made predates it. We post the boot's same-origin resource URLs
+// (perf buffer, cross-origin dropped by warmList — the model call never
+// re-fires) plus the lazily-imported KaTeX vendor set; the SW caches them,
+// making ONE online load fully offline-ready (R-0047 AC2).
+if ("serviceWorker" in navigator && shouldRegister(window.location)) {
+  navigator.serviceWorker
+    .register("./sw.js", { type: "module" })
+    .then(async (reg) => {
+      await navigator.serviceWorker.ready;
+      const boot = warmList(performance.getEntriesByType("resource"), window.location.origin);
+      (reg.active ?? reg.waiting ?? reg.installing)?.postMessage({
+        type: "warm",
+        urls: [...boot, ...VENDOR_WARM],
+      });
+      console.log(`[mp] service worker ready — warming ${boot.length + VENDOR_WARM.length} files for offline`);
+    })
+    .catch((err) => console.warn("[mp] service worker unavailable:", err?.message ?? err));
+}

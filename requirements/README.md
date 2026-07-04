@@ -76,3 +76,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0044](0044-rhizome-drilldown.md) | Rhizome drill-down: select a term while reading → grow a nested, bridged, drillable plateau (companion-drafted); go as deep as you want | POC — Knowledge content | Draft |
 | [R-0045](0045-rich-note-capture.md) | Rich note capture: external search deep-links (done) + QR-paired mobile photo of handwritten notes → attach + OCR via the connected multimodal companion | POC — Knowledge content | Draft |
 | [R-0046](0046-in-browser-compute-cell.md) | In-browser compute cell: run real Python (Pyodide, numpy/sympy) on a plateau, offline & self-hosted; save a cell as a shareable "Notebook" resource | POC — Knowledge content | Accepted |
+| [R-0047](0047-installable-pwa.md) | Installable offline PWA: install to desktop/phone/Boox; the whole app works with no network after one load | POC — Reach | Accepted |
