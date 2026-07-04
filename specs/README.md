@@ -74,4 +74,6 @@ field. The build order across requirements and specs is in
 | [SPEC-0037](0037-mobile-web.md) | Mobile web: responsive `@media` (bottom-sheet drawer, wrapping HUD) + touch pan/pinch (pure `pinch` reducer + `touch-action:none`) | R-0037 | Implemented |
 | [SPEC-0038](0038-author-your-own-domain.md) | Author your own domain: pure `authorDomain` (name-derived uuid) + `SUGGESTED_DOMAINS` + `allDomains()` merge + creator "Add a lens"; a custom lens is any grade-1 direction (no core change) | R-0038 | Implemented |
 | [SPEC-0039](0039-learning-paths.md) | Learning paths: Rust-core `Path` + signed `KIND_PATH` (30082, recompute ignores it), local-keep + opt-in publish (mirrors R-0036), grounded on the domain meet (RFC-0002 §2.5, deferred to Phase 1) | R-0039 | Draft |
-| [SPEC-0043](0043-view-pipeline-phase1.md) | View pipeline Phase 1: pure `viewModel → Frame` + `canvasRenderer(draw)` + pure `hitTest`; behaviour-preserving via a dependency-free draw-call-log snapshot (RFC-0003) | R-0043 | Accepted |
+| [SPEC-0043](0043-view-pipeline-phase1.md) | View pipeline Phase 1: pure `viewModel → Frame` + `canvasRenderer(draw)` + pure `hitTest`; behaviour-preserving via a dependency-free draw-call-log snapshot (RFC-0003) | R-0043 | Implemented |
+| [SPEC-0044]0
+| [SPEC-0045](0045-rich-note-capture.md) | Rich note capture: external search (shipped) + QR-paired mobile photo over P2P (#60), bounded-image attach (#61), model-OCR "Read it" (#62) | R-0045 | Accepted |

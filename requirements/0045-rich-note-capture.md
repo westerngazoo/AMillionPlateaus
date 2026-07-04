@@ -7,7 +7,7 @@
 - **Depends on:** R-0014 (trail markers / resources), R-0020 (plateau content), R-0018 (WebRTC P2P
   transport + QR-able signaling blob), R-0007 (companion / multimodal model), R-0044 (rhizome +
   the study surface). Composes existing primitives; the OCR reuses the connected multimodal model.
-- **Realized by:** SPEC-0045 (pending). **Slice 0 (external search links) is already implemented.**
+- **Realized by:** SPEC-0045 (Accepted, architect-reviewed) — **Slice 0 implemented** (external search links, on `main`)
 - **QA:** `qa` agent run scoped to this requirement
 
 ## 1. Statement
