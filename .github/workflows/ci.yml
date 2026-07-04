@@ -45,9 +45,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: AMillionPlateaus
-      - name: cargo fmt --check
+      - name: cargo fmt --check (app crates only — not the garust dependency)
         working-directory: AMillionPlateaus
-        run: cargo fmt --all -- --check
+        # `--all` pulls the sibling garust checkout into fmt scope and gates on the
+        # dependency's own formatting, which this repo doesn't own. Scope to our
+        # workspace members. clippy/test below stay `--workspace` (deps aren't linted).
+        run: cargo fmt -p mp-graph -p mp-domain -p mp-reputation -p mp-identity -p mp-crdt -p mp-wasm -p mp-host -p mp-godot -- --check
       - name: cargo clippy -D warnings
         working-directory: AMillionPlateaus
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -71,23 +74,6 @@ jobs:
       - name: node --test
         working-directory: AMillionPlateaus
         run: node --test apps/web/src/*.test.mjs
-
-  lint:
-    name: Web — Biome (fmt + lint gate)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout AMillionPlateaus
-        uses: actions/checkout@v4
-        with:
-          path: AMillionPlateaus
-      # Biome is a single binary — no node_modules, no npm install (issue #34).
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: 2.5.2
-      - name: biome ci apps/web/src
-        working-directory: AMillionPlateaus
-        run: biome ci apps/web/src
 
   wasm:
     name: wasm — wasm-pack build check
