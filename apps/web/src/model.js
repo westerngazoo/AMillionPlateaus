@@ -68,6 +68,19 @@ export const PRESETS = [
     needsKey: false,
   },
   {
+    // LM Studio serves the SAME OpenAI-compatible surface as Ollama, on port 1234
+    // by default (Developer tab → Start Server), no key, fully offline. `model` is
+    // whatever you've loaded in LM Studio — swap it for that model's identifier
+    // (shown next to the loaded model); recent LM Studio also routes any id to the
+    // loaded model. Same adapter, different base URL — nothing else to wire.
+    id: "local-lmstudio",
+    kind: "openai-compatible",
+    label: "Local — LM Studio (no key, fully offline)",
+    endpoint: "http://localhost:1234/v1",
+    model: "llama-3.2-3b-instruct",
+    needsKey: false,
+  },
+  {
     // Google exposes an OpenAI-compatible surface for Gemini, so the same
     // adapter reaches it with only a different base URL + key. The free AI
     // Studio tier (aistudio.google.com/apikey) is generous enough for study,
