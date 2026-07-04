@@ -21,7 +21,11 @@ import init, {
   proof_kind,
   path_kind,
 } from "../pkg/mp_wasm.js";
-import { render, RADIUS } from "./render.js";
+import { canvasRenderer } from "./renderers/canvas.js";
+import { viewModel } from "./viewpipeline.js";
+import { spreadNodes as spreadLayout } from "./layout.js";
+import { project as place } from "./project.js";
+import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -83,7 +87,7 @@ import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
-import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
+import { centerOn, zoomAt } from "./wayfinding.js";
 import { pinch } from "./gestures.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
@@ -373,7 +377,10 @@ async function main() {
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
-  const ctx = canvas.getContext("2d");
+  // The view pipeline is injected here (RFC-0003 §4): a layout strategy, a
+  // renderer backend, and a pure hit-test. Swapping any of them (force layout,
+  // WebGL, raycast) is a constructor choice — no change to the draw loop.
+  const renderer = canvasRenderer(canvas);
   const hud = document.getElementById("hud");
   const identityHud = document.getElementById("identity-hud");
   const relayHud = document.getElementById("relay-hud");
@@ -442,26 +449,30 @@ async function main() {
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
+    // place → layout: project each plateau to screen, then declutter. The SAME
+    // placement drives the draw AND hit-testing (stored in `points`).
+    const raw = new Map();
+    for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
+    points = spreadLayout(raw);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
-    // discovery, R-0010); it just no longer gates or colours the map.
-    points = render(ctx, {
-      plateaus,
-      bridges,
-      view: VIEW,
-      resources,
-      peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
-      focusedId, // transient travel highlight (R-0019); null most of the time
-      visited, // studying set (R-0033)
-      mastered, // mastered set — ✓ + gold (R-0030)
-      community, // crowd-approved set — bedrock ring (R-0031)
-      pathSteps: followSteps(),
-      pathNext: followNext(),
-      // Focus + context: your lens's domains render full; the rest fade to small
-      // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
-      // all-shadow world renders everything full — fading ALL nodes helps nobody.
-      focusDomains: facedDomains(),
-    });
+    // discovery, R-0010); it just no longer gates or colours the map. The
+    // viewModel owns emphasis (focus/context, PR #42); the renderer just replays.
+    renderer.draw(
+      viewModel({ plateaus, bridges, resources }, points, {
+        visited, // studying set (R-0033)
+        mastered, // mastered set — ✓ + gold (R-0030)
+        community, // crowd-approved set — bedrock ring (R-0031)
+        focusedId, // transient travel highlight (R-0019); null most of the time
+        // Focus + context: your lens's domains render full; the rest fade to small
+        // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
+        // all-shadow world renders everything full — fading ALL nodes helps nobody.
+        focusDomains: facedDomains(),
+        pathSteps: followSteps(),
+        pathNext: followNext(),
+        peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+      }),
+    );
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
@@ -690,7 +701,8 @@ async function main() {
 
   function appendMessage(role, text) {
     const div = document.createElement("div");
-    div.className = role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
+    div.className =
+      role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
     div.textContent = text;
     companionLog.append(div);
     companionLog.scrollTop = companionLog.scrollHeight;
@@ -941,7 +953,8 @@ async function main() {
       const hit = SUGGESTED_DOMAINS.find(
         (s) => s.name.toLowerCase() === lensName.value.trim().toLowerCase(),
       );
-      if (hit) for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
+      if (hit)
+        for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
     });
     const addBtn = document.createElement("button");
     addBtn.type = "button";
@@ -1171,18 +1184,12 @@ async function main() {
     const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
-    // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
-    // (no reachability gate). Opening one is "studying" it.
-    let hit = null;
-    let best = RADIUS * RADIUS;
-    for (const p of graph.plateaus()) {
-      const pt = points.get(p.id);
-      const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
-      if (d <= best) {
-        best = d;
-        hit = p;
-      }
-    }
+    // R-0033 — the map is browsable: hit-test the last-drawn placement (no
+    // reachability gate). Discs win over bridges; `hitTest` iterates `points`
+    // keys so it is total (SPEC-0043 §2.4). Opening a disc is "studying" it.
+    const id = hitTest(points, mx, my, { bridges: graph.bridges(), tol: 6 });
+    if (id === null) return;
+    const hit = graph.plateaus().find((p) => p.id === id);
     if (hit) {
       // Focusing a plateau is the wizard's position — announce it to peers
       // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
@@ -1200,14 +1207,11 @@ async function main() {
       openPlateau(hit);
       return;
     }
-    // No disc hit → test bridges (R-0029). Every disc is now a hit candidate, so
-    // "cursor over a disc" ⇔ `hit` is set above — a disc already wins precedence
-    // over a bridge, and opening a bridge stays read-only.
-    const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
-    if (bid) {
-      const b = graph.bridges().find((x) => x.id === bid);
-      if (b) openBridge(b, graph);
-    }
+    // Not a disc → the id is a bridge (R-0029). Disc precedence is already handled
+    // by hitTest (a disc under the cursor is returned first); opening a bridge
+    // stays read-only.
+    const b = graph.bridges().find((x) => x.id === id);
+    if (b) openBridge(b, graph);
   });
 
   // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
@@ -1343,7 +1347,9 @@ async function main() {
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
     // otherwise show the raw prompt:/answer: lines (and leak the answer).
-    detailBody.innerHTML = renderMarkdown(stripChallenges(p.description || "") || "_No description yet._");
+    detailBody.innerHTML = renderMarkdown(
+      stripChallenges(p.description || "") || "_No description yet._",
+    );
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
@@ -1475,7 +1481,9 @@ async function main() {
     const shared = bridgeResources({ resources: graph.resources(), fromId: b.from, toId: b.to });
     const label = document.createElement("p");
     label.className = "bridge-res-label";
-    label.textContent = shared.length ? "Books that span both:" : "No resources span both topics yet.";
+    label.textContent = shared.length
+      ? "Books that span both:"
+      : "No resources span both topics yet.";
     detailBridge.append(label);
     if (shared.length) {
       const ul = document.createElement("ul");
@@ -1557,7 +1565,9 @@ async function main() {
 
       const stones = document.createElement("span");
       stones.className = crystallized ? "res-stones bedrock" : "res-stones";
-      stones.textContent = crystallized ? `◆ ${Math.round(r.vote_count)}` : `● ${Math.round(r.vote_count)}`;
+      stones.textContent = crystallized
+        ? `◆ ${Math.round(r.vote_count)}`
+        : `● ${Math.round(r.vote_count)}`;
       stones.title = crystallized ? "crystallized — community-vouched" : "weighted stones";
       li.append(stones);
 
@@ -1629,7 +1639,9 @@ async function main() {
       .to_graph()
       .plateaus()
       .filter((p) => p.id !== currentId)
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .sort((a, b) =>
+        a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
     for (const p of others) {
       const label = document.createElement("label");
       label.className = "also-pin-item";
@@ -1700,7 +1712,10 @@ async function main() {
     }
     showStudyReply("…"); // feedback in the drawer while the model answers
     // R-0034: strip any author ```solve answer from the grounding so it never rides to the model.
-    const groundPlateau = { name: studyPlateau.name, description: stripChallenges(studyPlateau.description || "") };
+    const groundPlateau = {
+      name: studyPlateau.name,
+      description: stripChallenges(studyPlateau.description || ""),
+    };
     const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
     const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
@@ -1709,7 +1724,10 @@ async function main() {
         showStudyReply(reply);
         // Shares the global transcript by design — one companion, one history
         // (R-0023): a plateau answer can context a later global turn, and vice-versa.
-        history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+        history.push(
+          { role: "user", content: action.prompt },
+          { role: "assistant", content: reply },
+        );
       })
       .catch((err) => {
         appendMessage("error", `⚠ ${err.message}`); // graceful (R-0007 AC4)
@@ -1866,9 +1884,18 @@ async function main() {
   // the verdict parse is fail-safe. Wired once — the box is a static sibling, so
   // a draft survives renderMastery's replaceChildren.
   const PROOF_SYMBOLS = [
-    ["∀", "\\forall "], ["∃", "\\exists "], ["∈", "\\in "], ["≤", "\\le "],
-    ["≥", "\\ge "], ["⇒", "\\Rightarrow "], ["⇔", "\\iff "], ["√", "\\sqrt{}"],
-    ["∑", "\\sum"], ["∫", "\\int"], ["a/b", "\\frac{}{}"], ["lim", "\\lim_{}"],
+    ["∀", "\\forall "],
+    ["∃", "\\exists "],
+    ["∈", "\\in "],
+    ["≤", "\\le "],
+    ["≥", "\\ge "],
+    ["⇒", "\\Rightarrow "],
+    ["⇔", "\\iff "],
+    ["√", "\\sqrt{}"],
+    ["∑", "\\sum"],
+    ["∫", "\\int"],
+    ["a/b", "\\frac{}{}"],
+    ["lim", "\\lim_{}"],
     ["$ $", "$$"],
   ];
   function insertAtCursor(el, text) {
@@ -1940,8 +1967,16 @@ async function main() {
   // LOCAL, deterministic equivalence engine (no model). Correct → signMastery
   // (the same ✓). Wired once — the box is a static sibling.
   const SOLVE_SYMBOLS = [
-    ["x", "x"], ["^", "^"], ["( )", "()"], ["/", "/"], ["·", "*"],
-    ["√", "sqrt()"], ["π", "pi"], ["sin", "sin()"], ["cos", "cos()"], ["ln", "ln()"],
+    ["x", "x"],
+    ["^", "^"],
+    ["( )", "()"],
+    ["/", "/"],
+    ["·", "*"],
+    ["√", "sqrt()"],
+    ["π", "pi"],
+    ["sin", "sin()"],
+    ["cos", "cos()"],
+    ["ln", "ln()"],
   ];
   function solveInsert(text) {
     const el = solveInput;
@@ -2028,8 +2063,14 @@ async function main() {
     }
     // LOCAL deterministic check (no model). Conservative — a wrong/unparseable
     // answer signs nothing.
-    const { equivalent, reason } = checkEquivalence(ans, solveCurrent.reference, solveCurrent.check);
-    solveFeedback.textContent = equivalent ? "✓ Correct — verified equivalent to the answer." : reason;
+    const { equivalent, reason } = checkEquivalence(
+      ans,
+      solveCurrent.reference,
+      solveCurrent.check,
+    );
+    solveFeedback.textContent = equivalent
+      ? "✓ Correct — verified equivalent to the answer."
+      : reason;
     if (equivalent) {
       signMastery(studyPlateau); // the ONLY sign path — same mastery as self-test / proof
       saveProof(studyPlateau.id, "solution", ans); // R-0036 — keep it locally (private)
@@ -2083,7 +2124,7 @@ async function main() {
   document.getElementById("draft-plateau-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const spec = buildPlateau({
-      name:   document.getElementById("dp-name").value,
+      name: document.getElementById("dp-name").value,
       domain: dpDomain.value,
       e1: parseFloat(document.getElementById("dp-e1").value),
       e2: parseFloat(document.getElementById("dp-e2").value),
@@ -2192,12 +2233,15 @@ async function main() {
   // synced-in plateaus are anchorable (AC1).
   function refreshMarkerPlateaus() {
     dmPlateau.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2256,12 +2300,15 @@ async function main() {
   function refreshVoteMarkers() {
     const threshold = crystallize_threshold();
     vsMarker.replaceChildren(
-      ...doc.to_graph().resources().map((r) => {
-        const o = document.createElement("option");
-        o.value = r.id;
-        o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .resources()
+        .map((r) => {
+          const o = document.createElement("option");
+          o.value = r.id;
+          o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
+          return o;
+        }),
     );
   }
 
@@ -2440,17 +2487,23 @@ async function main() {
   let draftPathSteps = [];
 
   function plateauById(id) {
-    return doc.to_graph().plateaus().find((p) => p.id === id);
+    return doc
+      .to_graph()
+      .plateaus()
+      .find((p) => p.id === id);
   }
 
   function refreshPathTopics() {
     pathStepTopic.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2583,7 +2636,11 @@ async function main() {
     if (next) {
       const p = plateauById(next);
       if (p) {
-        const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+        const { cx, cy } = centerOn(
+          p.position,
+          { width: canvas.width, height: canvas.height },
+          VIEW.scale,
+        );
         VIEW.cx = cx;
         VIEW.cy = cy;
       }
@@ -2604,15 +2661,7 @@ async function main() {
     const plateaus = doc.to_graph().plateaus();
     const domains = pathDomains(plateaus, entry.steps);
     try {
-      ingest(
-        identity.sign_path(
-          entry.id,
-          entry.title,
-          entry.goal ?? "",
-          entry.steps,
-          domains,
-        ),
-      );
+      ingest(identity.sign_path(entry.id, entry.title, entry.goal ?? "", entry.steps, domains));
       renderPublishedPaths();
     } catch (err) {
       console.error("[mp] sign_path failed:", err);
@@ -2657,7 +2706,11 @@ async function main() {
       .find((x) => x.id === travelSel.value);
     if (!p) return;
     // Re-centre the camera so the chosen topic sits at the canvas centre.
-    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    const { cx, cy } = centerOn(
+      p.position,
+      { width: canvas.width, height: canvas.height },
+      VIEW.scale,
+    );
     VIEW.cx = cx;
     VIEW.cy = cy;
     focusedId = p.id; // transient highlight ring (render.js); cleared below
