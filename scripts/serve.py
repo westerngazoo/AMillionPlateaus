@@ -19,6 +19,12 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apps", "w
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    # Match GitHub Pages: the PWA manifest gets its real MIME (SPEC-0047).
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".webmanifest": "application/manifest+json",
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
