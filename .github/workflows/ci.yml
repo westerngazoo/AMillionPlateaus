@@ -45,9 +45,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: AMillionPlateaus
-      - name: cargo fmt --check
+      - name: cargo fmt --check (app crates only — not the garust dependency)
         working-directory: AMillionPlateaus
-        run: cargo fmt --all -- --check
+        # `--all` pulls the sibling garust checkout into fmt scope and gates on the
+        # dependency's own formatting, which this repo doesn't own. Scope to our
+        # workspace members. clippy/test below stay `--workspace` (deps aren't linted).
+        run: cargo fmt -p mp-graph -p mp-domain -p mp-reputation -p mp-identity -p mp-crdt -p mp-wasm -p mp-host -p mp-godot -- --check
       - name: cargo clippy -D warnings
         working-directory: AMillionPlateaus
         run: cargo clippy --workspace --all-targets -- -D warnings
