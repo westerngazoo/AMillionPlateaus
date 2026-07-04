@@ -175,562 +175,2268 @@ export { FIXTURE, PEERS, VIEW, STATES };
 // ── The committed baseline (captured from pre-refactor render.js, SPEC-0043 §3) ──
 // Regenerate ONLY on an intentional visual change; a diff here is a pixel change.
 const BASELINE = {
-  noPersona: [
-    ["clearRect", 0, 0, 900, 600],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 610, 364],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "limits", 672, 318],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 610, 364],
-    ["lineTo", 466, 156],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "continuity", 544, 254],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 226, 140],
-    ["lineTo", 514, 524],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "meter", 376, 326],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 226, 140],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "symmetry", 480, 206],
-    ["beginPath"],
-    ["arc", 722, 284, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 226, 140, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 514, 524, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 466, 156, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Algebra", 722, 314],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Calculus", 610, 394],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Harmony", 226, 170],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Rhythm", 514, 554],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Topology", 466, 186],
-    ["save"],
-    ["set textAlign", "left"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "#ffd166"],
-    ["beginPath"],
-    ["arc", 748, 268, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Intro PDF · 5", 756, 271],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 748, 282, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Notes", 756, 285],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 252, 124, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Chords · 2", 260, 127],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "right"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(126, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 584, 348, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "abcdef", 576, 351],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(154, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 572, 354, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "beefca", 564, 357],
-    ["restore"],
+  "noPersona": [
+    [
+      "clearRect",
+      0,
+      0,
+      900,
+      600
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      610,
+      364
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "limits",
+      672,
+      318
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      610,
+      364
+    ],
+    [
+      "lineTo",
+      466,
+      156
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "continuity",
+      544,
+      254
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      226,
+      140
+    ],
+    [
+      "lineTo",
+      514,
+      524
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "meter",
+      376,
+      326
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      226,
+      140
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "symmetry",
+      480,
+      206
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      722,
+      284,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      226,
+      140,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      514,
+      524,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      466,
+      156,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Algebra",
+      722,
+      314
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Calculus",
+      610,
+      394
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Harmony",
+      226,
+      170
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Rhythm",
+      514,
+      554
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Topology",
+      466,
+      186
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "left"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "#ffd166"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      268,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      282,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      252,
+      124,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "right"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(126, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      584,
+      348,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "abcdef",
+      576,
+      351
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(154, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      572,
+      354,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "beefca",
+      564,
+      357
+    ],
+    [
+      "restore"
+    ]
   ],
-  lens: [
-    ["clearRect", 0, 0, 900, 600],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 610, 364],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "limits", 672, 318],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 610, 364],
-    ["lineTo", 466, 156],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "continuity", 544, 254],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 226, 140],
-    ["lineTo", 514, 524],
-    ["stroke"],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 226, 140],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "symmetry", 480, 206],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 226, 140, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 514, 524, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["beginPath"],
-    ["arc", 722, 284, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#e0a64a"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 20, 0, 6.283185307179586],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "#bfe3ff"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 466, 156, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "bold 12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Algebra", 722, 314],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Calculus", 610, 394],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Topology", 466, 186],
-    ["save"],
-    ["set strokeStyle", "#9fd0ff"],
-    ["set lineWidth", 2],
-    ["setLineDash", [4, 4]],
-    ["beginPath"],
-    ["arc", 722, 284, 24, 0, 6.283185307179586],
-    ["stroke"],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "left"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "#ffd166"],
-    ["beginPath"],
-    ["arc", 748, 268, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Intro PDF · 5", 756, 271],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 748, 282, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Notes", 756, 285],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 252, 124, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "right"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(126, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 584, 348, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "abcdef", 576, 351],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(154, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 572, 354, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "beefca", 564, 357],
-    ["restore"],
+  "lens": [
+    [
+      "clearRect",
+      0,
+      0,
+      900,
+      600
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      610,
+      364
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "limits",
+      672,
+      318
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      610,
+      364
+    ],
+    [
+      "lineTo",
+      466,
+      156
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "continuity",
+      544,
+      254
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      226,
+      140
+    ],
+    [
+      "lineTo",
+      514,
+      524
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      226,
+      140
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "symmetry",
+      480,
+      206
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      226,
+      140,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      514,
+      524,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      722,
+      284,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#e0a64a"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      20,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "#bfe3ff"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      466,
+      156,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "bold 12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Algebra",
+      722,
+      314
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Calculus",
+      610,
+      394
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Topology",
+      466,
+      186
+    ],
+    [
+      "save"
+    ],
+    [
+      "set strokeStyle",
+      "#9fd0ff"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "setLineDash",
+      [
+        4,
+        4
+      ]
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      722,
+      284,
+      24,
+      0,
+      6.283185307179586
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "left"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "#ffd166"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      268,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      282,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      252,
+      124,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "right"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(126, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      584,
+      348,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "abcdef",
+      576,
+      351
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(154, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      572,
+      354,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "beefca",
+      564,
+      357
+    ],
+    [
+      "restore"
+    ]
   ],
-  path: [
-    ["clearRect", 0, 0, 900, 600],
-    ["save"],
-    ["set strokeStyle", "rgba(159, 208, 255, 0.9)"],
-    ["set lineWidth", 3],
-    ["setLineDash", [6, 4]],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 610, 364],
-    ["lineTo", 466, 156],
-    ["stroke"],
-    ["restore"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set lineWidth", 2.5],
-    ["set strokeStyle", "#6fb6e0"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 610, 364],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "limits", 672, 318],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 610, 364],
-    ["lineTo", 466, 156],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "continuity", 544, 254],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 226, 140],
-    ["lineTo", 514, 524],
-    ["stroke"],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 226, 140],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "symmetry", 480, 206],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 226, 140, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 514, 524, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["beginPath"],
-    ["arc", 722, 284, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#e0a64a"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#e0a64a"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 466, 156, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "bold 12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Algebra", 722, 314],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "bold 12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Calculus", 610, 394],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Topology", 466, 186],
-    ["save"],
-    ["set strokeStyle", "#9fd0ff"],
-    ["set lineWidth", 2],
-    ["setLineDash", [4, 4]],
-    ["beginPath"],
-    ["arc", 610, 364, 24, 0, 6.283185307179586],
-    ["stroke"],
-    ["restore"],
-    ["save"],
-    ["set strokeStyle", "#9fd0ff"],
-    ["set lineWidth", 2.5],
-    ["setLineDash", []],
-    ["beginPath"],
-    ["arc", 466, 156, 22, 0, 6.283185307179586],
-    ["stroke"],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "left"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "#ffd166"],
-    ["beginPath"],
-    ["arc", 748, 268, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Intro PDF · 5", 756, 271],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 748, 282, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Notes", 756, 285],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 252, 124, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "right"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(126, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 584, 348, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "abcdef", 576, 351],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(154, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 572, 354, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "beefca", 564, 357],
-    ["restore"],
+  "path": [
+    [
+      "clearRect",
+      0,
+      0,
+      900,
+      600
+    ],
+    [
+      "save"
+    ],
+    [
+      "set strokeStyle",
+      "rgba(159, 208, 255, 0.9)"
+    ],
+    [
+      "set lineWidth",
+      3
+    ],
+    [
+      "setLineDash",
+      [
+        6,
+        4
+      ]
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      610,
+      364
+    ],
+    [
+      "lineTo",
+      466,
+      156
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set lineWidth",
+      2.5
+    ],
+    [
+      "set strokeStyle",
+      "#6fb6e0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      610,
+      364
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "limits",
+      672,
+      318
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      610,
+      364
+    ],
+    [
+      "lineTo",
+      466,
+      156
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "continuity",
+      544,
+      254
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      226,
+      140
+    ],
+    [
+      "lineTo",
+      514,
+      524
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      226,
+      140
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "symmetry",
+      480,
+      206
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      226,
+      140,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      514,
+      524,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      722,
+      284,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#e0a64a"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#e0a64a"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      466,
+      156,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "bold 12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Algebra",
+      722,
+      314
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "bold 12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Calculus",
+      610,
+      394
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Topology",
+      466,
+      186
+    ],
+    [
+      "save"
+    ],
+    [
+      "set strokeStyle",
+      "#9fd0ff"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "setLineDash",
+      [
+        4,
+        4
+      ]
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      24,
+      0,
+      6.283185307179586
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set strokeStyle",
+      "#9fd0ff"
+    ],
+    [
+      "set lineWidth",
+      2.5
+    ],
+    [
+      "setLineDash",
+      []
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      466,
+      156,
+      22,
+      0,
+      6.283185307179586
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "left"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "#ffd166"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      268,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      282,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      252,
+      124,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "right"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(126, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      584,
+      348,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "abcdef",
+      576,
+      351
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(154, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      572,
+      354,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "beefca",
+      564,
+      357
+    ],
+    [
+      "restore"
+    ]
   ],
-  mastered: [
-    ["clearRect", 0, 0, 900, 600],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set lineWidth", 2.5],
-    ["set strokeStyle", "#6fb6e0"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 610, 364],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "limits", 672, 318],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 610, 364],
-    ["lineTo", 466, 156],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "continuity", 544, 254],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 226, 140],
-    ["lineTo", 514, 524],
-    ["stroke"],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "rgba(180, 200, 220, 0.5)"],
-    ["beginPath"],
-    ["moveTo", 722, 284],
-    ["lineTo", 226, 140],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "symmetry", 480, 206],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 226, 140, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set globalAlpha", 0.4],
-    ["beginPath"],
-    ["arc", 514, 524, 9, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["restore"],
-    ["beginPath"],
-    ["arc", 722, 284, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#e0a64a"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#ffd166"],
-    ["fill"],
-    ["set lineWidth", 3],
-    ["set strokeStyle", "#fff3c4"],
-    ["stroke"],
-    ["beginPath"],
-    ["arc", 610, 364, 20, 0, 6.283185307179586],
-    ["set lineWidth", 2],
-    ["set strokeStyle", "#bfe3ff"],
-    ["stroke"],
-    ["set fillStyle", "#5dcaa5"],
-    ["set font", "bold 14px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "✓", 626, 352],
-    ["beginPath"],
-    ["arc", 466, 156, 16, 0, 6.283185307179586],
-    ["set fillStyle", "#2f3e50"],
-    ["fill"],
-    ["set lineWidth", 1.5],
-    ["set strokeStyle", "#4a5d72"],
-    ["stroke"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "bold 12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Algebra", 722, 314],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "bold 12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Calculus", 610, 394],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["set font", "12px system-ui, sans-serif"],
-    ["set textAlign", "center"],
-    ["fillText", "Topology", 466, 186],
-    ["save"],
-    ["set textAlign", "left"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "#ffd166"],
-    ["beginPath"],
-    ["arc", 748, 268, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Intro PDF · 5", 756, 271],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 748, 282, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "Notes", 756, 285],
-    ["set globalAlpha", 0.6],
-    ["set fillStyle", "#7fd0a0"],
-    ["beginPath"],
-    ["arc", 252, 124, 4, 0, 6.283185307179586],
-    ["fill"],
-    ["restore"],
-    ["save"],
-    ["set textAlign", "right"],
-    ["set font", "10px system-ui, sans-serif"],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(126, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 584, 348, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "abcdef", 576, 351],
-    ["set globalAlpha", 0.85],
-    ["set fillStyle", "hsl(154, 70%, 62%)"],
-    ["beginPath"],
-    ["arc", 572, 354, 5, 0, 6.283185307179586],
-    ["fill"],
-    ["set globalAlpha", 1],
-    ["set fillStyle", "rgba(220, 230, 240, 0.85)"],
-    ["fillText", "beefca", 564, 357],
-    ["restore"],
-  ],
+  "mastered": [
+    [
+      "clearRect",
+      0,
+      0,
+      900,
+      600
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set lineWidth",
+      2.5
+    ],
+    [
+      "set strokeStyle",
+      "#6fb6e0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      610,
+      364
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "limits",
+      672,
+      318
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      610,
+      364
+    ],
+    [
+      "lineTo",
+      466,
+      156
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "continuity",
+      544,
+      254
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      226,
+      140
+    ],
+    [
+      "lineTo",
+      514,
+      524
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "rgba(180, 200, 220, 0.5)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "moveTo",
+      722,
+      284
+    ],
+    [
+      "lineTo",
+      226,
+      140
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "symmetry",
+      480,
+      206
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      226,
+      140,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set globalAlpha",
+      0.4
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      514,
+      524,
+      9,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      722,
+      284,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#e0a64a"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#ffd166"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      3
+    ],
+    [
+      "set strokeStyle",
+      "#fff3c4"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      610,
+      364,
+      20,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set lineWidth",
+      2
+    ],
+    [
+      "set strokeStyle",
+      "#bfe3ff"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "#5dcaa5"
+    ],
+    [
+      "set font",
+      "bold 14px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "✓",
+      626,
+      352
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      466,
+      156,
+      16,
+      0,
+      6.283185307179586
+    ],
+    [
+      "set fillStyle",
+      "#2f3e50"
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set lineWidth",
+      1.5
+    ],
+    [
+      "set strokeStyle",
+      "#4a5d72"
+    ],
+    [
+      "stroke"
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "bold 12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Algebra",
+      722,
+      314
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "bold 12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Calculus",
+      610,
+      394
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "set font",
+      "12px system-ui, sans-serif"
+    ],
+    [
+      "set textAlign",
+      "center"
+    ],
+    [
+      "fillText",
+      "Topology",
+      466,
+      186
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "left"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "#ffd166"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      268,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      748,
+      282,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      0.6
+    ],
+    [
+      "set fillStyle",
+      "#7fd0a0"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      252,
+      124,
+      4,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "restore"
+    ],
+    [
+      "save"
+    ],
+    [
+      "set textAlign",
+      "right"
+    ],
+    [
+      "set font",
+      "10px system-ui, sans-serif"
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(126, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      584,
+      348,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "abcdef",
+      576,
+      351
+    ],
+    [
+      "set globalAlpha",
+      0.85
+    ],
+    [
+      "set fillStyle",
+      "hsl(154, 70%, 62%)"
+    ],
+    [
+      "beginPath"
+    ],
+    [
+      "arc",
+      572,
+      354,
+      5,
+      0,
+      6.283185307179586
+    ],
+    [
+      "fill"
+    ],
+    [
+      "set globalAlpha",
+      1
+    ],
+    [
+      "set fillStyle",
+      "rgba(220, 230, 240, 0.85)"
+    ],
+    [
+      "fillText",
+      "beefca",
+      564,
+      357
+    ],
+    [
+      "restore"
+    ]
+  ]
 };
 
 // The load-bearing parity proof (SPEC-0043 §3/§5.3): the extracted seam

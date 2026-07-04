@@ -1214,6 +1214,75 @@ async function main() {
     if (b) openBridge(b, graph);
   });
 
+  // ── Study context menu (right-click a topic) ─────────────────────────────────
+  // The map is a graph of dots; "what do I do to study?" isn't obvious. Right-
+  // clicking a topic surfaces the study verbs right where you clicked, each wired
+  // to the existing study/companion flow. Left-click still opens the full drawer.
+  const studyMenu = document.createElement("div");
+  studyMenu.id = "study-menu";
+  studyMenu.hidden = true;
+  let studyMenuHit = null;
+  function hideStudyMenu() {
+    studyMenu.hidden = true;
+    studyMenuHit = null;
+  }
+  // Opening a topic = studying it: sign a traversal (mirrors the left-click path).
+  function studyHit(hit) {
+    myPlateau = hit.id;
+    announcePresence();
+    const domain = DOMAIN_OF.get(hit.id) ?? activePersona?.orient?.[0]?.domain;
+    if (domain) signTraversal(domain, hit);
+    openPlateau(hit);
+  }
+  function studyMenuBtn(label, cls, fn) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => {
+      const h = studyMenuHit;
+      hideStudyMenu();
+      if (h) fn(h);
+    });
+    return b;
+  }
+  studyMenu.append(
+    studyMenuBtn("📖  Study this topic", "primary", (h) => studyHit(h)),
+    studyMenuBtn("✦  Explain it to me", "", (h) => {
+      studyHit(h);
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "model"));
+    }),
+    studyMenuBtn("❓  Quiz me on it", "", (h) => {
+      studyHit(h);
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz"));
+    }),
+    studyMenuBtn("🔎  Search the web", "", (h) =>
+      window.open(`https://www.perplexity.ai/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
+    ),
+  );
+  document.body.append(studyMenu);
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); // no browser menu over the map
+    if (!activePersona) return;
+    const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY);
+    const id = hitTest(points, mx, my, { bridges: [], tol: 6 }); // discs only
+    const hit = id && doc.to_graph().plateaus().find((p) => p.id === id);
+    if (!hit) {
+      hideStudyMenu();
+      return;
+    }
+    document.getElementById("map-hint")?.setAttribute("hidden", ""); // learned it
+    studyMenuHit = hit;
+    studyMenu.hidden = false;
+    studyMenu.style.left = `${Math.min(e.clientX, window.innerWidth - studyMenu.offsetWidth - 8)}px`;
+    studyMenu.style.top = `${Math.min(e.clientY, window.innerHeight - studyMenu.offsetHeight - 8)}px`;
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!studyMenu.contains(e.target)) hideStudyMenu();
+  });
+  canvas.addEventListener("pointerdown", hideStudyMenu);
+
   // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
   // Render a plateau's Markdown body (typeset math via lazy vendored KaTeX) plus
   // the resources anchored to it. Pure view over the DTO — no mutation. The body

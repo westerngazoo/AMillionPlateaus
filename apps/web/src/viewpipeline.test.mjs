@@ -18,7 +18,7 @@ const GRAPH = {
   ],
   bridges: [{ id: "e1", from: "a", to: "b", concept: "link" }],
   resources: [
-    { id: "r1", plateau_id: "a", title: "Doc", state: "Crystallized", vote_count: 3 },
+    { id: "r1", plateau_id: "a", title: "Doc", state: "Crystallized", vote_count: 3, kind: "Article" },
     { id: "r2", plateau_id: "a", title: "Note", state: "Floating", vote_count: 0 },
   ],
 };
@@ -173,7 +173,7 @@ test("overlay rings resolve to points or null", () => {
   assert.equal(viewModel(GRAPH, POS, { focusedId: "zzz" }).overlays.focusRing, null);
 });
 
-test("markers stack per plateau with crystallized state and vote-formatted caption", () => {
+test("markers stack per plateau, carry crystallized state + kind, no on-map caption", () => {
   const f = viewModel(GRAPH, POS, {});
   assert.equal(f.markers.length, 2);
   assert.deepEqual(f.markers[0], {
@@ -181,14 +181,16 @@ test("markers stack per plateau with crystallized state and vote-formatted capti
     y: 100,
     stackIndex: 0,
     crystallized: true,
-    caption: "Doc · 3",
+    kind: "Article", // the dot signals the TYPE; the renderer colours by kind
+    caption: null, // titles live in the study drawer, not as on-map text (declutter)
   });
   assert.deepEqual(f.markers[1], {
     x: 100,
     y: 100,
     stackIndex: 1,
     crystallized: false,
-    caption: "Note", // 0 votes ⇒ no " · n" suffix
+    kind: null, // no kind on the resource → default marker colour
+    caption: null,
   });
 });
 

@@ -151,25 +151,10 @@ export function viewModel(
     });
   }
 
-  // Markers (R-0014/R-0015): dots anchored to their plateau, stacked by i*14.
-  // Caption survival uses the SAME declutter as names (focus-gated, left-anchored
-  // box), and the drawn text mirrors render.js's per-marker vote formatting.
-  const titleCandidates = [];
-  {
-    const seen = new Map();
-    for (const r of resources) {
-      const pt = positions.get(r.plateau_id);
-      if (!pt || !focusIds.has(r.plateau_id)) continue; // no captions on shadow plateaus
-      const i = seen.get(r.plateau_id) ?? 0;
-      seen.set(r.plateau_id, i + 1);
-      const text = (r.vote_count ?? 0) > 0 ? `${r.title} · ${Math.round(r.vote_count)}` : r.title;
-      const box = captionBox(text, 0, pt.y - RADIUS + i * 14 + 3);
-      box.x = pt.x + RADIUS + 18; // left-anchored: shift the centered box to the text
-      titleCandidates.push({ key: r.id, box });
-    }
-  }
-  const captionedResources = planBoxes(titleCandidates, { obstacles: nameBoxes });
-
+  // Markers (R-0014/R-0015): dots anchored to their plateau, stacked by i*14. The
+  // DOT signals the resource TYPE (coloured by `kind` in the renderer); the title
+  // lives in the study drawer, NOT on the map — the always-on captions made the map
+  // text-soup, so `caption` is null (kept on the Frame for a future hover/opt-in).
   const markers = [];
   {
     const placed = new Map();
@@ -178,13 +163,13 @@ export function viewModel(
       if (!pt) continue; // orphan anchor → skip (the DOT never draws either)
       const i = placed.get(r.plateau_id) ?? 0;
       placed.set(r.plateau_id, i + 1);
-      const n = Math.round(r.vote_count ?? 0);
       markers.push({
         x: pt.x,
         y: pt.y,
         stackIndex: i,
         crystallized: r.state === "Crystallized",
-        caption: captionedResources.has(r.id) ? (n > 0 ? `${r.title} · ${n}` : r.title) : null,
+        kind: r.kind ?? null,
+        caption: null,
       });
     }
   }

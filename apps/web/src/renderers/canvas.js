@@ -32,6 +32,18 @@ export const PALETTE = {
   MASTERED: "#5dcaa5", // mastered-topic ✓ glyph (R-0030)
 };
 
+// Resource marker colour by KIND (R-0014): the dot signals the type — its title
+// lives in the study drawer, not as always-on text on the map. Crystallized
+// markers (R-0015) stay bedrock-gold regardless of kind. Keep in sync with the
+// legend swatches in index.html.
+export const MARKER_KIND = {
+  Video: "#e0715a",
+  Article: "#6fb6e0",
+  Interactive: "#7fd0a0",
+  Book: "#b18fd0",
+  Note: "#9fb2c4",
+};
+
 // Token → hex, exactly the inline ternaries render.js used for the progress fill
 // and the progress ring. Kept as named tables so a Phase-3 WebGL renderer can
 // remap them without widening the parity surface.
@@ -174,7 +186,7 @@ export function drawFrame(ctx, frame) {
     const mx = m.x + RADIUS + 10;
     const my = m.y - RADIUS + m.stackIndex * 14;
     ctx.globalAlpha = m.crystallized ? 1 : 0.6;
-    ctx.fillStyle = m.crystallized ? PALETTE.MARKER_SOLID : PALETTE.MARKER;
+    ctx.fillStyle = m.crystallized ? PALETTE.MARKER_SOLID : MARKER_KIND[m.kind] || PALETTE.MARKER;
     ctx.beginPath();
     ctx.arc(mx, my, m.crystallized ? 5 : 4, 0, Math.PI * 2);
     ctx.fill();
