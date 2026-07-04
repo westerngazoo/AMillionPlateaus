@@ -46,6 +46,7 @@ import {
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
+import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
@@ -251,12 +252,13 @@ async function main() {
   // touched (AC4).
   // (`description` rides the same upsert since the QC curriculum — seeds.js rows
   // have none, curriculum.js rows ship their Markdown body.)
-  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS])
+  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS])
     doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3, p.description ?? "");
-  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES]) doc.seed_bridge(b.id, b.from, b.to, b.concept);
+  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES])
+    doc.seed_bridge(b.id, b.from, b.to, b.concept);
   // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
   // fresh world has something to read; re-seeding never resets earned stones.
-  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES])
+  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES, ...CS_RESOURCES])
     doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
 
   // Rebuild id→domain from the (possibly restored) doc so a restored authored
@@ -417,7 +419,7 @@ async function main() {
   // to follow the moment the world loads.
   (function seedPaths() {
     const all = loadPaths();
-    for (const p of SEED_PATHS) all[p.id] = { ...p };
+    for (const p of [...SEED_PATHS, ...CS_PATHS]) all[p.id] = { ...p };
     savePaths(all);
   })();
   const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;
