@@ -60,3 +60,15 @@ test("presets offer at least two options including a key-less local one", () => 
   assert.ok(PRESETS.some((p) => p.needsKey === false), "a local, key-less preset exists");
   assert.ok(PRESETS.some((p) => p.needsKey === true), "a hosted, key-bearing preset exists");
 });
+
+test("LM Studio ships as a key-less local preset on the OpenAI-compatible adapter", () => {
+  const lm = PRESETS.find((p) => p.id === "local-lmstudio");
+  assert.ok(lm, "an LM Studio preset exists");
+  assert.equal(lm.kind, "openai-compatible");
+  assert.equal(lm.needsKey, false);
+  assert.match(lm.endpoint, /:1234\/v1$/); // LM Studio's default server port
+  // and it flows through the shared adapter with no auth header (local, no key)
+  const req = buildRequest({ kind: lm.kind, endpoint: lm.endpoint, model: lm.model }, []);
+  assert.equal(req.url, "http://localhost:1234/v1/chat/completions");
+  assert.equal("authorization" in req.headers, false);
+});
