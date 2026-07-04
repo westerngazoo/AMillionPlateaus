@@ -39,11 +39,16 @@ export function viewModel(
   } = {},
 ) {
   // Focus + context (PR #42): plateaus in the lens's domains — plus anything you've
-  // touched (visited/mastered/focused) — are FULL; the rest are shadow dots. No
-  // focus set ⇒ everything full. `viewModel` OWNS this emphasis model.
+  // touched (visited/mastered/focused) OR any step of the path you're following —
+  // are FULL; the rest are shadow dots. A followed path lights its whole route
+  // regardless of lens, so the journey a learner chose is never dimmed to context
+  // (R-0044-adjacent, ported from the pre-seam render.js). No focus set ⇒
+  // everything full. `viewModel` OWNS this emphasis model.
+  const pathStepSet = new Set(pathSteps);
   const inFocus = (p) =>
     focusDomains.size === 0 ||
     focusDomains.has(p.domain_id) ||
+    pathStepSet.has(p.id) ||
     visited.has(p.id) ||
     mastered.has(p.id) ||
     p.id === focusedId;
