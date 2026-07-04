@@ -301,6 +301,26 @@
       #rhizome-menu button:hover { background: #345780; }
       #rhizome-menu button.grow { background: #2f5233; color: #d6f0d6; font-weight: 600; }
       #rhizome-menu button.grow:hover { background: #3d6b42; }
+      /* Study context menu (right-click a topic). Vertical action list. */
+      #study-menu {
+        position: fixed; z-index: 40; display: flex; flex-direction: column; gap: 2px; padding: 5px;
+        background: #1b2735; border: 1px solid #35506e; border-radius: 9px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); min-width: 190px;
+      }
+      #study-menu[hidden] { display: none; }
+      #study-menu button {
+        text-align: left; font-size: 13px; padding: 7px 12px; background: transparent;
+        color: #cfe0f0; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
+      }
+      #study-menu button:hover { background: #2a4058; }
+      #study-menu button.primary { color: #ffe08a; font-weight: 600; }
+      /* One-line map hint (dismisses on first right-click). */
+      #map-hint {
+        position: absolute; top: 8px; left: 10px; z-index: 6; pointer-events: none;
+        font-size: 11px; color: #9fb2c4; background: rgba(19, 27, 37, 0.72);
+        border: 1px solid #2a3543; border-radius: 6px; padding: 3px 8px;
+      }
+      #map-hint[hidden] { display: none; }
       .detail-study { display: flex; flex-wrap: wrap; gap: 6px; }
       .detail-search { display: flex; flex-wrap: wrap; gap: 6px; }
       .detail-search a {
@@ -743,6 +763,8 @@
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>
+        <!-- Wayfinding hint: how to start studying. Hidden after first right-click. -->
+        <div id="map-hint">Click a topic to open it · right-click for study options</div>
         <!-- Zoom controls (R-0024): wheel/drag also pan+zoom the map. -->
         <div id="zoom-controls">
           <button id="zoom-in" type="button" title="Zoom in (or scroll)">＋</button>
@@ -788,7 +810,12 @@
       <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="#e0a64a"/></svg><span><b>Studying</b></span></div>
       <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="#ffd166" stroke="#fff3c4" stroke-width="1.5"/></svg><span><b>Mastered</b> (✓)</span></div>
       <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="4" fill="#ffd166"/><circle cx="7" cy="6" r="6.5" fill="none" stroke="#bfe3ff" stroke-width="1.5"/></svg><span><b>Community-canonical</b></span></div>
-      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#7fd0a0"/></svg><span><b>Resource</b> pinned here</span></div>
+      <div class="legend-section">Resources (dot = type; title in the drawer)</div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#e0715a"/></svg><span>Video</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#6fb6e0"/></svg><span>Article</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#7fd0a0"/></svg><span>Interactive</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#b18fd0"/></svg><span>Book</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#9fb2c4"/></svg><span>Note</span></div>
     </div>
 
     <!-- Model-setup overlay (R-0007 AC1): bring-your-own model, hosted or local. -->
