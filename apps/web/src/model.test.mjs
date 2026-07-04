@@ -21,6 +21,16 @@ test("local endpoint omits the auth header when no key", () => {
   assert.equal("authorization" in buildRequest(cfg, []).headers, false);
 });
 
+test("Anthropic endpoint gets the browser-access opt-in header; others don't", () => {
+  const claude = { kind: "openai-compatible", endpoint: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "k" };
+  assert.equal(buildRequest(claude, []).headers["anthropic-dangerous-direct-browser-access"], "true");
+  const openai = { kind: "openai-compatible", endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini", apiKey: "k" };
+  assert.equal("anthropic-dangerous-direct-browser-access" in buildRequest(openai, []).headers, false);
+  // hostname match must be exact — a look-alike host must NOT get the header
+  const evil = { kind: "openai-compatible", endpoint: "https://api.anthropic.com.evil.test/v1", model: "x", apiKey: "k" };
+  assert.equal("anthropic-dangerous-direct-browser-access" in buildRequest(evil, []).headers, false);
+});
+
 test("parseResponse extracts assistant text; missing → empty string", () => {
   const cfg = { kind: "openai-compatible" };
   assert.equal(parseResponse(cfg, { choices: [{ message: { content: "ok" } }] }), "ok");

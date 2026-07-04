@@ -166,7 +166,7 @@
       }
       .companion-name { font-size: 14px; font-weight: 600; color: #ffd166; }
       .companion-status { font-size: 11px; color: #8aa0b4; }
-      .companion-log { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+      .companion-log { flex: 1; overflow-y: auto; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
       .msg { font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
       .msg-user { color: #cfe0f0; align-self: flex-end; max-width: 90%; background: #243447; padding: 6px 10px; border-radius: 8px; }
       .msg-bot { color: #d6e0ea; max-width: 95%; }
@@ -190,6 +190,22 @@
       }
       .setup-card h2 { margin: 0; font-size: 17px; }
       .setup-card p { margin: 0; font-size: 12px; color: #9fb2c4; }
+      /* Map legend (Legend toolbar button). Floating bottom-left, above the canvas. */
+      #legend {
+        position: fixed; left: 12px; bottom: 12px; z-index: 22; width: 260px; max-width: 80vw;
+        background: rgba(19, 27, 37, 0.95); border: 1px solid #2a3543; border-radius: 10px;
+        padding: 10px 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.45); font-size: 12px; color: #cdd9e6;
+      }
+      #legend[hidden] { display: none; }
+      .legend-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; color: #e6eef6; margin-bottom: 6px; }
+      #legend-close { background: none; border: none; color: #8aa0b4; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+      #legend-close:hover { color: #e6eef6; }
+      .legend-section { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #8aa0b4; margin: 8px 0 3px; }
+      .legend-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+      .legend-row svg { width: 26px; height: 12px; flex: 0 0 26px; }
+      .legend-row b { color: #e6eef6; font-weight: 600; }
+      .setup-hint { border-left: 2px solid #3a5a78; padding-left: 8px; }
+      .setup-hint code { background: rgba(159,178,196,0.14); padding: 1px 4px; border-radius: 3px; }
       .field { display: flex; flex-direction: column; gap: 4px; }
       .field label { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: #8aa0b4; }
       .field input, .field select {
@@ -227,6 +243,7 @@
       #plateau-detail {
         position: fixed; top: 0; right: 0; bottom: 0; z-index: 25;
         width: 460px; max-width: 92vw; overflow-y: auto;
+        scroll-behavior: smooth; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         background: #131b25; border-left: 1px solid #2a3543;
         box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
         padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
@@ -269,7 +286,48 @@
         background: #1b2735; color: #9fd0b4; border: 1px solid #34495f; cursor: pointer;
       }
       .res-stone-btn:hover { background: #223346; }
+      /* Rhizome drill-down (R-0044): the floating menu shown over a text selection
+         inside a plateau's body. Above the read panel (z25). */
+      #rhizome-menu {
+        position: fixed; z-index: 40; display: flex; gap: 4px; padding: 4px;
+        background: #1b2735; border: 1px solid #35506e; border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+      }
+      #rhizome-menu[hidden] { display: none; }
+      #rhizome-menu button {
+        font-size: 12px; padding: 4px 9px; background: #22364a; color: #cfe0f0;
+        border: none; border-radius: 5px; cursor: pointer; white-space: nowrap;
+      }
+      #rhizome-menu button:hover { background: #345780; }
+      #rhizome-menu button.grow { background: #2f5233; color: #d6f0d6; font-weight: 600; }
+      #rhizome-menu button.grow:hover { background: #3d6b42; }
+      /* Study context menu (right-click a topic). Vertical action list. */
+      #study-menu {
+        position: fixed; z-index: 40; display: flex; flex-direction: column; gap: 2px; padding: 5px;
+        background: #1b2735; border: 1px solid #35506e; border-radius: 9px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); min-width: 190px;
+      }
+      #study-menu[hidden] { display: none; }
+      #study-menu button {
+        text-align: left; font-size: 13px; padding: 7px 12px; background: transparent;
+        color: #cfe0f0; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
+      }
+      #study-menu button:hover { background: #2a4058; }
+      #study-menu button.primary { color: #ffe08a; font-weight: 600; }
+      /* One-line map hint (dismisses on first right-click). */
+      #map-hint {
+        position: absolute; top: 8px; left: 10px; z-index: 6; pointer-events: none;
+        font-size: 11px; color: #9fb2c4; background: rgba(19, 27, 37, 0.72);
+        border: 1px solid #2a3543; border-radius: 6px; padding: 3px 8px;
+      }
+      #map-hint[hidden] { display: none; }
       .detail-study { display: flex; flex-wrap: wrap; gap: 6px; }
+      .detail-search { display: flex; flex-wrap: wrap; gap: 6px; }
+      .detail-search a {
+        font-size: 12px; padding: 4px 9px; background: #1c2836; color: #9fd0ff;
+        border: 1px solid #2a3543; border-radius: 5px; text-decoration: none; white-space: nowrap;
+      }
+      .detail-search a:hover { background: #24384c; }
       .detail-study button {
         font-size: 12px; padding: 5px 10px; border-radius: 8px;
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
@@ -303,6 +361,7 @@
       #plateau-detail[data-mode="bridge"] #detail-proof,
       #plateau-detail[data-mode="bridge"] #detail-solve,
       #plateau-detail[data-mode="bridge"] #detail-proofs,
+      #plateau-detail[data-mode="bridge"] #detail-search,
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -489,6 +548,7 @@
       <button id="discover">Discover wizards</button>
       <button id="reset-fog">Reset my history</button>
       <button id="tour">Tour</button>
+      <button id="legend-toggle">Legend</button>
       <span id="hud">loading…</span>
       <span id="import-status" class="idhud" hidden></span>
       <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
@@ -703,6 +763,8 @@
     <div class="layout">
       <div class="stage">
         <canvas id="world" width="800" height="600"></canvas>
+        <!-- Wayfinding hint: how to start studying. Hidden after first right-click. -->
+        <div id="map-hint">Click a topic to open it · right-click for study options</div>
         <!-- Zoom controls (R-0024): wheel/drag also pan+zoom the map. -->
         <div id="zoom-controls">
           <button id="zoom-in" type="button" title="Zoom in (or scroll)">＋</button>
@@ -732,6 +794,30 @@
          main.js on "Discover wizards". -->
     <div id="discovery" class="discovery"></div>
 
+    <!-- Map legend (R-0044-adjacent): what each line and dot on the map means.
+         Swatches are inline SVG at the SAME colours render.js draws, so the key
+         stays true if a colour changes. Toggled by the "Legend" toolbar button. -->
+    <div id="legend" hidden>
+      <div class="legend-head">Map key<button id="legend-close" type="button" aria-label="Close">×</button></div>
+      <div class="legend-section">Connections</div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><line x1="1" y1="6" x2="25" y2="6" stroke="rgba(180,200,220,0.6)" stroke-width="2"/></svg><span><b>Bridge</b> — a named link between two topics</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><line x1="1" y1="6" x2="25" y2="6" stroke="#6fb6e0" stroke-width="2.5"/></svg><span><b>Covered</b> — both ends visited (your trail)</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><line x1="1" y1="6" x2="25" y2="6" stroke="#9fd0ff" stroke-width="3" stroke-dasharray="6 4"/></svg><span><b>Path</b> you're following</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="none" stroke="#9fd0ff" stroke-width="2"/></svg><span><b>Next step</b> on your path</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="none" stroke="#9fd0ff" stroke-width="2" stroke-dasharray="4 4"/></svg><span><b>Travel focus</b> — where you jumped</span></div>
+      <div class="legend-section">Topics</div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="#2f3e50" stroke="#4a5d72" stroke-width="1.5"/></svg><span><b>Unexplored</b></span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="#e0a64a"/></svg><span><b>Studying</b></span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="5" fill="#ffd166" stroke="#fff3c4" stroke-width="1.5"/></svg><span><b>Mastered</b> (✓)</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="4" fill="#ffd166"/><circle cx="7" cy="6" r="6.5" fill="none" stroke="#bfe3ff" stroke-width="1.5"/></svg><span><b>Community-canonical</b></span></div>
+      <div class="legend-section">Resources (dot = type; title in the drawer)</div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#e0715a"/></svg><span>Video</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#6fb6e0"/></svg><span>Article</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#7fd0a0"/></svg><span>Interactive</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#b18fd0"/></svg><span>Book</span></div>
+      <div class="legend-row"><svg viewBox="0 0 26 12"><circle cx="7" cy="6" r="3.5" fill="#9fb2c4"/></svg><span>Note</span></div>
+    </div>
+
     <!-- Model-setup overlay (R-0007 AC1): bring-your-own model, hosted or local. -->
     <div id="setup" hidden>
       <div class="setup-card">
@@ -740,6 +826,12 @@
           Bring your own model — a <strong>local</strong> runtime (Ollama / LM Studio)
           or any <strong>OpenAI-compatible</strong> endpoint. Your key stays in this
           browser and is never synced. Leave it on <em>Offline</em> to explore without one.
+        </p>
+        <p class="setup-hint">
+          <strong>Free &amp; easy:</strong> pick <em>Google Gemini (free tier)</em>, then paste a
+          free key from Google AI Studio (<code>aistudio.google.com/apikey</code>). <strong>No cloud,
+          no key:</strong> run <em>Ollama</em> locally — nothing leaves your machine. Either way the
+          companion can then explain a plateau, quiz you, and judge your proofs live.
         </p>
         <div class="field">
           <label for="setup-preset">Preset</label>
@@ -847,6 +939,11 @@
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
+
+      <!-- Look this topic up elsewhere (R-0044-adjacent): deep-links prefilled with
+           the plateau name. Opens in a new tab — the learner chooses to click. -->
+      <h3 class="detail-res-title">Look it up</h3>
+      <div id="detail-search" class="detail-search"><!-- links, by main.js --></div>
 
       <!-- Add a book / link / video, pinned to this plateau (R-0023 / R-0014). -->
       <form id="detail-add-form" class="detail-add">

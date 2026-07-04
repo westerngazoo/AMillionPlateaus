@@ -21,7 +21,11 @@ import init, {
   proof_kind,
   path_kind,
 } from "../pkg/mp_wasm.js";
-import { render, RADIUS } from "./render.js";
+import { canvasRenderer } from "./renderers/canvas.js";
+import { viewModel } from "./viewpipeline.js";
+import { spreadNodes as spreadLayout } from "./layout.js";
+import { project as place } from "./project.js";
+import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore } from "./persistence.js";
 import { createPeer } from "./webrtc.js";
@@ -41,7 +45,8 @@ import {
   PHYSICS_DOMAIN,
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
-import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES } from "./curriculum.js";
+import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
+import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
@@ -82,7 +87,7 @@ import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
 import { createPresence, HEARTBEAT_MS } from "./presence.js";
-import { centerOn, zoomAt, pickBridge } from "./wayfinding.js";
+import { centerOn, zoomAt } from "./wayfinding.js";
 import { pinch } from "./gestures.js";
 import { TUTORIAL_STEPS, shouldShowTutorial, markTutorialSeen } from "./tutorial.js";
 
@@ -372,7 +377,10 @@ async function main() {
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
-  const ctx = canvas.getContext("2d");
+  // The view pipeline is injected here (RFC-0003 §4): a layout strategy, a
+  // renderer backend, and a pure hit-test. Swapping any of them (force layout,
+  // WebGL, raycast) is a constructor choice — no change to the draw loop.
+  const renderer = canvasRenderer(canvas);
   const hud = document.getElementById("hud");
   const identityHud = document.getElementById("identity-hud");
   const relayHud = document.getElementById("relay-hud");
@@ -402,6 +410,17 @@ async function main() {
       /* quota */
     }
   }
+  // Seed the flagship curriculum path(s) (R-0039) — an idempotent upsert on their
+  // fixed 4… ids, the same convergent seed contract the plateaus use. User paths
+  // mint random uuids, so re-seeding the canonical route never clobbers an
+  // authored one. This is why "Paths" is never empty: there is always a journey
+  // to follow the moment the world loads.
+  (function seedPaths() {
+    const all = loadPaths();
+    for (const p of SEED_PATHS) all[p.id] = { ...p };
+    savePaths(all);
+  })();
+  const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;
   function followSteps() {
     if (!followPathId) return [];
     return loadPaths()[followPathId]?.steps ?? [];
@@ -430,26 +449,30 @@ async function main() {
     const plateaus = graph.plateaus();
     const bridges = graph.bridges();
     const resources = graph.resources(); // trail markers, anchored to plateaus (R-0014)
+    // place → layout: project each plateau to screen, then declutter. The SAME
+    // placement drives the draw AND hit-testing (stored in `points`).
+    const raw = new Map();
+    for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
+    points = spreadLayout(raw);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
-    // discovery, R-0010); it just no longer gates or colours the map.
-    points = render(ctx, {
-      plateaus,
-      bridges,
-      view: VIEW,
-      resources,
-      peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
-      focusedId, // transient travel highlight (R-0019); null most of the time
-      visited, // studying set (R-0033)
-      mastered, // mastered set — ✓ + gold (R-0030)
-      community, // crowd-approved set — bedrock ring (R-0031)
-      pathSteps: followSteps(),
-      pathNext: followNext(),
-      // Focus + context: your lens's domains render full; the rest fade to small
-      // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
-      // all-shadow world renders everything full — fading ALL nodes helps nobody.
-      focusDomains: facedDomains(),
-    });
+    // discovery, R-0010); it just no longer gates or colours the map. The
+    // viewModel owns emphasis (focus/context, PR #42); the renderer just replays.
+    renderer.draw(
+      viewModel({ plateaus, bridges, resources }, points, {
+        visited, // studying set (R-0033)
+        mastered, // mastered set — ✓ + gold (R-0030)
+        community, // crowd-approved set — bedrock ring (R-0031)
+        focusedId, // transient travel highlight (R-0019); null most of the time
+        // Focus + context: your lens's domains render full; the rest fade to small
+        // "shadow" dots (context, still clickable). Empty set (no persona yet) or an
+        // all-shadow world renders everything full — fading ALL nodes helps nobody.
+        focusDomains: facedDomains(),
+        pathSteps: followSteps(),
+        pathNext: followNext(),
+        peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+      }),
+    );
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
@@ -678,7 +701,8 @@ async function main() {
 
   function appendMessage(role, text) {
     const div = document.createElement("div");
-    div.className = role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
+    div.className =
+      role === "user" ? "msg msg-user" : role === "error" ? "msg msg-err" : "msg msg-bot";
     div.textContent = text;
     companionLog.append(div);
     companionLog.scrollTop = companionLog.scrollHeight;
@@ -929,7 +953,8 @@ async function main() {
       const hit = SUGGESTED_DOMAINS.find(
         (s) => s.name.toLowerCase() === lensName.value.trim().toLowerCase(),
       );
-      if (hit) for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
+      if (hit)
+        for (const axis of AXES) lensSliders[axis.key].value = String(hit.canonical[axis.key]);
     });
     const addBtn = document.createElement("button");
     addBtn.type = "button";
@@ -1159,18 +1184,12 @@ async function main() {
     const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
-    // R-0033 — the map is browsable: hit-test the nearest disc among ALL plateaus
-    // (no reachability gate). Opening one is "studying" it.
-    let hit = null;
-    let best = RADIUS * RADIUS;
-    for (const p of graph.plateaus()) {
-      const pt = points.get(p.id);
-      const d = (pt.x - mx) ** 2 + (pt.y - my) ** 2;
-      if (d <= best) {
-        best = d;
-        hit = p;
-      }
-    }
+    // R-0033 — the map is browsable: hit-test the last-drawn placement (no
+    // reachability gate). Discs win over bridges; `hitTest` iterates `points`
+    // keys so it is total (SPEC-0043 §2.4). Opening a disc is "studying" it.
+    const id = hitTest(points, mx, my, { bridges: graph.bridges(), tol: 6 });
+    if (id === null) return;
+    const hit = graph.plateaus().find((p) => p.id === id);
     if (hit) {
       // Focusing a plateau is the wizard's position — announce it to peers
       // (ephemeral presence, R-0016 AC4). This is NOT a graph edit or an event.
@@ -1188,15 +1207,81 @@ async function main() {
       openPlateau(hit);
       return;
     }
-    // No disc hit → test bridges (R-0029). Every disc is now a hit candidate, so
-    // "cursor over a disc" ⇔ `hit` is set above — a disc already wins precedence
-    // over a bridge, and opening a bridge stays read-only.
-    const bid = pickBridge({ bridges: graph.bridges(), points, mx, my, tol: 6 });
-    if (bid) {
-      const b = graph.bridges().find((x) => x.id === bid);
-      if (b) openBridge(b, graph);
-    }
+    // Not a disc → the id is a bridge (R-0029). Disc precedence is already handled
+    // by hitTest (a disc under the cursor is returned first); opening a bridge
+    // stays read-only.
+    const b = graph.bridges().find((x) => x.id === id);
+    if (b) openBridge(b, graph);
   });
+
+  // ── Study context menu (right-click a topic) ─────────────────────────────────
+  // The map is a graph of dots; "what do I do to study?" isn't obvious. Right-
+  // clicking a topic surfaces the study verbs right where you clicked, each wired
+  // to the existing study/companion flow. Left-click still opens the full drawer.
+  const studyMenu = document.createElement("div");
+  studyMenu.id = "study-menu";
+  studyMenu.hidden = true;
+  let studyMenuHit = null;
+  function hideStudyMenu() {
+    studyMenu.hidden = true;
+    studyMenuHit = null;
+  }
+  // Opening a topic = studying it: sign a traversal (mirrors the left-click path).
+  function studyHit(hit) {
+    myPlateau = hit.id;
+    announcePresence();
+    const domain = DOMAIN_OF.get(hit.id) ?? activePersona?.orient?.[0]?.domain;
+    if (domain) signTraversal(domain, hit);
+    openPlateau(hit);
+  }
+  function studyMenuBtn(label, cls, fn) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => {
+      const h = studyMenuHit;
+      hideStudyMenu();
+      if (h) fn(h);
+    });
+    return b;
+  }
+  studyMenu.append(
+    studyMenuBtn("📖  Study this topic", "primary", (h) => studyHit(h)),
+    studyMenuBtn("✦  Explain it to me", "", (h) => {
+      studyHit(h);
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "model"));
+    }),
+    studyMenuBtn("❓  Quiz me on it", "", (h) => {
+      studyHit(h);
+      studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz"));
+    }),
+    studyMenuBtn("🔎  Search the web", "", (h) =>
+      window.open(`https://www.perplexity.ai/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
+    ),
+  );
+  document.body.append(studyMenu);
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); // no browser menu over the map
+    if (!activePersona) return;
+    const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY);
+    const id = hitTest(points, mx, my, { bridges: [], tol: 6 }); // discs only
+    const hit = id && doc.to_graph().plateaus().find((p) => p.id === id);
+    if (!hit) {
+      hideStudyMenu();
+      return;
+    }
+    document.getElementById("map-hint")?.setAttribute("hidden", ""); // learned it
+    studyMenuHit = hit;
+    studyMenu.hidden = false;
+    studyMenu.style.left = `${Math.min(e.clientX, window.innerWidth - studyMenu.offsetWidth - 8)}px`;
+    studyMenu.style.top = `${Math.min(e.clientY, window.innerHeight - studyMenu.offsetHeight - 8)}px`;
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!studyMenu.contains(e.target)) hideStudyMenu();
+  });
+  canvas.addEventListener("pointerdown", hideStudyMenu);
 
   // ── Plateau read view (SPEC-0020 / R-0020) ──────────────────────────────────
   // Render a plateau's Markdown body (typeset math via lazy vendored KaTeX) plus
@@ -1331,7 +1416,9 @@ async function main() {
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
     // otherwise show the raw prompt:/answer: lines (and leak the answer).
-    detailBody.innerHTML = renderMarkdown(stripChallenges(p.description || "") || "_No description yet._");
+    detailBody.innerHTML = renderMarkdown(
+      stripChallenges(p.description || "") || "_No description yet._",
+    );
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
@@ -1341,7 +1428,31 @@ async function main() {
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
+    renderSearchLinks(p); // deep-links to look this topic up elsewhere
     detail.hidden = false;
+  }
+
+  // "Look it up" — external search deep-links prefilled with the plateau name.
+  // Each opens in a new tab (rel=noopener); the learner chooses to click. The
+  // name is URL-encoded and set via textContent — never interpolated as HTML.
+  const detailSearch = document.getElementById("detail-search");
+  const SEARCH_ENGINES = [
+    { label: "Perplexity", url: (q) => `https://www.perplexity.ai/search?q=${q}` },
+    { label: "Wikipedia", url: (q) => `https://en.wikipedia.org/w/index.php?search=${q}` },
+    { label: "Scholar", url: (q) => `https://scholar.google.com/scholar?q=${q}` },
+  ];
+  function renderSearchLinks(p) {
+    const q = encodeURIComponent(String(p?.name ?? "").slice(0, 200));
+    detailSearch.replaceChildren(
+      ...SEARCH_ENGINES.map((e) => {
+        const a = document.createElement("a");
+        a.href = e.url(q);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = e.label;
+        return a;
+      }),
+    );
   }
 
   // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
@@ -1439,7 +1550,9 @@ async function main() {
     const shared = bridgeResources({ resources: graph.resources(), fromId: b.from, toId: b.to });
     const label = document.createElement("p");
     label.className = "bridge-res-label";
-    label.textContent = shared.length ? "Books that span both:" : "No resources span both topics yet.";
+    label.textContent = shared.length
+      ? "Books that span both:"
+      : "No resources span both topics yet.";
     detailBridge.append(label);
     if (shared.length) {
       const ul = document.createElement("ul");
@@ -1521,7 +1634,9 @@ async function main() {
 
       const stones = document.createElement("span");
       stones.className = crystallized ? "res-stones bedrock" : "res-stones";
-      stones.textContent = crystallized ? `◆ ${Math.round(r.vote_count)}` : `● ${Math.round(r.vote_count)}`;
+      stones.textContent = crystallized
+        ? `◆ ${Math.round(r.vote_count)}`
+        : `● ${Math.round(r.vote_count)}`;
       stones.title = crystallized ? "crystallized — community-vouched" : "weighted stones";
       li.append(stones);
 
@@ -1593,7 +1708,9 @@ async function main() {
       .to_graph()
       .plateaus()
       .filter((p) => p.id !== currentId)
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .sort((a, b) =>
+        a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
     for (const p of others) {
       const label = document.createElement("label");
       label.className = "also-pin-item";
@@ -1664,7 +1781,10 @@ async function main() {
     }
     showStudyReply("…"); // feedback in the drawer while the model answers
     // R-0034: strip any author ```solve answer from the grounding so it never rides to the model.
-    const groundPlateau = { name: studyPlateau.name, description: stripChallenges(studyPlateau.description || "") };
+    const groundPlateau = {
+      name: studyPlateau.name,
+      description: stripChallenges(studyPlateau.description || ""),
+    };
     const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
     const messages = assembleMessages(voiceFor(activePersona), grounding, history, action.prompt);
     sendTurn(modelConfig, messages)
@@ -1673,7 +1793,10 @@ async function main() {
         showStudyReply(reply);
         // Shares the global transcript by design — one companion, one history
         // (R-0023): a plateau answer can context a later global turn, and vice-versa.
-        history.push({ role: "user", content: action.prompt }, { role: "assistant", content: reply });
+        history.push(
+          { role: "user", content: action.prompt },
+          { role: "assistant", content: reply },
+        );
       })
       .catch((err) => {
         appendMessage("error", `⚠ ${err.message}`); // graceful (R-0007 AC4)
@@ -1689,6 +1812,140 @@ async function main() {
     studyButtons.append(btn);
   }
 
+  // ── Rhizome drill-down (R-0044) ──────────────────────────────────────────────
+  // Select a term inside a plateau's body → a floating menu offers a quick inline
+  // gloss (Define / Example, through the companion) OR the rhizome move: GROW the
+  // term into a brand-new plateau, placed next to its parent, BRIDGED to it by the
+  // term itself, and opened so you can drill in and grow further — as deep as you
+  // like. Not a dictionary popup: a durable, syncable, masterable node in the graph.
+  const rhizMenu = document.createElement("div");
+  rhizMenu.id = "rhizome-menu";
+  rhizMenu.hidden = true;
+  let rhizTerm = "";
+  function hideRhizMenu() {
+    rhizMenu.hidden = true;
+    rhizTerm = "";
+  }
+  function rhizBtn(label, cls, fn) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (cls) b.className = cls;
+    // mousedown-preventDefault keeps the text selection alive through the click.
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => {
+      const t = rhizTerm;
+      hideRhizMenu();
+      fn(t);
+    });
+    return b;
+  }
+  rhizMenu.append(
+    rhizBtn("Define", "", (t) => askInline(t, "define")),
+    rhizBtn("Example", "", (t) => askInline(t, "example")),
+    rhizBtn("🌱 Grow a plateau", "grow", (t) => growPlateau(t)),
+  );
+  document.body.append(rhizMenu);
+
+  // A quick inline gloss — routed through the SAME plateau-scoped companion turn
+  // as the study actions (R-0023 trust boundary). No plateau is created.
+  function askInline(term, mode) {
+    const parent = studyPlateau;
+    if (!parent || !activePersona) return;
+    const prompt = inlinePrompt(term, parent.name, mode);
+    companion.hidden = false;
+    appendMessage("user", prompt);
+    if (modelConfig.kind === "fake") {
+      const msg = `Connect a model (Model setup) for a live answer — or 🌱 grow “${term}” into a plateau to explore it yourself.`;
+      appendMessage("bot", msg);
+      showStudyReply(msg);
+      return;
+    }
+    showStudyReply("…");
+    const rs = doc.to_graph().resources().filter((r) => r.plateau_id === parent.id);
+    const groundPlateau = { name: parent.name, description: stripChallenges(parent.description || "") };
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        appendMessage("bot", reply);
+        showStudyReply(reply);
+        history.push({ role: "user", content: prompt }, { role: "assistant", content: reply });
+      })
+      .catch((err) => {
+        appendMessage("error", `⚠ ${err.message}`);
+        showStudyReply(`⚠ ${err.message}`);
+      });
+  }
+
+  // The rhizome move: grow the selected term into a nested, bridged plateau.
+  async function growPlateau(term) {
+    const parent = studyPlateau;
+    if (!parent || !activePersona) return;
+    // Inherit the parent's domain so the child lands on the same island; fall back
+    // to the persona's first faced domain for an authored, domain-less parent.
+    const domain = DOMAIN_OF.get(parent.id) ?? parent.domain_id ?? activePersona.orient?.[0]?.domain;
+    if (!domain) return;
+    const pos = childPosition(parent.position, term);
+    let body = starterBody(term, parent.name); // offline default; a model fleshes it out
+    if (modelConfig.kind !== "fake") {
+      showStudyReply(`🌱 Growing “${term}”…`);
+      try {
+        const rs = doc.to_graph().resources().filter((r) => r.plateau_id === parent.id);
+        const groundPlateau = { name: parent.name, description: stripChallenges(parent.description || "") };
+        const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+        const messages = assembleMessages(voiceFor(activePersona), grounding, history, draftPlateauPrompt(term, parent.name));
+        const draft = await sendTurn(modelConfig, messages);
+        if (draft && draft.trim()) body = `# ${term}\n\n${draft.trim()}`;
+      } catch {
+        /* keep the honest offline stub */
+      }
+    }
+    let childId;
+    try {
+      childId = doc.add_plateau(term, domain, pos.e1, pos.e2, pos.e3, body);
+    } catch (err) {
+      console.error("[mp] grow plateau:", err);
+      return;
+    }
+    DOMAIN_OF.set(childId, domain); // register for traversal scoring
+    try {
+      doc.add_bridge(parent.id, childId, term); // the term IS the bridge concept
+    } catch (err) {
+      console.error("[mp] grow bridge:", err);
+    }
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    const child = doc.to_graph().plateaus().find((p) => p.id === childId);
+    if (child) openPlateau(child); // drill straight in — grow further from here
+  }
+
+  // Show the menu when a term is selected inside the plateau body; hide on scroll
+  // or an outside click. Desktop pointer path (mouseup); touch is a follow-up.
+  function showRhizMenu(term, rect) {
+    rhizTerm = term;
+    rhizMenu.hidden = false;
+    const mx = Math.min(Math.max(rect.left, 8), window.innerWidth - rhizMenu.offsetWidth - 8);
+    const above = rect.top - rhizMenu.offsetHeight - 8;
+    rhizMenu.style.left = `${mx}px`;
+    rhizMenu.style.top = `${above < 8 ? rect.bottom + 8 : above}px`;
+  }
+  detailBody.addEventListener("mouseup", () => {
+    const sel = window.getSelection();
+    const term = sel && !sel.isCollapsed ? sel.toString().trim() : "";
+    if (!isGrowable(term)) {
+      hideRhizMenu();
+      return;
+    }
+    showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
+  });
+  detail.addEventListener("scroll", hideRhizMenu);
+  document.addEventListener("mousedown", (e) => {
+    if (!rhizMenu.contains(e.target)) hideRhizMenu();
+  });
+
   // ── Prove it (R-0032 / SPEC-0032): the AI-checked proof box ─────────────────
   // A LaTeX proof input + symbol palette + live KaTeX preview + Check. On a PASS
   // verdict it signs the SAME mastery as the self-test (signMastery → ✓ + the
@@ -1696,9 +1953,18 @@ async function main() {
   // the verdict parse is fail-safe. Wired once — the box is a static sibling, so
   // a draft survives renderMastery's replaceChildren.
   const PROOF_SYMBOLS = [
-    ["∀", "\\forall "], ["∃", "\\exists "], ["∈", "\\in "], ["≤", "\\le "],
-    ["≥", "\\ge "], ["⇒", "\\Rightarrow "], ["⇔", "\\iff "], ["√", "\\sqrt{}"],
-    ["∑", "\\sum"], ["∫", "\\int"], ["a/b", "\\frac{}{}"], ["lim", "\\lim_{}"],
+    ["∀", "\\forall "],
+    ["∃", "\\exists "],
+    ["∈", "\\in "],
+    ["≤", "\\le "],
+    ["≥", "\\ge "],
+    ["⇒", "\\Rightarrow "],
+    ["⇔", "\\iff "],
+    ["√", "\\sqrt{}"],
+    ["∑", "\\sum"],
+    ["∫", "\\int"],
+    ["a/b", "\\frac{}{}"],
+    ["lim", "\\lim_{}"],
     ["$ $", "$$"],
   ];
   function insertAtCursor(el, text) {
@@ -1770,8 +2036,16 @@ async function main() {
   // LOCAL, deterministic equivalence engine (no model). Correct → signMastery
   // (the same ✓). Wired once — the box is a static sibling.
   const SOLVE_SYMBOLS = [
-    ["x", "x"], ["^", "^"], ["( )", "()"], ["/", "/"], ["·", "*"],
-    ["√", "sqrt()"], ["π", "pi"], ["sin", "sin()"], ["cos", "cos()"], ["ln", "ln()"],
+    ["x", "x"],
+    ["^", "^"],
+    ["( )", "()"],
+    ["/", "/"],
+    ["·", "*"],
+    ["√", "sqrt()"],
+    ["π", "pi"],
+    ["sin", "sin()"],
+    ["cos", "cos()"],
+    ["ln", "ln()"],
   ];
   function solveInsert(text) {
     const el = solveInput;
@@ -1858,8 +2132,14 @@ async function main() {
     }
     // LOCAL deterministic check (no model). Conservative — a wrong/unparseable
     // answer signs nothing.
-    const { equivalent, reason } = checkEquivalence(ans, solveCurrent.reference, solveCurrent.check);
-    solveFeedback.textContent = equivalent ? "✓ Correct — verified equivalent to the answer." : reason;
+    const { equivalent, reason } = checkEquivalence(
+      ans,
+      solveCurrent.reference,
+      solveCurrent.check,
+    );
+    solveFeedback.textContent = equivalent
+      ? "✓ Correct — verified equivalent to the answer."
+      : reason;
     if (equivalent) {
       signMastery(studyPlateau); // the ONLY sign path — same mastery as self-test / proof
       saveProof(studyPlateau.id, "solution", ans); // R-0036 — keep it locally (private)
@@ -1913,7 +2193,7 @@ async function main() {
   document.getElementById("draft-plateau-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const spec = buildPlateau({
-      name:   document.getElementById("dp-name").value,
+      name: document.getElementById("dp-name").value,
       domain: dpDomain.value,
       e1: parseFloat(document.getElementById("dp-e1").value),
       e2: parseFloat(document.getElementById("dp-e2").value),
@@ -2022,12 +2302,15 @@ async function main() {
   // synced-in plateaus are anchorable (AC1).
   function refreshMarkerPlateaus() {
     dmPlateau.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2086,12 +2369,15 @@ async function main() {
   function refreshVoteMarkers() {
     const threshold = crystallize_threshold();
     vsMarker.replaceChildren(
-      ...doc.to_graph().resources().map((r) => {
-        const o = document.createElement("option");
-        o.value = r.id;
-        o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .resources()
+        .map((r) => {
+          const o = document.createElement("option");
+          o.value = r.id;
+          o.textContent = `${r.title} (${Math.round(r.vote_count)}/${threshold})`;
+          return o;
+        }),
     );
   }
 
@@ -2270,17 +2556,23 @@ async function main() {
   let draftPathSteps = [];
 
   function plateauById(id) {
-    return doc.to_graph().plateaus().find((p) => p.id === id);
+    return doc
+      .to_graph()
+      .plateaus()
+      .find((p) => p.id === id);
   }
 
   function refreshPathTopics() {
     pathStepTopic.replaceChildren(
-      ...doc.to_graph().plateaus().map((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        return o;
-      }),
+      ...doc
+        .to_graph()
+        .plateaus()
+        .map((p) => {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          return o;
+        }),
     );
   }
 
@@ -2366,6 +2658,11 @@ async function main() {
       pathsPanel.open = true;
       refreshPathTopics();
       refreshPathPick();
+      // Land on the flagship curriculum route so the panel opens on a real
+      // journey to Follow, not the blank "— new path —" authoring form.
+      if (!pathPick.value && FLAGSHIP_PATH_ID && loadPaths()[FLAGSHIP_PATH_ID]) {
+        pathPick.value = FLAGSHIP_PATH_ID;
+      }
       renderPublishedPaths();
       loadDraftFromPick();
     }
@@ -2408,7 +2705,11 @@ async function main() {
     if (next) {
       const p = plateauById(next);
       if (p) {
-        const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+        const { cx, cy } = centerOn(
+          p.position,
+          { width: canvas.width, height: canvas.height },
+          VIEW.scale,
+        );
         VIEW.cx = cx;
         VIEW.cy = cy;
       }
@@ -2429,15 +2730,7 @@ async function main() {
     const plateaus = doc.to_graph().plateaus();
     const domains = pathDomains(plateaus, entry.steps);
     try {
-      ingest(
-        identity.sign_path(
-          entry.id,
-          entry.title,
-          entry.goal ?? "",
-          entry.steps,
-          domains,
-        ),
-      );
+      ingest(identity.sign_path(entry.id, entry.title, entry.goal ?? "", entry.steps, domains));
       renderPublishedPaths();
     } catch (err) {
       console.error("[mp] sign_path failed:", err);
@@ -2482,7 +2775,11 @@ async function main() {
       .find((x) => x.id === travelSel.value);
     if (!p) return;
     // Re-centre the camera so the chosen topic sits at the canvas centre.
-    const { cx, cy } = centerOn(p.position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    const { cx, cy } = centerOn(
+      p.position,
+      { width: canvas.width, height: canvas.height },
+      VIEW.scale,
+    );
     VIEW.cx = cx;
     VIEW.cy = cy;
     focusedId = p.id; // transient highlight ring (render.js); cleared below
@@ -2543,6 +2840,15 @@ async function main() {
   });
   document.getElementById("tutorial-gotit").addEventListener("click", dismissTutorial);
   document.getElementById("tour").addEventListener("click", () => showTutorial(0)); // replay (AC4)
+
+  // Map legend: a static key of what each line/dot means. Pure toggle, no state.
+  const legendPanel = document.getElementById("legend");
+  document.getElementById("legend-toggle").addEventListener("click", () => {
+    legendPanel.hidden = !legendPanel.hidden;
+  });
+  document.getElementById("legend-close").addEventListener("click", () => {
+    legendPanel.hidden = true;
+  });
 
   // Advertise our initial state so a tab opened later converges with us, and draw
   // the (fogged) world behind the creator overlay.
