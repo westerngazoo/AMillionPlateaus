@@ -36,6 +36,7 @@ export function viewModel(
     pathSteps = [],
     pathNext = null,
     peers = [],
+    groundedPlateaus = new Map(),
   } = {},
 ) {
   // Focus + context (PR #42): plateaus in the lens's domains — plus anything you've
@@ -133,6 +134,7 @@ export function viewModel(
         communityRing: false,
         mastered: false,
         label: null,
+        groundedWith: null,
       });
       continue;
     }
@@ -148,6 +150,7 @@ export function viewModel(
       communityRing: community.has(p.id),
       mastered: done,
       label: labelled.has(p.id) ? p.name : null,
+      groundedWith: groundedPlateaus.get(p.id) || null,
     });
   }
 

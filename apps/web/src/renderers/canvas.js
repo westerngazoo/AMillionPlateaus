@@ -150,6 +150,12 @@ export function drawFrame(ctx, frame) {
       n.fill === "unexplored" ? "12px system-ui, sans-serif" : "bold 12px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(n.label, n.x, n.y + RADIUS + 14);
+
+    if (n.groundedWith) {
+      ctx.fillStyle = PALETTE.COVERED;
+      ctx.font = "italic 10px system-ui, sans-serif";
+      ctx.fillText(n.groundedWith, n.x, n.y + RADIUS + 26);
+    }
   }
 
   // Travel focus ring (R-0019).
