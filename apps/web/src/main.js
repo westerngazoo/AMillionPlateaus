@@ -23,7 +23,7 @@ import init, {
 } from "../pkg/mp_wasm.js";
 import { canvasRenderer } from "./renderers/canvas.js";
 import { viewModel } from "./viewpipeline.js";
-import { spreadNodes as spreadLayout } from "./layout.js";
+import { spreadNodes as spreadLayout, forceLayout } from "./layout.js";
 import { project as place } from "./project.js";
 import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
@@ -529,10 +529,9 @@ async function main() {
     // placement drives the draw AND hit-testing (stored in `points`).
     const raw = new Map();
     for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
-    points = spreadLayout(raw);
+    points = forceLayout(raw, { bridges });
 
     const groundedPlateaus = computeGroundedPlateaus(graph, plateaus);
-
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
     // discovery, R-0010); it just no longer gates or colours the map. The

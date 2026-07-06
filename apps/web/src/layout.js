@@ -49,3 +49,73 @@ export function spreadNodes(points, { minDist = DEFAULT_MIN_DIST, iterations = 1
   }
   return out;
 }
+
+/**
+ * A force-directed layout for the graph.
+ * Pulls connected nodes together (springs) and pushes all nodes apart (Coulomb).
+ * Phase 2 (#52) sibling strategy to spreadNodes.
+ */
+export function forceLayout(points, { bridges = [], minDist = DEFAULT_MIN_DIST, iterations = 50, alpha = 0.5 } = {}) {
+  const out = new Map([...points].map(([id, pt]) => [id, { x: pt.x, y: pt.y, vx: 0, vy: 0 }]));
+  const ids = [...out.keys()];
+  if (ids.length < 2) return out;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = out.get(ids[i]);
+        const b = out.get(ids[j]);
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < 1e-6) {
+          const angle = ((i * 31 + j * 17) % 360) * (Math.PI / 180);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          dist = 1;
+        }
+        if (dist < minDist * 2) {
+          const force = (minDist * minDist) / (dist * dist);
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          a.vx -= fx;
+          a.vy -= fy;
+          b.vx += fx;
+          b.vy += fy;
+        }
+      }
+    }
+
+    for (const bridge of bridges) {
+      const source = out.get(bridge.from);
+      const target = out.get(bridge.to);
+      if (!source || !target) continue;
+      let dx = target.x - source.x;
+      let dy = target.y - source.y;
+      let dist = Math.hypot(dx, dy);
+      if (dist > minDist) {
+        const force = (dist - minDist) * 0.1;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        source.vx += fx;
+        source.vy += fy;
+        target.vx -= fx;
+        target.vy -= fy;
+      }
+    }
+
+    for (const id of ids) {
+      const node = out.get(id);
+      node.x += node.vx * alpha;
+      node.y += node.vy * alpha;
+      node.vx *= 0.5;
+      node.vy *= 0.5;
+    }
+  }
+
+  const final = new Map();
+  for (const [id, node] of out) {
+    final.set(id, { x: node.x, y: node.y });
+  }
+  return final;
+}
