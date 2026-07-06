@@ -450,6 +450,76 @@ async function main() {
     return ids;
   }
 
+  // RFC-0002 Phase 2: compute grounded plateaus between the followed path and other published paths.
+  function computeGroundedPlateaus(graph, plateaus) {
+    const grounded = new Map();
+    if (!followPathId) return grounded;
+    const mySteps = followSteps();
+    if (!mySteps.length) return grounded;
+    
+    // get domain of each step
+    const myDomains = new Set();
+    const stepToDomain = new Map();
+    for (const p of plateaus) {
+      if (mySteps.includes(p.id)) {
+        myDomains.add(p.domain_id);
+        stepToDomain.set(p.id, p.domain_id);
+      }
+    }
+
+    // pre-compute my domain planes
+    const DOMAINS = allDomains();
+    const myPlanes = new Map();
+    for (const d of myDomains) {
+      const canonical = DOMAINS.find(x => x.id === d)?.canonical || {e1:0, e2:0, e3:0};
+      try {
+        myPlanes.set(d, graph.domain_plane(d, canonical.e1, canonical.e2, canonical.e3));
+      } catch (e) {
+        console.error("[mp] domain_plane error", e);
+      }
+    }
+
+    // check published paths
+    for (const other of publishedPaths(log.all())) {
+      if (other.id === followPathId) continue;
+      
+      const otherDomains = pathDomains(plateaus, other.steps);
+      for (const d of otherDomains) {
+        if (myDomains.has(d)) continue; // same domain, handled natively
+        
+        const canonical = DOMAINS.find(x => x.id === d)?.canonical || {e1:0, e2:0, e3:0};
+        let otherPlane;
+        try {
+          otherPlane = graph.domain_plane(d, canonical.e1, canonical.e2, canonical.e3);
+        } catch(e) {
+          continue;
+        }
+
+        // find shared_line between each of my domains and this other domain
+        for (const [myDomain, myPlane] of myPlanes) {
+          let line;
+          try {
+             line = graph.shared_line(myPlane, otherPlane);
+          } catch(e) {
+             continue;
+          }
+          // for each step in my path that belongs to myDomain, check if it's a member of the OTHER plane
+          for (const step of mySteps) {
+             if (stepToDomain.get(step) !== myDomain) continue;
+             const p = plateaus.find(x => x.id === step);
+             if (!p) continue;
+             try {
+                if (graph.is_member(p.position.e1, p.position.e2, p.position.e3, otherPlane)) {
+                   grounded.set(step, `Grounded with ${other.title} by ${shortKey(other.pubkey)}`);
+                }
+             } catch(e) { }
+          }
+        }
+      }
+    }
+    return grounded;
+  }
+
   function draw() {
     const graph = doc.to_graph();
     const plateaus = graph.plateaus();
@@ -460,6 +530,9 @@ async function main() {
     const raw = new Map();
     for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
     points = spreadLayout(raw);
+
+    const groundedPlateaus = computeGroundedPlateaus(graph, plateaus);
+
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
     // discovery, R-0010); it just no longer gates or colours the map. The
@@ -477,6 +550,7 @@ async function main() {
         pathSteps: followSteps(),
         pathNext: followNext(),
         peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
+        groundedPlateaus,
       }),
     );
     const studying = [...visited].filter((id) => !mastered.has(id)).length;

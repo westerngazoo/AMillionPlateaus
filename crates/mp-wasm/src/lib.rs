@@ -148,6 +148,46 @@ impl WasmGraph {
             k,
         )?)?)
     }
+
+    /// RFC-0002 Phase 2: compute the fitted domain plane (bivector) for a domain,
+    /// given a fallback canonical axis `[e1, e2, e3]`.
+    pub fn domain_plane(&self, domain_id: &str, e1: f32, e2: f32, e3: f32) -> Result<Vec<f32>, JsError> {
+        let domain = uuid::Uuid::parse_str(domain_id)?;
+        let mut topics = Vec::new();
+        for p in self.inner.plateaus() {
+            if p.domain_id == domain {
+                topics.push(p.position());
+            }
+        }
+        let fallback = mp_domain::ga::vector(e1, e2, e3);
+        let refs: Vec<&mp_domain::ga::Mv> = topics.iter().collect();
+        let plane = mp_domain::domain_plane(&refs, &fallback);
+        Ok(plane.coeffs.to_vec())
+    }
+
+    /// RFC-0002 Phase 2: compute the shared line between two bivector planes.
+    pub fn shared_line(&self, b1_coeffs: &[f32], b2_coeffs: &[f32]) -> Result<Vec<f32>, JsError> {
+        if b1_coeffs.len() != 8 || b2_coeffs.len() != 8 {
+            return Err(JsError::new("bivector coeffs must have length 8"));
+        }
+        let mut b1 = mp_domain::ga::Mv::zero();
+        b1.coeffs.copy_from_slice(b1_coeffs);
+        let mut b2 = mp_domain::ga::Mv::zero();
+        b2.coeffs.copy_from_slice(b2_coeffs);
+        let line = mp_domain::shared_line(&b1, &b2);
+        Ok(line.coeffs.to_vec())
+    }
+
+    /// RFC-0002 Phase 2: test if a topic (grade-1 position) lies near a domain plane.
+    pub fn is_member(&self, e1: f32, e2: f32, e3: f32, b_coeffs: &[f32]) -> Result<bool, JsError> {
+        if b_coeffs.len() != 8 {
+            return Err(JsError::new("bivector coeffs must have length 8"));
+        }
+        let v = mp_domain::ga::vector(e1, e2, e3);
+        let mut b = mp_domain::ga::Mv::zero();
+        b.coeffs.copy_from_slice(b_coeffs);
+        Ok(mp_domain::is_member(&v, &b, mp_domain::MEMBERSHIP_TOLERANCE))
+    }
 }
 
 impl Default for WasmGraph {
