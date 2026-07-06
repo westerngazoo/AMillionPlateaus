@@ -47,7 +47,7 @@ import {
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
 import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
-import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
+import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
 import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
@@ -1847,6 +1847,14 @@ async function main() {
     rhizBtn("Define", "", (t) => askInline(t, "define")),
     rhizBtn("Example", "", (t) => askInline(t, "example")),
     rhizBtn("🌱 Grow a plateau", "grow", (t) => growPlateau(t)),
+    rhizBtn("Add resource", "", (t) => {
+      const titleInput = document.getElementById("detail-add-title");
+      if (titleInput) {
+        titleInput.value = t.trim().replace(/\s+/g, " ");
+        titleInput.focus();
+        titleInput.scrollIntoView({ behavior: "smooth" });
+      }
+    }),
   );
   document.body.append(rhizMenu);
 
@@ -1882,9 +1890,19 @@ async function main() {
   }
 
   // The rhizome move: grow the selected term into a nested, bridged plateau.
-  async function growPlateau(term) {
+  async function growPlateau(rawTerm) {
     const parent = studyPlateau;
     if (!parent || !activePersona) return;
+    const term = rawTerm.trim().replace(/\s+/g, " "); // normalize term once (Slice 4 dedup)
+
+    const graph = doc.to_graph();
+    const existing = existingChild(parent, term, graph.plateaus(), graph.bridges());
+    if (existing) {
+      const child = graph.plateaus().find((p) => p.id === existing);
+      if (child) openPlateau(child);
+      return;
+    }
+
     // Inherit the parent's domain so the child lands on the same island; fall back
     // to the persona's first faced domain for an authored, domain-less parent.
     const domain = DOMAIN_OF.get(parent.id) ?? parent.domain_id ?? activePersona.orient?.[0]?.domain;
@@ -1904,25 +1922,53 @@ async function main() {
         /* keep the honest offline stub */
       }
     }
-    let childId;
-    try {
-      childId = doc.add_plateau(term, domain, pos.e1, pos.e2, pos.e3, body);
-    } catch (err) {
-      console.error("[mp] grow plateau:", err);
-      return;
-    }
-    DOMAIN_OF.set(childId, domain); // register for traversal scoring
-    try {
-      doc.add_bridge(parent.id, childId, term); // the term IS the bridge concept
-    } catch (err) {
-      console.error("[mp] grow bridge:", err);
-    }
-    sync.pump();
-    pumpPeer();
-    persist();
-    draw();
-    const child = doc.to_graph().plateaus().find((p) => p.id === childId);
-    if (child) openPlateau(child); // drill straight in — grow further from here
+
+    const preview = document.getElementById("rhizome-preview");
+    const rpName = document.getElementById("rp-name");
+    const rpBody = document.getElementById("rp-body");
+    const rpCancel = document.getElementById("rp-cancel");
+    const rpCreate = document.getElementById("rp-create");
+    
+    rpName.value = term;
+    rpBody.value = body;
+    preview.hidden = false;
+    
+    const cleanup = () => {
+      preview.hidden = true;
+      rpCancel.removeEventListener("click", onCancel);
+      rpCreate.removeEventListener("click", onCreate);
+    };
+
+    const onCancel = () => cleanup();
+    const onCreate = () => {
+      const finalName = rpName.value.trim() || term;
+      const finalBody = rpBody.value;
+      cleanup();
+
+      let childId;
+      try {
+        // the wasm CRDT add path — do not use buildPlateau
+        childId = doc.add_plateau(finalName, domain, pos.e1, pos.e2, pos.e3, finalBody);
+      } catch (err) {
+        console.error("[mp] grow plateau:", err);
+        return;
+      }
+      DOMAIN_OF.set(childId, domain);
+      try {
+        doc.add_bridge(parent.id, childId, term);
+      } catch (err) {
+        console.error("[mp] grow bridge:", err);
+      }
+      sync.pump();
+      pumpPeer();
+      persist();
+      draw();
+      const child = doc.to_graph().plateaus().find((p) => p.id === childId);
+      if (child) openPlateau(child);
+    };
+
+    rpCancel.addEventListener("click", onCancel);
+    rpCreate.addEventListener("click", onCreate);
   }
 
   // Show the menu when a term is selected inside the plateau body; hide on scroll
@@ -1932,8 +1978,9 @@ async function main() {
     rhizMenu.hidden = false;
     const mx = Math.min(Math.max(rect.left, 8), window.innerWidth - rhizMenu.offsetWidth - 8);
     const above = rect.top - rhizMenu.offsetHeight - 8;
+    const my = Math.min(above < 8 ? rect.bottom + 8 : above, window.innerHeight - rhizMenu.offsetHeight - 8);
     rhizMenu.style.left = `${mx}px`;
-    rhizMenu.style.top = `${above < 8 ? rect.bottom + 8 : above}px`;
+    rhizMenu.style.top = `${my}px`;
   }
   detailBody.addEventListener("mouseup", () => {
     const sel = window.getSelection();
@@ -1944,6 +1991,19 @@ async function main() {
     }
     showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
   });
+  
+  let touchTimeout;
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(touchTimeout);
+    touchTimeout = setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !detailBody.contains(sel.anchorNode)) return;
+      const term = sel.toString().trim();
+      if (!isGrowable(term)) return;
+      showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
+    }, 250);
+  });
+
   detail.addEventListener("scroll", hideRhizMenu);
   document.addEventListener("mousedown", (e) => {
     if (!rhizMenu.contains(e.target)) hideRhizMenu();

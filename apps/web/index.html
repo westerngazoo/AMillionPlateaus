@@ -306,6 +306,12 @@
       #rhizome-menu button:hover { background: #345780; }
       #rhizome-menu button.grow { background: #2f5233; color: #d6f0d6; font-weight: 600; }
       #rhizome-menu button.grow:hover { background: #3d6b42; }
+      /* Rhizome preview modal (R-0044 Slice 3) */
+      #rhizome-preview {
+        position: fixed; z-index: 45; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 420px; max-width: 90vw; max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      }
       /* Study context menu (right-click a topic). Vertical action list. */
       #study-menu {
         position: fixed; z-index: 40; display: flex; flex-direction: column; gap: 2px; padding: 5px;
@@ -798,6 +804,25 @@
          from VERIFIED events, each foreign wizard offering a "Vouch". Populated by
          main.js on "Discover wizards". -->
     <div id="discovery" class="discovery"></div>
+    
+    <!-- Rhizome preview (Slice 3, #58) -->
+    <div id="rhizome-preview" class="draft-plateau" hidden>
+      <div class="draft-plateau-body">
+        <h2 style="margin:0 0 10px; font-size:16px; color:#ffd166;">🌱 Grow a plateau</h2>
+        <div class="dp-row">
+          <label for="rp-name">Name</label>
+          <input id="rp-name" type="text" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="rp-body">Body</label>
+          <textarea id="rp-body" rows="6"></textarea>
+        </div>
+        <div class="dp-actions">
+          <button type="button" id="rp-cancel" style="background:#2a3a4c; border:1px solid #3a4d62;">Cancel</button>
+          <button type="button" id="rp-create" style="background:#2f5233; color:#d6f0d6; font-weight:600; margin-left:8px;">Create</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Map legend (R-0044-adjacent): what each line and dot on the map means.
          Swatches are inline SVG at the SAME colours render.js draws, so the key

@@ -8,6 +8,7 @@ import {
   starterBody,
   draftPlateauPrompt,
   inlinePrompt,
+  existingChild,
 } from "./rhizome.js";
 
 test("isGrowable accepts a short term, rejects junk and sentences", () => {
@@ -62,4 +63,15 @@ test("prompts embed the term and the parent context", () => {
 
   assert.match(inlinePrompt("sheaf", "Topos", "define"), /define .*sheaf/i);
   assert.match(inlinePrompt("sheaf", "Topos", "example"), /example/i);
+});
+
+test("existingChild finds a child bridged by the exact concept", () => {
+  const p1 = { id: "p1" };
+  const p2 = { id: "p2" };
+  const plateaus = [p1, p2];
+  const bridges = [{ from: "p1", to: "p2", concept: "functor" }];
+  
+  assert.equal(existingChild(p1, "functor", plateaus, bridges), "p2");
+  assert.equal(existingChild(p1, "monad", plateaus, bridges), null);
+  assert.equal(existingChild({ id: "other" }, "functor", plateaus, bridges), null);
 });
