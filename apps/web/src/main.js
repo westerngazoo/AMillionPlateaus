@@ -27,7 +27,9 @@ import { spreadNodes as spreadLayout } from "./layout.js";
 import { project as place } from "./project.js";
 import { hitTest } from "./hittest.js";
 import { createSync } from "./sync.js";
-import { createSnapshotStore } from "./persistence.js";
+import { createSnapshotStore, createMediaStore } from "./persistence.js";
+import { safeImageSrc } from "./rich-notes.js";
+import { drawQR } from "./qr.js";
 import { createPeer } from "./webrtc.js";
 import { loadOrMintIdentity } from "./identity.js";
 import { makeLog } from "./events.js";
@@ -48,11 +50,11 @@ import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
 import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
-import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
+import { PRESETS, PROVIDERS, isConfigured, visionMessages } from "./model.js";
 import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
-import { assembleMessages, sendTurn } from "./companion.js";
+import { assembleMessages, sendTurn, sendVisionTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
@@ -239,6 +241,7 @@ async function main() {
   // catch does not reseed), so catch it here and discard-and-reseed (AC7). In
   // node/private-mode the store is inert and load() resolves null.
   const snapshots = createSnapshotStore();
+  const mediaStore = createMediaStore();
   const saved = await snapshots.load();
   let doc;
   try {
@@ -513,6 +516,7 @@ async function main() {
   // drives its OWN WasmSyncSession; the pump mirrors sync.js, over peer.send.
   let peer = null;
   let peerSession = null;
+  let qrPlateauId = null;
   function pumpPeer() {
     if (!peer || !peer.isOpen()) return;
     let msg;
@@ -528,6 +532,22 @@ async function main() {
         draw();
         persist(); // durable (R-0012); the doc carries plateaus/bridges/markers/votes
       },
+      onMediaMessage: async (bytes) => {
+        if (!qrPlateauId) return;
+        const id = crypto.randomUUID();
+        await mediaStore.put(id, new Blob([bytes], { type: "image/jpeg" }));
+        doc.add_resource(qrPlateauId, "Scanned Note", "Note", `resource://local/${id}`);
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        if (studyPlateau && studyPlateau.id === qrPlateauId) {
+          // If the detail view is still open on that plateau, refresh resources
+          try {
+            renderStudyResources();
+          } catch {}
+        }
+      }
     });
     return peer;
   }
@@ -1623,16 +1643,57 @@ async function main() {
       kind.textContent = r.kind; // DTO enum string; textContent keeps it inert
       li.append(kind, document.createTextNode(" "));
 
-      const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
-      if (href) {
-        const a = document.createElement("a");
-        a.href = href;
-        a.rel = "noopener noreferrer";
-        a.target = "_blank";
-        a.textContent = r.title;
-        li.append(a);
+      const imgUri = safeImageSrc(r.uri);
+      if (imgUri) {
+        const img = document.createElement("img");
+        img.className = "res-image";
+        img.alt = r.title;
+        const localId = r.uri.replace("resource://local/", "");
+        mediaStore.get(localId).then((blob) => {
+          if (blob) img.src = URL.createObjectURL(blob);
+        });
+
+        const readBtn = document.createElement("button");
+        readBtn.type = "button";
+        readBtn.className = "res-read-btn";
+        readBtn.textContent = "Read it";
+        readBtn.addEventListener("click", () => {
+          mediaStore.get(localId).then((blob) => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.onload = async () => {
+              detailReply.textContent = "Reading image...";
+              detailReply.hidden = false;
+              try {
+                const msgs = visionMessages(reader.result, "Extract and format the math or notes from this image as Markdown. Respond ONLY with the extracted text, no conversational filler.");
+                const conf = JSON.parse(localStorage.getItem("mp-model") || "{\"kind\":\"fake\"}");
+                const res = await sendVisionTurn(conf, msgs);
+                detailReply.innerHTML = renderMarkdown(res);
+                typesetMath(detailReply);
+              } catch (e) {
+                detailReply.textContent = "Error: " + e.message;
+              }
+            };
+            reader.readAsDataURL(blob);
+          });
+        });
+
+        const container = document.createElement("div");
+        container.className = "res-image-container";
+        container.append(img, readBtn);
+        li.append(container);
       } else {
-        li.append(document.createTextNode(r.title));
+        const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = r.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(r.title));
+        }
       }
 
       const stones = document.createElement("span");
@@ -1724,6 +1785,28 @@ async function main() {
       alsoPinList.append(label);
     }
   }
+
+  document.getElementById("detail-add-qr-btn").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    qrPlateauId = studyPlateau.id;
+    const roomId = crypto.randomUUID().slice(0, 8);
+    const url = new URL(`capture.html#${roomId}`, location.href).href;
+    const canvas = document.getElementById("detail-add-qr-canvas");
+    canvas.hidden = false;
+    drawQR(canvas, url);
+    
+    // Set up the shim for this specific pairing
+    const sig = new BroadcastChannel(`qr-pairing-${roomId}`);
+    sig.onmessage = async (e) => {
+      if (e.data.type === "ready") {
+        const p = startPeer(); // Replaces or updates global peer
+        const offer = await p.createOffer();
+        sig.postMessage({ type: "offer", offer });
+      } else if (e.data.type === "answer") {
+        if (peer) await peer.acceptAnswer(e.data.answer);
+      }
+    };
+  });
 
   document.getElementById("detail-add-form").addEventListener("submit", (e) => {
     e.preventDefault();

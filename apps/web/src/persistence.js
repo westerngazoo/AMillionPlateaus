@@ -14,6 +14,7 @@
 
 export const DB_NAME = "mp-graph";
 export const STORE = "snapshot";
+export const MEDIA_STORE = "media";
 // The version suffix tracks the stored types' SERDE SHAPE (golden-pinned,
 // GA_DB.md §3), not the app version: bump it only when PlateauNode/Bridge
 // serialization changes, and old blobs are simply never read (clean discard).
@@ -36,10 +37,11 @@ export function createSnapshotStore({
   function open() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
-      const req = idb.open(DB_NAME, 1);
+      const req = idb.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(MEDIA_STORE)) db.createObjectStore(MEDIA_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => {
@@ -106,5 +108,49 @@ function inertStore() {
     load: async () => null,
     save: () => {},
     flush: async () => {},
+  };
+}
+
+export function createMediaStore(idb = globalThis.indexedDB) {
+  if (!idb) return { async get() { return null; }, async put() {} };
+  let dbPromise = null;
+  function open() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = idb.open(DB_NAME, 2);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(MEDIA_STORE)) db.createObjectStore(MEDIA_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => { dbPromise = null; reject(req.error); };
+    });
+    return dbPromise;
+  }
+  return {
+    async get(id) {
+      try {
+        const db = await open();
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(MEDIA_STORE, "readonly");
+          const req = tx.objectStore(MEDIA_STORE).get(id);
+          req.onsuccess = () => resolve(req.result ?? null);
+          req.onerror = () => reject(req.error);
+        });
+      } catch { return null; }
+    },
+    async put(id, blob) {
+      try {
+        const db = await open();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(MEDIA_STORE, "readwrite");
+          tx.objectStore(MEDIA_STORE).put(blob, id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      } catch {}
+    }
   };
 }
