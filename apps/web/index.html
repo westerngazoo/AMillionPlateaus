@@ -958,6 +958,10 @@
           <input id="detail-add-uri" type="text" placeholder="https://… (book, link, video)" autocomplete="off" />
           <button type="submit">Pin</button>
         </div>
+        <div class="detail-add-qr">
+          <button type="button" id="detail-add-qr-btn">Scan Note (QR)</button>
+          <canvas id="detail-add-qr-canvas" width="210" height="210" hidden></canvas>
+        </div>
         <!-- Pin the same link to other topics too (R-0028): one book across many. -->
         <details class="detail-add-also">
           <summary>Also pin to other topics</summary>

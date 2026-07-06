@@ -8,6 +8,7 @@
 // a hand-rolled fake — no real WebRTC stack, no npm dependency.
 
 export const CHANNEL_LABEL = "mp-sync";
+export const MEDIA_CHANNEL_LABEL = "mp-media";
 
 function defaultFactory() {
   // No data ever traverses a STUN/TURN server; an empty iceServers list works on
@@ -24,12 +25,15 @@ function defaultFactory() {
 export function createPeer({
   rtcFactory = defaultFactory,
   onMessage = () => {},
+  onMediaMessage = () => {},
   onOpen = () => {},
   onClose = () => {},
 } = {}) {
   const pc = rtcFactory();
   let channel = null;
+  let mediaChannel = null;
   const outbox = []; // bytes queued before the channel opens
+  const mediaOutbox = [];
 
   function wire(ch) {
     channel = ch;
@@ -40,6 +44,15 @@ export function createPeer({
     };
     ch.onmessage = (e) => onMessage(new Uint8Array(e.data));
     ch.onclose = () => onClose();
+  }
+
+  function wireMedia(ch) {
+    mediaChannel = ch;
+    ch.binaryType = "arraybuffer";
+    ch.onopen = () => {
+      for (const m of mediaOutbox.splice(0)) ch.send(m);
+    };
+    ch.onmessage = (e) => onMediaMessage(new Uint8Array(e.data));
   }
 
   // Resolve the full local SDP once ICE gathering completes (non-trickle), so the
@@ -62,13 +75,17 @@ export function createPeer({
     /// Offerer: create the data channel + an invite blob to copy out.
     async createOffer() {
       wire(pc.createDataChannel(CHANNEL_LABEL));
+      wireMedia(pc.createDataChannel(MEDIA_CHANNEL_LABEL));
       await pc.setLocalDescription(await pc.createOffer());
       return JSON.stringify(await gathered());
     },
     /// Answerer: ingest the invite, return an answer blob to copy back. The
     /// `ondatachannel` listener is registered BEFORE applying the remote offer.
     async acceptOffer(offerBlob) {
-      pc.ondatachannel = (e) => wire(e.channel);
+      pc.ondatachannel = (e) => {
+        if (e.channel.label === CHANNEL_LABEL) wire(e.channel);
+        else if (e.channel.label === MEDIA_CHANNEL_LABEL) wireMedia(e.channel);
+      };
       await pc.setRemoteDescription(JSON.parse(offerBlob));
       await pc.setLocalDescription(await pc.createAnswer());
       return JSON.stringify(await gathered());
@@ -81,6 +98,10 @@ export function createPeer({
     send(bytes) {
       if (channel && channel.readyState === "open") channel.send(bytes);
       else outbox.push(bytes);
+    },
+    sendMedia(bytes) {
+      if (mediaChannel && mediaChannel.readyState === "open") mediaChannel.send(bytes);
+      else mediaOutbox.push(bytes);
     },
     isOpen: () => channel?.readyState === "open",
     close: () => pc.close(),
