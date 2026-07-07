@@ -25,11 +25,13 @@ import { canvasRenderer } from "./renderers/canvas.js";
 import { viewModel } from "./viewpipeline.js";
 import { spreadNodes as spreadLayout, forceLayout } from "./layout.js";
 import { project as place } from "./project.js";
-import { hitTest } from "./hittest.js";
+import { hitTest, hitMarkers } from "./hittest.js";
 import { createSync } from "./sync.js";
 import { createSnapshotStore, createMediaStore } from "./persistence.js";
 import { safeImageSrc } from "./rich-notes.js";
-import { drawQR } from "./qr.js";
+// qr.js is imported LAZILY at the button (not here): it chains to a vendored
+// module, and a missing/broken OPTIONAL vendor file must degrade that one
+// button — never kill the app's whole module graph at boot (issue #73).
 import { createPeer } from "./webrtc.js";
 import { loadOrMintIdentity } from "./identity.js";
 import { makeLog } from "./events.js";
@@ -399,6 +401,7 @@ async function main() {
   const companionForm = document.getElementById("companion-form");
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
+  let lastFrame = null; // the last-drawn Frame — click handlers hit-test ITS marker dots
   let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
   let followPathId = null; // R-0039: local path being followed (camera/UI only)
   const PATHS_KEY = "mp.paths";
@@ -536,7 +539,9 @@ async function main() {
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
     // discovery, R-0010); it just no longer gates or colours the map. The
     // viewModel owns emphasis (focus/context, PR #42); the renderer just replays.
-    renderer.draw(
+    // The frame is KEPT (lastFrame) so click handlers hit-test the exact dots
+    // this draw painted — same placement source as `points` for the discs.
+    lastFrame =
       viewModel({ plateaus, bridges, resources }, points, {
         visited, // studying set (R-0033)
         mastered, // mastered set — ✓ + gold (R-0030)
@@ -550,8 +555,8 @@ async function main() {
         pathNext: followNext(),
         peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
         groundedPlateaus,
-      }),
-    );
+      });
+    renderer.draw(lastFrame);
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
@@ -1280,6 +1285,20 @@ async function main() {
     const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
+    // Resource DOTS first (R-0014 + the declutter): post-declutter the coloured
+    // dot is a resource's only visible trace, so it must open something. Dots are
+    // 8–10px targets that can sit within a NEIGHBOURING disc's 16px radius, so
+    // the small target wins the overlap. Clicking one opens its plateau's study
+    // drawer scrolled to that resource.
+    const dot = lastFrame ? hitMarkers(lastFrame.markers, mx, my) : null;
+    if (dot) {
+      const anchor = graph.plateaus().find((p) => p.id === dot.plateauId);
+      if (anchor) {
+        studyHit(anchor); // same studying semantics as clicking the disc
+        highlightResource(dot.id);
+        return;
+      }
+    }
     // R-0033 — the map is browsable: hit-test the last-drawn placement (no
     // reachability gate). Discs win over bridges; `hitTest` iterates `points`
     // keys so it is total (SPEC-0043 §2.4). Opening a disc is "studying" it.
@@ -1691,6 +1710,16 @@ async function main() {
   // weighted SUM, not an integer tally), a bedrock badge when Crystallized, and a
   // ＋ stone button on the audited grow-only vote path. Reuses the safeHref
   // chokepoint for the link, exactly as the old flat list did.
+  // A map-dot click lands here: scroll the drawer to the resource's row and
+  // flash it, so the learner sees WHICH pinned thing that coloured dot was.
+  function highlightResource(resourceId) {
+    const row = detailResources.querySelector(`[data-resource-id="${CSS.escape(resourceId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.classList.add("res-flash");
+    setTimeout(() => row.classList.remove("res-flash"), 1600);
+  }
+
   function renderStudyResources() {
     if (!studyPlateau) return;
     const g = doc.to_graph();
@@ -1709,6 +1738,7 @@ async function main() {
     ul.className = "res-list";
     for (const r of rankResources(rs)) {
       const li = document.createElement("li");
+      li.dataset.resourceId = r.id; // lets a map-dot click scroll to + flash this row
       const crystallized = r.state === "Crystallized";
 
       const kind = document.createElement("span");
@@ -1859,14 +1889,23 @@ async function main() {
     }
   }
 
-  document.getElementById("detail-add-qr-btn").addEventListener("click", () => {
+  document.getElementById("detail-add-qr-btn").addEventListener("click", async () => {
     if (!studyPlateau) return;
     qrPlateauId = studyPlateau.id;
     const roomId = crypto.randomUUID().slice(0, 8);
     const url = new URL(`capture.html#${roomId}`, location.href).href;
     const canvas = document.getElementById("detail-add-qr-canvas");
     canvas.hidden = false;
-    drawQR(canvas, url);
+    try {
+      const { drawQR } = await import("./qr.js"); // lazy: see the import note at the top
+      drawQR(canvas, url);
+    } catch {
+      // Honest degradation: no QR renderer → show the capture URL as TEXT the
+      // learner can type/copy on the phone. The pairing shim below works either way.
+      canvas.hidden = true;
+      detailReply.hidden = false;
+      detailReply.textContent = `QR renderer unavailable — open this on your phone instead: ${url}`;
+    }
     
     // Set up the shim for this specific pairing
     const sig = new BroadcastChannel(`qr-pairing-${roomId}`);

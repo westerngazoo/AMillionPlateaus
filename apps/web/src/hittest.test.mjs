@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { hitTest, RADIUS } from "./hittest.js";
+import { hitTest, hitMarkers, RADIUS } from "./hittest.js";
 
 const pts = (entries) => new Map(entries);
 
@@ -72,4 +72,37 @@ test("iterates positions keys, so a graph-only plateau is simply not clickable y
   // was drawn; a click near where "B" WOULD be finds nothing rather than throwing.
   const positions = pts([["A", { x: 0, y: 0 }]]);
   assert.equal(hitTest(positions, 300, 300), null);
+});
+
+// ── hitMarkers: resource DOTS are clickable where they are painted ────────────
+// Markers come from the Frame with their FINAL stacked position (viewpipeline
+// applies the offset once); post-declutter the dot is a resource's only visible
+// trace, so a click on it must resolve to {id, plateauId}.
+
+test("hitMarkers: nearest dot within tol; ties last-wins (the dot drawn on top)", () => {
+  const markers = [
+    { id: "r1", plateauId: "a", x: 126, y: 84 },
+    { id: "r2", plateauId: "a", x: 126, y: 98 }, // 14px below in the stack
+  ];
+  assert.equal(hitMarkers(markers, 126, 85).id, "r1");
+  assert.equal(hitMarkers(markers, 126, 97).id, "r2");
+  // exactly between two stacked dots (7px each): nearest tie → last-drawn wins
+  assert.equal(hitMarkers(markers, 126, 91).id, "r2");
+});
+
+test("hitMarkers: a fat-finger tol of 10 never grabs a dot 14px away in the stack", () => {
+  const markers = [
+    { id: "r1", plateauId: "a", x: 126, y: 84 },
+    { id: "r2", plateauId: "a", x: 126, y: 98 },
+  ];
+  // 4px above r1 — within r1's tol, 18px from r2 (out of tol AND farther)
+  assert.equal(hitMarkers(markers, 126, 80).id, "r1");
+});
+
+test("hitMarkers: null when far, on empty lists, and on undefined", () => {
+  const markers = [{ id: "r1", plateauId: "a", x: 126, y: 84 }];
+  assert.equal(hitMarkers(markers, 200, 200), null);
+  assert.equal(hitMarkers(markers, 126, 95), null); // 11px — just outside tol 10
+  assert.equal(hitMarkers([], 0, 0), null);
+  assert.equal(hitMarkers(undefined, 0, 0), null);
 });

@@ -75,7 +75,12 @@ export function forceLayout(points, { bridges = [], minDist = DEFAULT_MIN_DIST, 
           dist = 1;
         }
         if (dist < minDist * 2) {
-          const force = (minDist * minDist) / (dist * dist);
+          // Coulomb term, CAPPED: uncapped, a near-coincident pair gets
+          // minDist²/dist² (thousands) and one kick flings the whole layout
+          // off-canvas — a fresh 50-topic world rendered as a BLANK map, every
+          // disc at ±3000px. Cap the pairwise force; the per-step clamp below
+          // bounds the pile-up of many pairs.
+          const force = Math.min((minDist * minDist) / (dist * dist), minDist);
           const fx = (dx / dist) * force;
           const fy = (dy / dist) * force;
           a.vx -= fx;
@@ -106,8 +111,20 @@ export function forceLayout(points, { bridges = [], minDist = DEFAULT_MIN_DIST, 
 
     for (const id of ids) {
       const node = out.get(id);
-      node.x += node.vx * alpha;
-      node.y += node.vy * alpha;
+      // Clamp the per-iteration displacement: no single step may move a node
+      // more than minDist/4, whatever the surrounding pile-up sums to. This is
+      // the stability guarantee — forces vanish once nodes clear minDist*2, so
+      // a clamped walk converges NEAR its input instead of exploding off it.
+      let sx = node.vx * alpha;
+      let sy = node.vy * alpha;
+      const step = Math.hypot(sx, sy);
+      const maxStep = minDist / 4;
+      if (step > maxStep) {
+        sx *= maxStep / step;
+        sy *= maxStep / step;
+      }
+      node.x += sx;
+      node.y += sy;
       node.vx *= 0.5;
       node.vy *= 0.5;
     }

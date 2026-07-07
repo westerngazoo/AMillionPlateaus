@@ -284,6 +284,13 @@
       /* Study view (R-0023): ranked rows with a stone count + ＋stone, the
          companion action buttons, and the inline add-a-resource form. */
       .res-list li { display: flex; align-items: center; gap: 8px; }
+      /* A map-dot click flashes its resource row so the learner sees which
+         pinned thing that coloured dot was. */
+      .res-list li.res-flash {
+        outline: 2px solid #9fd0ff; outline-offset: 2px; border-radius: 4px;
+        background: rgba(159, 208, 255, 0.12);
+        transition: background 0.8s ease, outline-color 0.8s ease;
+      }
       .res-stones { margin-left: auto; font-size: 11px; color: #8aa0b4; white-space: nowrap; }
       .res-stones.bedrock { color: #ffd166; } /* crystallized — community-vouched */
       .res-stone-btn {

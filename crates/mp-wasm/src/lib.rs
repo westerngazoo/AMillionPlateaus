@@ -151,7 +151,13 @@ impl WasmGraph {
 
     /// RFC-0002 Phase 2: compute the fitted domain plane (bivector) for a domain,
     /// given a fallback canonical axis `[e1, e2, e3]`.
-    pub fn domain_plane(&self, domain_id: &str, e1: f32, e2: f32, e3: f32) -> Result<Vec<f32>, JsError> {
+    pub fn domain_plane(
+        &self,
+        domain_id: &str,
+        e1: f32,
+        e2: f32,
+        e3: f32,
+    ) -> Result<Vec<f32>, JsError> {
         let domain = uuid::Uuid::parse_str(domain_id)?;
         let mut topics = Vec::new();
         for p in self.inner.plateaus() {
@@ -160,8 +166,9 @@ impl WasmGraph {
             }
         }
         let fallback = mp_domain::ga::vector(e1, e2, e3);
-        let refs: Vec<&mp_domain::ga::Mv> = topics.iter().collect();
-        let plane = mp_domain::domain_plane(&refs, &fallback);
+        // `topics` already holds `&Mv` refs — re-collecting `.iter()` yielded
+        // `&&Mv` and did not compile (broke every wasm build since 809800d).
+        let plane = mp_domain::domain_plane(&topics, &fallback);
         Ok(plane.coeffs.to_vec())
     }
 
@@ -186,7 +193,11 @@ impl WasmGraph {
         let v = mp_domain::ga::vector(e1, e2, e3);
         let mut b = mp_domain::ga::Mv::zero();
         b.coeffs.copy_from_slice(b_coeffs);
-        Ok(mp_domain::is_member(&v, &b, mp_domain::MEMBERSHIP_TOLERANCE))
+        Ok(mp_domain::is_member(
+            &v,
+            &b,
+            mp_domain::MEMBERSHIP_TOLERANCE,
+        ))
     }
 }
 
