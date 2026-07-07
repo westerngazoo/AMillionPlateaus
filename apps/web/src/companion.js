@@ -38,3 +38,18 @@ export async function sendTurn(cfg, messages, deps = { fetch: globalThis.fetch }
   if (!res.ok) throw new Error(`model HTTP ${res.status}`);
   return parseResponse(cfg, await res.json());
 }
+
+export async function sendVisionTurn(cfg, messages, deps = { fetch: globalThis.fetch }) {
+  if (cfg.kind === "fake") {
+    return `(${cfg.model || "offline"}) [Image received] I see your image. Configure a multimodal model to read it.`;
+  }
+  const req = buildRequest(cfg, messages);
+  let res;
+  try {
+    res = await deps.fetch(req.url, { method: "POST", headers: req.headers, body: req.body });
+  } catch (e) {
+    throw new Error(`model unreachable (CORS/network): ${e.message}`);
+  }
+  if (!res.ok) throw new Error(`model HTTP ${res.status}`);
+  return parseResponse(cfg, await res.json());
+}

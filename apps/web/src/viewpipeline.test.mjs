@@ -121,6 +121,7 @@ test("nodes carry the placed x/y and stay in plateaus order", () => {
     communityRing: false,
     mastered: false,
     label: "Alpha",
+    groundedWith: null, // RFC-0002 Phase 2 meet-grounding: none in this fixture
   });
 });
 
@@ -173,21 +174,26 @@ test("overlay rings resolve to points or null", () => {
   assert.equal(viewModel(GRAPH, POS, { focusedId: "zzz" }).overlays.focusRing, null);
 });
 
-test("markers stack per plateau, carry crystallized state + kind, no on-map caption", () => {
+test("markers carry ids + the FINAL stacked dot position, kind, no on-map caption", () => {
   const f = viewModel(GRAPH, POS, {});
   assert.equal(f.markers.length, 2);
+  // anchor (100,100): dot at x+RADIUS+10 = 126, y-RADIUS+i*14 = 84 / 98 — the
+  // offset applied ONCE here, so the renderer and hitMarkers share the point,
+  // and {id, plateauId} make the dot clickable (open the drawer at the resource).
   assert.deepEqual(f.markers[0], {
-    x: 100,
-    y: 100,
-    stackIndex: 0,
+    id: "r1",
+    plateauId: "a",
+    x: 126,
+    y: 84,
     crystallized: true,
     kind: "Article", // the dot signals the TYPE; the renderer colours by kind
     caption: null, // titles live in the study drawer, not as on-map text (declutter)
   });
   assert.deepEqual(f.markers[1], {
-    x: 100,
-    y: 100,
-    stackIndex: 1,
+    id: "r2",
+    plateauId: "a",
+    x: 126,
+    y: 98, // second in the stack: +14
     crystallized: false,
     kind: null, // no kind on the resource → default marker colour
     caption: null,

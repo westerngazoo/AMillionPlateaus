@@ -284,6 +284,13 @@
       /* Study view (R-0023): ranked rows with a stone count + ＋stone, the
          companion action buttons, and the inline add-a-resource form. */
       .res-list li { display: flex; align-items: center; gap: 8px; }
+      /* A map-dot click flashes its resource row so the learner sees which
+         pinned thing that coloured dot was. */
+      .res-list li.res-flash {
+        outline: 2px solid #9fd0ff; outline-offset: 2px; border-radius: 4px;
+        background: rgba(159, 208, 255, 0.12);
+        transition: background 0.8s ease, outline-color 0.8s ease;
+      }
       .res-stones { margin-left: auto; font-size: 11px; color: #8aa0b4; white-space: nowrap; }
       .res-stones.bedrock { color: #ffd166; } /* crystallized — community-vouched */
       .res-stone-btn {
@@ -306,6 +313,12 @@
       #rhizome-menu button:hover { background: #345780; }
       #rhizome-menu button.grow { background: #2f5233; color: #d6f0d6; font-weight: 600; }
       #rhizome-menu button.grow:hover { background: #3d6b42; }
+      /* Rhizome preview modal (R-0044 Slice 3) */
+      #rhizome-preview {
+        position: fixed; z-index: 45; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 420px; max-width: 90vw; max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      }
       /* Study context menu (right-click a topic). Vertical action list. */
       #study-menu {
         position: fixed; z-index: 40; display: flex; flex-direction: column; gap: 2px; padding: 5px;
@@ -798,6 +811,25 @@
          from VERIFIED events, each foreign wizard offering a "Vouch". Populated by
          main.js on "Discover wizards". -->
     <div id="discovery" class="discovery"></div>
+    
+    <!-- Rhizome preview (Slice 3, #58) -->
+    <div id="rhizome-preview" class="draft-plateau" hidden>
+      <div class="draft-plateau-body">
+        <h2 style="margin:0 0 10px; font-size:16px; color:#ffd166;">🌱 Grow a plateau</h2>
+        <div class="dp-row">
+          <label for="rp-name">Name</label>
+          <input id="rp-name" type="text" autocomplete="off" />
+        </div>
+        <div class="dp-row">
+          <label for="rp-body">Body</label>
+          <textarea id="rp-body" rows="6"></textarea>
+        </div>
+        <div class="dp-actions">
+          <button type="button" id="rp-cancel" style="background:#2a3a4c; border:1px solid #3a4d62;">Cancel</button>
+          <button type="button" id="rp-create" style="background:#2f5233; color:#d6f0d6; font-weight:600; margin-left:8px;">Create</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Map legend (R-0044-adjacent): what each line and dot on the map means.
          Swatches are inline SVG at the SAME colours render.js draws, so the key
@@ -957,6 +989,10 @@
           <select id="detail-add-kind"><!-- RESOURCE_KINDS, by main.js --></select>
           <input id="detail-add-uri" type="text" placeholder="https://… (book, link, video)" autocomplete="off" />
           <button type="submit">Pin</button>
+        </div>
+        <div class="detail-add-qr">
+          <button type="button" id="detail-add-qr-btn">Scan Note (QR)</button>
+          <canvas id="detail-add-qr-canvas" width="210" height="210" hidden></canvas>
         </div>
         <!-- Pin the same link to other topics too (R-0028): one book across many. -->
         <details class="detail-add-also">

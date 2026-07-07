@@ -36,6 +36,7 @@ export function viewModel(
     pathSteps = [],
     pathNext = null,
     peers = [],
+    groundedPlateaus = new Map(),
   } = {},
 ) {
   // Focus + context (PR #42): plateaus in the lens's domains — plus anything you've
@@ -133,6 +134,7 @@ export function viewModel(
         communityRing: false,
         mastered: false,
         label: null,
+        groundedWith: null,
       });
       continue;
     }
@@ -148,13 +150,19 @@ export function viewModel(
       communityRing: community.has(p.id),
       mastered: done,
       label: labelled.has(p.id) ? p.name : null,
+      groundedWith: groundedPlateaus.get(p.id) || null,
     });
   }
 
-  // Markers (R-0014/R-0015): dots anchored to their plateau, stacked by i*14. The
-  // DOT signals the resource TYPE (coloured by `kind` in the renderer); the title
-  // lives in the study drawer, NOT on the map — the always-on captions made the map
-  // text-soup, so `caption` is null (kept on the Frame for a future hover/opt-in).
+  // Markers (R-0014/R-0015): dots anchored to their plateau, stacked by i*14.
+  // The DOT signals the resource TYPE (coloured by `kind` in the renderer); the
+  // title lives in the study drawer, NOT on the map — the always-on captions made
+  // the map text-soup, so `caption` is null (kept for a future hover/opt-in).
+  // x/y is the dot's FINAL screen position (the stack offset applied HERE, once —
+  // the renderer replays it verbatim, and `hitMarkers` hit-tests the same point),
+  // and each dot carries `{id, plateauId}` so a CLICK on it opens the study
+  // drawer at that resource — post-declutter the dot is the resource's only
+  // visible trace, so it must be interactive, not draw-only.
   const markers = [];
   {
     const placed = new Map();
@@ -164,9 +172,10 @@ export function viewModel(
       const i = placed.get(r.plateau_id) ?? 0;
       placed.set(r.plateau_id, i + 1);
       markers.push({
-        x: pt.x,
-        y: pt.y,
-        stackIndex: i,
+        id: r.id,
+        plateauId: r.plateau_id,
+        x: pt.x + RADIUS + 10,
+        y: pt.y - RADIUS + i * 14,
         crystallized: r.state === "Crystallized",
         kind: r.kind ?? null,
         caption: null,

@@ -16,7 +16,11 @@ import { createPeer, CHANNEL_LABEL } from "./webrtc.js";
 // (so `new Uint8Array(e.data)` in webrtc.js is exercised).
 function fakeNetwork() {
   const channels = [];
-  let offererCh = null;
+  // ALL channels the offerer announces — the peer now opens TWO (mp-sync +
+  // mp-media, SPEC-0045 §2.1), and real WebRTC announces each to the answerer
+  // with its label in-band; the old single `offererCh` kept only the LAST one
+  // (media), unlabelled on the answerer side, so the label filter wired nothing.
+  const offererChs = [];
 
   function makeChannel() {
     const ch = {
@@ -42,9 +46,10 @@ function fakeNetwork() {
       iceGatheringState: "complete", // non-trickle fast path
       localDescription: null,
       createDataChannel(label) {
-        offererCh = makeChannel();
-        offererCh.label = label;
-        return offererCh;
+        const ch = makeChannel();
+        ch.label = label;
+        offererChs.push(ch);
+        return ch;
       },
       createOffer: async () => ({ type: "offer", sdp: "OFFER" }),
       createAnswer: async () => ({ type: "answer", sdp: "ANSWER" }),
@@ -52,12 +57,16 @@ function fakeNetwork() {
         pc.localDescription = d;
       },
       setRemoteDescription: async (_d) => {
-        // The answerer receives the offerer's channel via ondatachannel, linked.
+        // The answerer receives EVERY offerer channel via ondatachannel, each
+        // carrying its label (as real WebRTC announces in-band), pairwise-linked.
         if (role === "answerer" && pc.ondatachannel) {
-          const answererCh = makeChannel();
-          answererCh._peer = offererCh;
-          offererCh._peer = answererCh;
-          pc.ondatachannel({ channel: answererCh });
+          for (const oc of offererChs) {
+            const answererCh = makeChannel();
+            answererCh.label = oc.label;
+            answererCh._peer = oc;
+            oc._peer = answererCh;
+            pc.ondatachannel({ channel: answererCh });
+          }
         }
       },
       close() {

@@ -92,3 +92,13 @@ export function inlinePrompt(term, parentName = "", mode = "define") {
     ? `Give one concrete, concrete-as-possible example of "${term}"${ctx}. Two or three sentences.`
     : `Briefly define "${term}"${ctx} in 2–3 sentences. Plain language; use $…$ for any math.`;
 }
+
+// Slice 4: Add resource / dedup
+export function existingChild(parent, term, plateaus = [], bridges = []) {
+  const has = new Set(plateaus.map((p) => p.id));
+  for (const b of bridges) {
+    if (b.from === parent.id && b.concept === term && has.has(b.to)) return b.to;
+  }
+  return null;
+}
+

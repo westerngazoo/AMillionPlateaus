@@ -23,11 +23,15 @@ import init, {
 } from "../pkg/mp_wasm.js";
 import { canvasRenderer } from "./renderers/canvas.js";
 import { viewModel } from "./viewpipeline.js";
-import { spreadNodes as spreadLayout } from "./layout.js";
+import { spreadNodes as spreadLayout, forceLayout } from "./layout.js";
 import { project as place } from "./project.js";
-import { hitTest } from "./hittest.js";
+import { hitTest, hitMarkers } from "./hittest.js";
 import { createSync } from "./sync.js";
-import { createSnapshotStore } from "./persistence.js";
+import { createSnapshotStore, createMediaStore } from "./persistence.js";
+import { safeImageSrc } from "./rich-notes.js";
+// qr.js is imported LAZILY at the button (not here): it chains to a vendored
+// module, and a missing/broken OPTIONAL vendor file must degrade that one
+// button — never kill the app's whole module graph at boot (issue #73).
 import { createPeer } from "./webrtc.js";
 import { loadOrMintIdentity } from "./identity.js";
 import { makeLog } from "./events.js";
@@ -47,12 +51,12 @@ import {
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
 import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
-import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt } from "./rhizome.js";
-import { PRESETS, PROVIDERS, isConfigured } from "./model.js";
+import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
+import { PRESETS, PROVIDERS, isConfigured, visionMessages } from "./model.js";
 import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
-import { assembleMessages, sendTurn } from "./companion.js";
+import { assembleMessages, sendTurn, sendVisionTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
@@ -239,6 +243,7 @@ async function main() {
   // catch does not reseed), so catch it here and discard-and-reseed (AC7). In
   // node/private-mode the store is inert and load() resolves null.
   const snapshots = createSnapshotStore();
+  const mediaStore = createMediaStore();
   const saved = await snapshots.load();
   let doc;
   try {
@@ -396,6 +401,7 @@ async function main() {
   const companionForm = document.getElementById("companion-form");
   const companionInput = document.getElementById("companion-input");
   let points = new Map();
+  let lastFrame = null; // the last-drawn Frame — click handlers hit-test ITS marker dots
   let focusedId = null; // travel focus ring (R-0019); camera highlight only, transient
   let followPathId = null; // R-0039: local path being followed (camera/UI only)
   const PATHS_KEY = "mp.paths";
@@ -447,6 +453,76 @@ async function main() {
     return ids;
   }
 
+  // RFC-0002 Phase 2: compute grounded plateaus between the followed path and other published paths.
+  function computeGroundedPlateaus(graph, plateaus) {
+    const grounded = new Map();
+    if (!followPathId) return grounded;
+    const mySteps = followSteps();
+    if (!mySteps.length) return grounded;
+    
+    // get domain of each step
+    const myDomains = new Set();
+    const stepToDomain = new Map();
+    for (const p of plateaus) {
+      if (mySteps.includes(p.id)) {
+        myDomains.add(p.domain_id);
+        stepToDomain.set(p.id, p.domain_id);
+      }
+    }
+
+    // pre-compute my domain planes
+    const DOMAINS = allDomains();
+    const myPlanes = new Map();
+    for (const d of myDomains) {
+      const canonical = DOMAINS.find(x => x.id === d)?.canonical || {e1:0, e2:0, e3:0};
+      try {
+        myPlanes.set(d, graph.domain_plane(d, canonical.e1, canonical.e2, canonical.e3));
+      } catch (e) {
+        console.error("[mp] domain_plane error", e);
+      }
+    }
+
+    // check published paths
+    for (const other of publishedPaths(log.all())) {
+      if (other.id === followPathId) continue;
+      
+      const otherDomains = pathDomains(plateaus, other.steps);
+      for (const d of otherDomains) {
+        if (myDomains.has(d)) continue; // same domain, handled natively
+        
+        const canonical = DOMAINS.find(x => x.id === d)?.canonical || {e1:0, e2:0, e3:0};
+        let otherPlane;
+        try {
+          otherPlane = graph.domain_plane(d, canonical.e1, canonical.e2, canonical.e3);
+        } catch(e) {
+          continue;
+        }
+
+        // find shared_line between each of my domains and this other domain
+        for (const [myDomain, myPlane] of myPlanes) {
+          let line;
+          try {
+             line = graph.shared_line(myPlane, otherPlane);
+          } catch(e) {
+             continue;
+          }
+          // for each step in my path that belongs to myDomain, check if it's a member of the OTHER plane
+          for (const step of mySteps) {
+             if (stepToDomain.get(step) !== myDomain) continue;
+             const p = plateaus.find(x => x.id === step);
+             if (!p) continue;
+             try {
+                if (graph.is_member(p.position.e1, p.position.e2, p.position.e3, otherPlane)) {
+                   grounded.set(step, `Grounded with ${other.title} by ${shortKey(other.pubkey)}`);
+                }
+             } catch(e) { }
+          }
+        }
+      }
+    }
+    return grounded;
+  }
+
   function draw() {
     const graph = doc.to_graph();
     const plateaus = graph.plateaus();
@@ -456,12 +532,16 @@ async function main() {
     // placement drives the draw AND hit-testing (stored in `points`).
     const raw = new Map();
     for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
-    points = spreadLayout(raw);
+    points = forceLayout(raw, { bridges });
+
+    const groundedPlateaus = computeGroundedPlateaus(graph, plateaus);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
     // browsable. Reach/reputation is still recomputed (it grounds the companion +
     // discovery, R-0010); it just no longer gates or colours the map. The
     // viewModel owns emphasis (focus/context, PR #42); the renderer just replays.
-    renderer.draw(
+    // The frame is KEPT (lastFrame) so click handlers hit-test the exact dots
+    // this draw painted — same placement source as `points` for the discs.
+    lastFrame =
       viewModel({ plateaus, bridges, resources }, points, {
         visited, // studying set (R-0033)
         mastered, // mastered set — ✓ + gold (R-0030)
@@ -474,8 +554,9 @@ async function main() {
         pathSteps: followSteps(),
         pathNext: followNext(),
         peers: presence.peers(), // ephemeral remote-wizard silhouettes (R-0016)
-      }),
-    );
+        groundedPlateaus,
+      });
+    renderer.draw(lastFrame);
     const studying = [...visited].filter((id) => !mastered.has(id)).length;
     const who = activePersona ? `${activePersona.name} · ` : "";
     const canonical = community.size > 0 ? ` · ${community.size} canonical` : "";
@@ -513,6 +594,7 @@ async function main() {
   // drives its OWN WasmSyncSession; the pump mirrors sync.js, over peer.send.
   let peer = null;
   let peerSession = null;
+  let qrPlateauId = null;
   function pumpPeer() {
     if (!peer || !peer.isOpen()) return;
     let msg;
@@ -528,6 +610,22 @@ async function main() {
         draw();
         persist(); // durable (R-0012); the doc carries plateaus/bridges/markers/votes
       },
+      onMediaMessage: async (bytes) => {
+        if (!qrPlateauId) return;
+        const id = crypto.randomUUID();
+        await mediaStore.put(id, new Blob([bytes], { type: "image/jpeg" }));
+        doc.add_resource(qrPlateauId, "Scanned Note", "Note", `resource://local/${id}`);
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        if (studyPlateau && studyPlateau.id === qrPlateauId) {
+          // If the detail view is still open on that plateau, refresh resources
+          try {
+            renderStudyResources();
+          } catch {}
+        }
+      }
     });
     return peer;
   }
@@ -1187,6 +1285,20 @@ async function main() {
     const { x: mx, y: my } = clientToCanvas(e.clientX, e.clientY); // canvas px (R-0037)
 
     const graph = doc.to_graph();
+    // Resource DOTS first (R-0014 + the declutter): post-declutter the coloured
+    // dot is a resource's only visible trace, so it must open something. Dots are
+    // 8–10px targets that can sit within a NEIGHBOURING disc's 16px radius, so
+    // the small target wins the overlap. Clicking one opens its plateau's study
+    // drawer scrolled to that resource.
+    const dot = lastFrame ? hitMarkers(lastFrame.markers, mx, my) : null;
+    if (dot) {
+      const anchor = graph.plateaus().find((p) => p.id === dot.plateauId);
+      if (anchor) {
+        studyHit(anchor); // same studying semantics as clicking the disc
+        highlightResource(dot.id);
+        return;
+      }
+    }
     // R-0033 — the map is browsable: hit-test the last-drawn placement (no
     // reachability gate). Discs win over bridges; `hitTest` iterates `points`
     // keys so it is total (SPEC-0043 §2.4). Opening a disc is "studying" it.
@@ -1598,6 +1710,16 @@ async function main() {
   // weighted SUM, not an integer tally), a bedrock badge when Crystallized, and a
   // ＋ stone button on the audited grow-only vote path. Reuses the safeHref
   // chokepoint for the link, exactly as the old flat list did.
+  // A map-dot click lands here: scroll the drawer to the resource's row and
+  // flash it, so the learner sees WHICH pinned thing that coloured dot was.
+  function highlightResource(resourceId) {
+    const row = detailResources.querySelector(`[data-resource-id="${CSS.escape(resourceId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.classList.add("res-flash");
+    setTimeout(() => row.classList.remove("res-flash"), 1600);
+  }
+
   function renderStudyResources() {
     if (!studyPlateau) return;
     const g = doc.to_graph();
@@ -1616,6 +1738,7 @@ async function main() {
     ul.className = "res-list";
     for (const r of rankResources(rs)) {
       const li = document.createElement("li");
+      li.dataset.resourceId = r.id; // lets a map-dot click scroll to + flash this row
       const crystallized = r.state === "Crystallized";
 
       const kind = document.createElement("span");
@@ -1623,16 +1746,57 @@ async function main() {
       kind.textContent = r.kind; // DTO enum string; textContent keeps it inert
       li.append(kind, document.createTextNode(" "));
 
-      const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
-      if (href) {
-        const a = document.createElement("a");
-        a.href = href;
-        a.rel = "noopener noreferrer";
-        a.target = "_blank";
-        a.textContent = r.title;
-        li.append(a);
+      const imgUri = safeImageSrc(r.uri);
+      if (imgUri) {
+        const img = document.createElement("img");
+        img.className = "res-image";
+        img.alt = r.title;
+        const localId = r.uri.replace("resource://local/", "");
+        mediaStore.get(localId).then((blob) => {
+          if (blob) img.src = URL.createObjectURL(blob);
+        });
+
+        const readBtn = document.createElement("button");
+        readBtn.type = "button";
+        readBtn.className = "res-read-btn";
+        readBtn.textContent = "Read it";
+        readBtn.addEventListener("click", () => {
+          mediaStore.get(localId).then((blob) => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.onload = async () => {
+              detailReply.textContent = "Reading image...";
+              detailReply.hidden = false;
+              try {
+                const msgs = visionMessages(reader.result, "Extract and format the math or notes from this image as Markdown. Respond ONLY with the extracted text, no conversational filler.");
+                const conf = JSON.parse(localStorage.getItem("mp-model") || "{\"kind\":\"fake\"}");
+                const res = await sendVisionTurn(conf, msgs);
+                detailReply.innerHTML = renderMarkdown(res);
+                typesetMath(detailReply);
+              } catch (e) {
+                detailReply.textContent = "Error: " + e.message;
+              }
+            };
+            reader.readAsDataURL(blob);
+          });
+        });
+
+        const container = document.createElement("div");
+        container.className = "res-image-container";
+        container.append(img, readBtn);
+        li.append(container);
       } else {
-        li.append(document.createTextNode(r.title));
+        const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = r.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(r.title));
+        }
       }
 
       const stones = document.createElement("span");
@@ -1724,6 +1888,37 @@ async function main() {
       alsoPinList.append(label);
     }
   }
+
+  document.getElementById("detail-add-qr-btn").addEventListener("click", async () => {
+    if (!studyPlateau) return;
+    qrPlateauId = studyPlateau.id;
+    const roomId = crypto.randomUUID().slice(0, 8);
+    const url = new URL(`capture.html#${roomId}`, location.href).href;
+    const canvas = document.getElementById("detail-add-qr-canvas");
+    canvas.hidden = false;
+    try {
+      const { drawQR } = await import("./qr.js"); // lazy: see the import note at the top
+      drawQR(canvas, url);
+    } catch {
+      // Honest degradation: no QR renderer → show the capture URL as TEXT the
+      // learner can type/copy on the phone. The pairing shim below works either way.
+      canvas.hidden = true;
+      detailReply.hidden = false;
+      detailReply.textContent = `QR renderer unavailable — open this on your phone instead: ${url}`;
+    }
+    
+    // Set up the shim for this specific pairing
+    const sig = new BroadcastChannel(`qr-pairing-${roomId}`);
+    sig.onmessage = async (e) => {
+      if (e.data.type === "ready") {
+        const p = startPeer(); // Replaces or updates global peer
+        const offer = await p.createOffer();
+        sig.postMessage({ type: "offer", offer });
+      } else if (e.data.type === "answer") {
+        if (peer) await peer.acceptAnswer(e.data.answer);
+      }
+    };
+  });
 
   document.getElementById("detail-add-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1847,6 +2042,14 @@ async function main() {
     rhizBtn("Define", "", (t) => askInline(t, "define")),
     rhizBtn("Example", "", (t) => askInline(t, "example")),
     rhizBtn("🌱 Grow a plateau", "grow", (t) => growPlateau(t)),
+    rhizBtn("Add resource", "", (t) => {
+      const titleInput = document.getElementById("detail-add-title");
+      if (titleInput) {
+        titleInput.value = t.trim().replace(/\s+/g, " ");
+        titleInput.focus();
+        titleInput.scrollIntoView({ behavior: "smooth" });
+      }
+    }),
   );
   document.body.append(rhizMenu);
 
@@ -1882,9 +2085,19 @@ async function main() {
   }
 
   // The rhizome move: grow the selected term into a nested, bridged plateau.
-  async function growPlateau(term) {
+  async function growPlateau(rawTerm) {
     const parent = studyPlateau;
     if (!parent || !activePersona) return;
+    const term = rawTerm.trim().replace(/\s+/g, " "); // normalize term once (Slice 4 dedup)
+
+    const graph = doc.to_graph();
+    const existing = existingChild(parent, term, graph.plateaus(), graph.bridges());
+    if (existing) {
+      const child = graph.plateaus().find((p) => p.id === existing);
+      if (child) openPlateau(child);
+      return;
+    }
+
     // Inherit the parent's domain so the child lands on the same island; fall back
     // to the persona's first faced domain for an authored, domain-less parent.
     const domain = DOMAIN_OF.get(parent.id) ?? parent.domain_id ?? activePersona.orient?.[0]?.domain;
@@ -1904,25 +2117,53 @@ async function main() {
         /* keep the honest offline stub */
       }
     }
-    let childId;
-    try {
-      childId = doc.add_plateau(term, domain, pos.e1, pos.e2, pos.e3, body);
-    } catch (err) {
-      console.error("[mp] grow plateau:", err);
-      return;
-    }
-    DOMAIN_OF.set(childId, domain); // register for traversal scoring
-    try {
-      doc.add_bridge(parent.id, childId, term); // the term IS the bridge concept
-    } catch (err) {
-      console.error("[mp] grow bridge:", err);
-    }
-    sync.pump();
-    pumpPeer();
-    persist();
-    draw();
-    const child = doc.to_graph().plateaus().find((p) => p.id === childId);
-    if (child) openPlateau(child); // drill straight in — grow further from here
+
+    const preview = document.getElementById("rhizome-preview");
+    const rpName = document.getElementById("rp-name");
+    const rpBody = document.getElementById("rp-body");
+    const rpCancel = document.getElementById("rp-cancel");
+    const rpCreate = document.getElementById("rp-create");
+    
+    rpName.value = term;
+    rpBody.value = body;
+    preview.hidden = false;
+    
+    const cleanup = () => {
+      preview.hidden = true;
+      rpCancel.removeEventListener("click", onCancel);
+      rpCreate.removeEventListener("click", onCreate);
+    };
+
+    const onCancel = () => cleanup();
+    const onCreate = () => {
+      const finalName = rpName.value.trim() || term;
+      const finalBody = rpBody.value;
+      cleanup();
+
+      let childId;
+      try {
+        // the wasm CRDT add path — do not use buildPlateau
+        childId = doc.add_plateau(finalName, domain, pos.e1, pos.e2, pos.e3, finalBody);
+      } catch (err) {
+        console.error("[mp] grow plateau:", err);
+        return;
+      }
+      DOMAIN_OF.set(childId, domain);
+      try {
+        doc.add_bridge(parent.id, childId, term);
+      } catch (err) {
+        console.error("[mp] grow bridge:", err);
+      }
+      sync.pump();
+      pumpPeer();
+      persist();
+      draw();
+      const child = doc.to_graph().plateaus().find((p) => p.id === childId);
+      if (child) openPlateau(child);
+    };
+
+    rpCancel.addEventListener("click", onCancel);
+    rpCreate.addEventListener("click", onCreate);
   }
 
   // Show the menu when a term is selected inside the plateau body; hide on scroll
@@ -1932,8 +2173,9 @@ async function main() {
     rhizMenu.hidden = false;
     const mx = Math.min(Math.max(rect.left, 8), window.innerWidth - rhizMenu.offsetWidth - 8);
     const above = rect.top - rhizMenu.offsetHeight - 8;
+    const my = Math.min(above < 8 ? rect.bottom + 8 : above, window.innerHeight - rhizMenu.offsetHeight - 8);
     rhizMenu.style.left = `${mx}px`;
-    rhizMenu.style.top = `${above < 8 ? rect.bottom + 8 : above}px`;
+    rhizMenu.style.top = `${my}px`;
   }
   detailBody.addEventListener("mouseup", () => {
     const sel = window.getSelection();
@@ -1944,6 +2186,19 @@ async function main() {
     }
     showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
   });
+  
+  let touchTimeout;
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(touchTimeout);
+    touchTimeout = setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !detailBody.contains(sel.anchorNode)) return;
+      const term = sel.toString().trim();
+      if (!isGrowable(term)) return;
+      showRhizMenu(term, sel.getRangeAt(0).getBoundingClientRect());
+    }, 250);
+  });
+
   detail.addEventListener("scroll", hideRhizMenu);
   document.addEventListener("mousedown", (e) => {
     if (!rhizMenu.contains(e.target)) hideRhizMenu();

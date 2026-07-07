@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capture - A Million Plateaus</title>
+</head>
+<body>
+  <h1>Capture Note</h1>
+  <input type="file" id="camera" accept="image/*" capture="environment">
+  <p id="status">Waiting for connection...</p>
+  <script type="module">
+    import { createPeer } from "./src/webrtc.js";
+    import { boundImage, MEDIA_BYTE_CAP } from "./src/rich-notes.js";
+
+    const status = document.getElementById("status");
+    const camera = document.getElementById("camera");
+    
+    const roomId = location.hash.slice(1);
+    const sig = new BroadcastChannel(`qr-pairing-${roomId}`);
+    
+    let peer;
+    
+    // Send a ready message in case the offerer is already waiting
+    sig.postMessage({ type: "ready" });
+
+    sig.onmessage = async (e) => {
+      if (e.data.type === "offer") {
+        status.textContent = "Connecting...";
+        peer = createPeer({
+          onOpen: () => { status.textContent = "Connected. Take a photo."; }
+        });
+        const answer = await peer.acceptOffer(e.data.offer);
+        sig.postMessage({ type: "answer", answer });
+      }
+    };
+
+    camera.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file || !peer || !peer.isOpen()) return;
+      status.textContent = "Processing image...";
+      
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise(r => img.onload = r);
+      
+      const { w, h } = boundImage(img.width, img.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      
+      let quality = 0.9;
+      let blob;
+      do {
+        blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
+        quality -= 0.1;
+      } while (blob.size > MEDIA_BYTE_CAP && quality > 0.1);
+      
+      if (blob.size > MEDIA_BYTE_CAP) {
+        status.textContent = "Image too complex/large to send.";
+        return;
+      }
+      
+      status.textContent = "Sending...";
+      const buf = await blob.arrayBuffer();
+      peer.sendMedia(new Uint8Array(buf));
+      status.textContent = "Sent!";
+    });
+  </script>
+</body>
+</html>

@@ -150,6 +150,12 @@ export function drawFrame(ctx, frame) {
       n.fill === "unexplored" ? "12px system-ui, sans-serif" : "bold 12px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(n.label, n.x, n.y + RADIUS + 14);
+
+    if (n.groundedWith) {
+      ctx.fillStyle = PALETTE.COVERED;
+      ctx.font = "italic 10px system-ui, sans-serif";
+      ctx.fillText(n.groundedWith, n.x, n.y + RADIUS + 26);
+    }
   }
 
   // Travel focus ring (R-0019).
@@ -178,21 +184,21 @@ export function drawFrame(ctx, frame) {
     ctx.restore();
   }
 
-  // Markers (R-0014/R-0015), anchored to their plateau, stacked by i*14.
+  // Markers (R-0014/R-0015): m.x/m.y is the dot's FINAL position — the stack
+  // offset is applied once in the viewModel, so the same point drives this draw
+  // AND hitMarkers (a dot is clickable exactly where it is painted).
   ctx.save();
   ctx.textAlign = "left";
   ctx.font = "10px system-ui, sans-serif";
   for (const m of frame.markers) {
-    const mx = m.x + RADIUS + 10;
-    const my = m.y - RADIUS + m.stackIndex * 14;
     ctx.globalAlpha = m.crystallized ? 1 : 0.6;
     ctx.fillStyle = m.crystallized ? PALETTE.MARKER_SOLID : MARKER_KIND[m.kind] || PALETTE.MARKER;
     ctx.beginPath();
-    ctx.arc(mx, my, m.crystallized ? 5 : 4, 0, Math.PI * 2);
+    ctx.arc(m.x, m.y, m.crystallized ? 5 : 4, 0, Math.PI * 2);
     ctx.fill();
     if (m.caption !== null) {
       ctx.fillStyle = PALETTE.LABEL;
-      ctx.fillText(m.caption, mx + 8, my + 3);
+      ctx.fillText(m.caption, m.x + 8, m.y + 3);
     }
   }
   ctx.restore();

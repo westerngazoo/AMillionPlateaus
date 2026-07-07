@@ -137,3 +137,11 @@ export function isConfigured(cfg) {
   if (PROVIDERS[cfg.kind].needsKey && !cfg.apiKey) return false;
   return true;
 }
+
+export function visionMessages(imageDataUri, prompt) {
+  return [{ role: "user", content: [
+    { type: "text", text: prompt },
+    { type: "image_url", image_url: { url: imageDataUri } },
+  ] }];
+}
+

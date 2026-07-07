@@ -35,3 +35,24 @@ export function hitTest(positions, x, y, { bridges = [], tol = 6 } = {}) {
   if (hitId !== null) return hitId; // a disc under the cursor wins over any bridge
   return pickBridge({ bridges, points: positions, mx: x, my: y, tol });
 }
+
+/**
+ * The resource-marker dot under (x,y), or null — over the SAME final positions
+ * the renderer painted (`Frame.markers`, offset applied in the viewModel).
+ * Nearest-within-`tol` wins, ties broken last-wins (the dot drawn on top).
+ * `tol` defaults finger-friendly: the dot radius is 4–5px, stacked 14px apart,
+ * so nearest-wins keeps 10px generous without grabbing a neighbour. Pure —
+ * markers are plain `{id, plateauId, x, y}` shapes from the Frame.
+ */
+export function hitMarkers(markers, x, y, tol = 10) {
+  let hit = null;
+  let best = tol * tol; // inclusive, matching the disc rule above
+  for (const m of markers ?? []) {
+    const d = (m.x - x) ** 2 + (m.y - y) ** 2;
+    if (d <= best) {
+      best = d;
+      hit = m;
+    }
+  }
+  return hit;
+}
