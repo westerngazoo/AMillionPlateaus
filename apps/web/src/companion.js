@@ -22,7 +22,10 @@ export function assembleMessages(voice, grounding, history, userText) {
 // OFFLINE reply (no model configured); it does NOT stand in for transport. Real
 // transport fidelity is proven against the openai-compatible adapter with an
 // injected fake `fetch` (see model + companion tests).
-export async function sendTurn(cfg, messages, deps = { fetch: globalThis.fetch }) {
+// Default fetch is a WRAPPER, never the bare reference: `{ fetch: globalThis.fetch }`
+// invokes fetch with `this === deps`, which every browser rejects as
+// "Illegal invocation" (Node tolerates it — tests passed while production broke).
+export async function sendTurn(cfg, messages, deps = { fetch: (...a) => globalThis.fetch(...a) }) {
   if (cfg.kind === "fake") {
     return `(${cfg.model || "offline"}) I hear you: "${messages.at(-1).content}". Configure a model to go deeper.`;
   }
@@ -39,7 +42,7 @@ export async function sendTurn(cfg, messages, deps = { fetch: globalThis.fetch }
   return parseResponse(cfg, await res.json());
 }
 
-export async function sendVisionTurn(cfg, messages, deps = { fetch: globalThis.fetch }) {
+export async function sendVisionTurn(cfg, messages, deps = { fetch: (...a) => globalThis.fetch(...a) }) {
   if (cfg.kind === "fake") {
     return `(${cfg.model || "offline"}) [Image received] I see your image. Configure a multimodal model to read it.`;
   }
