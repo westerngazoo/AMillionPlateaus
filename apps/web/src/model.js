@@ -83,14 +83,18 @@ export const PRESETS = [
   {
     // Google exposes an OpenAI-compatible surface for Gemini, so the same
     // adapter reaches it with only a different base URL + key. The free AI
-    // Studio tier (aistudio.google.com/apikey) is generous enough for study,
-    // and its endpoint returns permissive CORS headers, so the browser can
-    // call it directly — no proxy. Swap `model` for any Gemini you can access.
+    // Studio tier (aistudio.google.com/apikey) is generous enough for study
+    // (2.5-flash: 10 req/min, 250/day), and its endpoint returns permissive
+    // CORS headers, so the browser can call it directly — no proxy. Swap
+    // `model` for any Gemini you can access — `gemini-2.5-flash-lite` has the
+    // biggest free quota (15/min, 1000/day). NOTE: a RETIRED model id answers
+    // 429 for every request (gemini-2.0-flash died 2026-03-03 and shipped here
+    // as the default — every Gemini connect looked "rate limited").
     id: "gemini-free",
     kind: "openai-compatible",
     label: "Google Gemini (free tier — paste a free key)",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     needsKey: true,
   },
   {
