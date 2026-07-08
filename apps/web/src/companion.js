@@ -8,6 +8,19 @@
 
 import { buildRequest, parseResponse } from "./model.js";
 
+// A status code alone ("model HTTP 429") sent the owner debugging quota when
+// the real cause was a RETIRED model id — say what each common status usually
+// means for a bring-your-own-key setup, right in the error the UI shows.
+export function httpHint(status) {
+  if (status === 401 || status === 403) return " — key rejected: re-paste it in Model setup";
+  if (status === 404) return " — model id unknown/retired: update the Model field in Model setup";
+  if (status === 429)
+    return " — rate/quota limited: wait a minute (free tiers are per-minute), or the model id is retired (retired Gemini ids answer 429 to everything — try gemini-2.5-flash)";
+  if (status >= 500) return " — provider outage: retry shortly";
+  return "";
+}
+
+
 // Assemble the chat messages: a system message (persona voice + graph grounding),
 // the prior turns, then the new user message. Pure.
 export function assembleMessages(voice, grounding, history, userText) {
@@ -38,7 +51,7 @@ export async function sendTurn(cfg, messages, deps = { fetch: (...a) => globalTh
     // Surface it distinctly from an HTTP-status error; both are caught by the UI.
     throw new Error(`model unreachable (CORS/network): ${e.message}`);
   }
-  if (!res.ok) throw new Error(`model HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`model HTTP ${res.status}${httpHint(res.status)}`);
   return parseResponse(cfg, await res.json());
 }
 
@@ -53,6 +66,6 @@ export async function sendVisionTurn(cfg, messages, deps = { fetch: (...a) => gl
   } catch (e) {
     throw new Error(`model unreachable (CORS/network): ${e.message}`);
   }
-  if (!res.ok) throw new Error(`model HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`model HTTP ${res.status}${httpHint(res.status)}`);
   return parseResponse(cfg, await res.json());
 }

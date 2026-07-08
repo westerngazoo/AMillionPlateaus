@@ -22,7 +22,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const PORT = process.argv[2] ?? "8151";
-const DEBUG_PORT = 9333;
 const APP_URL = `http://localhost:${PORT}/`;
 const TIMEOUT_MS = 60_000;
 
@@ -41,13 +40,16 @@ if (!chrome) {
 }
 
 const profile = mkdtempSync(join(tmpdir(), "mp-smoke-"));
+// port=0: Chrome picks a free port and writes it to <profile>/DevToolsActivePort
+// — the canonical handshake, immune to port contention on busy CI runners
+// (a fixed port + short wait flaked with "endpoint never came up").
 const proc = spawn(chrome, [
   "--headless",
   "--disable-gpu",
   "--no-sandbox",
   "--no-first-run",
   `--user-data-dir=${profile}`,
-  `--remote-debugging-port=${DEBUG_PORT}`,
+  "--remote-debugging-port=0",
   "about:blank",
 ], { stdio: "ignore" });
 
@@ -62,15 +64,26 @@ setTimeout(() => cleanup(1, "smoke: FAIL — timed out; the app never left the l
 // Wait for the DevTools endpoint, open the page target, then poll the HUD.
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+import { readFileSync } from "node:fs";
+let debugPort = null;
+for (let i = 0; i < 150 && !debugPort; i++) {
+  await wait(200); // up to 30s — slow runners need it
+  try {
+    const line = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0].trim();
+    if (line) debugPort = Number(line);
+  } catch {}
+}
+if (!debugPort) cleanup(1, "smoke: FAIL — Chrome never wrote DevToolsActivePort");
+
 let target = null;
 for (let i = 0; i < 50 && !target; i++) {
   await wait(200);
   try {
-    const list = await fetch(`http://localhost:${DEBUG_PORT}/json`).then((r) => r.json());
+    const list = await fetch(`http://localhost:${debugPort}/json`).then((r) => r.json());
     target = list.find((t) => t.type === "page");
   } catch {}
 }
-if (!target) cleanup(1, "smoke: FAIL — DevTools endpoint never came up");
+if (!target) cleanup(1, "smoke: FAIL — DevTools endpoint never answered on the advertised port");
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 let seq = 0;

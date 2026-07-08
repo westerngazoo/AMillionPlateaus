@@ -72,3 +72,20 @@ test("LM Studio ships as a key-less local preset on the OpenAI-compatible adapte
   assert.equal(req.url, "http://localhost:1234/v1/chat/completions");
   assert.equal("authorization" in req.headers, false);
 });
+
+test("the Gemini preset points at a LIVE free-tier model (a retired id 429s everything)", () => {
+  const g = PRESETS.find((p) => p.id === "gemini-free");
+  assert.ok(g, "the Gemini preset exists");
+  assert.notEqual(g.model, "gemini-2.0-flash", "retired 2026-03-03 — answered 429 to every request");
+  assert.match(g.model, /^gemini-2\.5-|^gemini-3/, "a current free-tier generation");
+});
+
+test("httpHint explains the statuses a BYO-key learner actually hits", async () => {
+  const { httpHint } = await import("./companion.js");
+  assert.match(httpHint(429), /rate\/quota/);
+  assert.match(httpHint(429), /retired/); // the gemini-2.0-flash lesson
+  assert.match(httpHint(401), /key rejected/);
+  assert.match(httpHint(404), /retired/);
+  assert.match(httpHint(500), /outage/);
+  assert.equal(httpHint(418), "");
+});
