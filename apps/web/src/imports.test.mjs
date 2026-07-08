@@ -43,6 +43,10 @@ test("every relative import in apps/web resolves to a file on disk (#73 class)",
     for (const match of source.matchAll(SPEC_RE)) {
       const spec = match[1];
       if (!spec.startsWith("./") && !spec.startsWith("../")) continue; // bare/URL: not ours
+      // pkg/ is the wasm-pack OUTPUT — gitignored by design, absent in the CI
+      // checkout. The smoke job builds it and boots the app, so a broken pkg
+      // import still fails CI — just in the job that actually has the artifact.
+      if (/^\.\.?\/pkg\//.test(spec)) continue;
       if (existsSync(normalize(join(dirname(file), spec)))) continue;
       if (KNOWN_MISSING.some((k) => k.file === rel && k.spec === spec)) continue;
       dangling.push(`${rel} → ${spec}`);
