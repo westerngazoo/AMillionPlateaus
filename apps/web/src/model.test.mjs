@@ -89,3 +89,16 @@ test("httpHint explains the statuses a BYO-key learner actually hits", async () 
   assert.match(httpHint(500), /outage/);
   assert.equal(httpHint(418), "");
 });
+
+test("Groq ships as a key-bearing free-tier preset on the OpenAI-compatible adapter", () => {
+  const g = PRESETS.find((p) => p.id === "groq-free");
+  assert.ok(g, "a Groq preset exists");
+  assert.equal(g.kind, "openai-compatible");
+  assert.equal(g.needsKey, true);
+  assert.equal(g.endpoint, "https://api.groq.com/openai/v1");
+  // flows through the shared adapter: right URL, bearer auth, no anthropic header
+  const req = buildRequest({ kind: g.kind, endpoint: g.endpoint, model: g.model, apiKey: "k" }, []);
+  assert.equal(req.url, "https://api.groq.com/openai/v1/chat/completions");
+  assert.equal(req.headers.authorization, "Bearer k");
+  assert.equal("anthropic-dangerous-direct-browser-access" in req.headers, false);
+});

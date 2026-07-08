@@ -98,6 +98,20 @@ export const PRESETS = [
     needsKey: true,
   },
   {
+    // Groq's developer tier is free with NO card (console.groq.com) and beats
+    // Gemini's free tier for study chat: 30 req/min + 1,000/day (vs 10/250),
+    // on very fast LPU inference. OpenAI-compatible + CORS-open (verified with
+    // a live preflight against this app's origin), so browser-direct works.
+    // Swap `model` for any you can access — llama-4-scout has a bigger daily
+    // token budget; llama-3.3-70b answers stronger per token.
+    id: "groq-free",
+    kind: "openai-compatible",
+    label: "Groq (free tier, fast — paste a free key)",
+    endpoint: "https://api.groq.com/openai/v1",
+    model: "llama-3.3-70b-versatile",
+    needsKey: true,
+  },
+  {
     // Anthropic exposes an OpenAI-compatible surface for Claude, reachable from
     // the browser once the adapter sends the anthropic-dangerous-direct-browser-
     // access header (buildRequest adds it for this host). Swap `model` for any
