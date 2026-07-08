@@ -103,3 +103,43 @@ jobs:
       - name: wasm-pack build crates/mp-wasm
         working-directory: AMillionPlateaus
         run: wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
+
+  smoke:
+    # Does the REAL app boot in a REAL browser? Exists because three defects
+    # shipped that node-only tests cannot see (a dangling import, a browser-only
+    # fetch binding, an IndexedDB boot deadlock — #73/#75/#76): each one passed
+    # `node --test` and still deployed a black screen. Headless Chrome is
+    # preinstalled on the runner — still zero project dependencies.
+    name: Smoke — app boots in headless Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AMillionPlateaus
+        uses: actions/checkout@v4
+        with:
+          path: AMillionPlateaus
+      - name: Checkout garust (sibling path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: westerngazoo/garust
+          path: garust
+          token: ${{ secrets.GARUST_TOKEN || github.token }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: AMillionPlateaus
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: Build the wasm bundle
+        working-directory: AMillionPlateaus
+        run: wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
+      - name: Setup Node >= 22 (built-in WebSocket for the CDP smoke client)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Boot the app in headless Chrome (CDP-poll the HUD until drawn)
+        working-directory: AMillionPlateaus
+        run: ./scripts/smoke.sh
