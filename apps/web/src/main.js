@@ -52,6 +52,16 @@ import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
 import { CS_PLATEAUS, CS_BRIDGES, CS_RESOURCES, CS_PATHS } from "./cs-curriculum.js";
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
+import {
+  DEEP_STUDY_ACTIONS,
+  mentalModelsPrompt,
+  disagreementsPrompt,
+  deepQuizPrompt,
+  evaluatePrompt,
+  hiddenConnectionsPrompt,
+  gapMapPrompt,
+  feynmanPrompt,
+} from "./study-prompts.js";
 import { PRESETS, PROVIDERS, isConfigured, visionMessages } from "./model.js";
 import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
@@ -2008,6 +2018,92 @@ async function main() {
     btn.textContent = a.label;
     btn.addEventListener("click", () => studyAction(a));
     studyButtons.append(btn);
+  }
+
+  // ── Deep study (R-0048): the owner's NotebookLM prompt pack, graph-adapted ────
+  // Same send path as studyAction; the difference is CONTEXT: mental models read
+  // the whole DOMAIN, deep-quiz/connections read the bridged NEIGHBOURS, the gap
+  // map reads the REAL mastered/studying sets + path position, and the two
+  // template verbs (Feynman / grade-my-answer) prefill the companion input so
+  // the learner answers in their OWN words before sending.
+  function deepStudyContext(scope) {
+    const g = doc.to_graph();
+    const plateaus = g.plateaus();
+    const me = studyPlateau;
+    if (scope === "domain") {
+      const topics = plateaus
+        .filter((p) => p.domain_id === me.domain_id)
+        .map((p) => ({ name: p.name, body: stripChallenges(p.description || "") }));
+      return { domainLabel: domainLabelOf(me.domain_id) ?? "this domain", topics };
+    }
+    if (scope === "neighbors") {
+      const neighbors = [];
+      for (const b of g.bridges()) {
+        const otherId = b.from === me.id ? b.to : b.to === me.id ? b.from : null;
+        if (!otherId) continue;
+        const other = plateaus.find((p) => p.id === otherId);
+        if (other) neighbors.push({ name: other.name, concept: b.concept });
+      }
+      return { neighbors };
+    }
+    if (scope === "progress") {
+      const topics = plateaus
+        .filter((p) => p.domain_id === me.domain_id)
+        .map((p) => ({
+          name: p.name,
+          status: mastered.has(p.id) ? "mastered" : visited.has(p.id) ? "studying" : "untouched",
+        }));
+      const followed = followPathId ? loadPaths()[followPathId] : null;
+      const nextId = followNext();
+      const next = nextId ? plateaus.find((p) => p.id === nextId)?.name ?? null : null;
+      return {
+        domainLabel: domainLabelOf(me.domain_id) ?? "this domain",
+        topics,
+        pathTitle: followed?.title ?? null,
+        nextStep: next,
+      };
+    }
+    return {};
+  }
+  function deepStudy(action) {
+    if (!studyPlateau || !activePersona) return;
+    if (action.scope === "template") {
+      // The learner's words are the payload: prefill the companion input with
+      // the template (placeholder included), open it, and let THEM send.
+      const t =
+        action.key === "feynman"
+          ? feynmanPrompt({ topicName: studyPlateau.name })
+          : evaluatePrompt({ topicName: studyPlateau.name });
+      companion.hidden = false;
+      companionInput.value = t;
+      companionInput.focus();
+      showStudyReply("Template loaded in the companion box below — replace the [PLACEHOLDER] with your own words and send.");
+      return;
+    }
+    try {
+      const ctx = deepStudyContext(action.scope);
+      const prompt =
+        action.key === "models"
+          ? mentalModelsPrompt(ctx)
+          : action.key === "disagree"
+            ? disagreementsPrompt()
+            : action.key === "deepquiz"
+              ? deepQuizPrompt(ctx)
+              : action.key === "connections"
+                ? hiddenConnectionsPrompt(ctx)
+                : gapMapPrompt(ctx);
+      studyAction({ key: action.key, label: action.label, prompt });
+    } catch (err) {
+      showStudyReply(`⚠ ${err.message}`); // context building must never die silently
+    }
+  }
+  const deepRow = document.getElementById("detail-deep-study");
+  for (const a of DEEP_STUDY_ACTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => deepStudy(a));
+    deepRow.append(btn);
   }
 
   // ── Rhizome drill-down (R-0044) ──────────────────────────────────────────────

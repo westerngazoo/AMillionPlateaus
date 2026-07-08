@@ -77,3 +77,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0045](0045-rich-note-capture.md) | Rich note capture: external search deep-links (done) + QR-paired mobile photo of handwritten notes → attach + OCR via the connected multimodal companion | POC — Knowledge content | Draft |
 | [R-0046](0046-in-browser-compute-cell.md) | In-browser compute cell: run real Python (Pyodide, numpy/sympy) on a plateau, offline & self-hosted; save a cell as a shareable "Notebook" resource | POC — Knowledge content | Accepted |
 | [R-0047](0047-installable-pwa.md) | Installable offline PWA: install to desktop/phone/Boox; the whole app works with no network after one load | POC — Reach | Accepted |
+| [R-0048](0048-deep-study-prompts.md) | Deep study: the NotebookLM prompt patterns (mental models, disagreements, deep quiz, hidden connections, gap map, Feynman), graph-grounded | POC — Knowledge content | Accepted |
