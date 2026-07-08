@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createSnapshotStore, SNAPSHOT_KEY } from "./persistence.js";
+import { createSnapshotStore, createMediaStore, openWithStores, SNAPSHOT_KEY, STORE, MEDIA_STORE } from "./persistence.js";
 
 // ── a minimal in-memory IndexedDB fake ──────────────────────────────────────
 // Mirrors just the request/transaction event model the store uses. Writes are
@@ -18,6 +18,8 @@ function fakeIDB(initial = {}) {
   const data = new Map(Object.entries(initial));
   const stores = new Set();
   const db = {
+    version: 1,
+    close: () => {},
     objectStoreNames: { contains: (n) => stores.has(n) },
     createObjectStore: (n) => stores.add(n),
     transaction() {
@@ -145,4 +147,93 @@ test("no IndexedDB ⇒ inert store: load null, save/flush safe no-ops (AC7)", as
   assert.equal(await store.load(), null);
   assert.doesNotThrow(() => store.save(bytes(1, 2, 3)));
   await assert.doesNotReject(() => store.flush());
+});
+
+// ── openWithStores: the boot-must-never-block contract ───────────────────────
+// R-0045 shipped a blind open(DB_NAME, 2) at boot; the version upgrade waits
+// forever while any pre-R-0045 tab holds v1 → the app froze at "loading…" in
+// production. These pin the fix: versionless-first, upgrade only when a store
+// is missing, REJECT (not hang) when an old tab blocks the upgrade.
+
+// A versioned fake: tracks stores + version; `blockUpgrades` simulates an old
+// tab holding the database open (fires onblocked, never onsuccess).
+function versionedIDB({ version = 1, stores = [], blockUpgrades = false } = {}) {
+  const state = { version, stores: new Set(stores), opens: [] };
+  function makeDb() {
+    return {
+      get version() { return state.version; },
+      close: () => {},
+      objectStoreNames: { contains: (n) => state.stores.has(n) },
+      createObjectStore: (n) => state.stores.add(n),
+      transaction() {
+        const tx = {};
+        tx.objectStore = () => ({
+          get: () => { const r = {}; queueMicrotask(() => { r.result = undefined; r.onsuccess?.(); }); return r; },
+          put: () => { const r = {}; queueMicrotask(() => r.onsuccess?.()); return r; },
+        });
+        queueMicrotask(() => tx.oncomplete?.());
+        return tx;
+      },
+    };
+  }
+  return {
+    _state: state,
+    open(_name, reqVersion) {
+      state.opens.push(reqVersion ?? null);
+      const req = {};
+      queueMicrotask(() => {
+        if (reqVersion === undefined) { // versionless: attach, never upgrade
+          req.result = makeDb();
+          req.onsuccess?.();
+        } else if (blockUpgrades) {
+          req.onblocked?.(); // an old connection never yields
+        } else {
+          state.version = reqVersion;
+          req.result = makeDb();
+          req.onupgradeneeded?.();
+          req.onsuccess?.();
+        }
+      });
+      return req;
+    },
+  };
+}
+
+test("boot open on a legacy v1 db attaches WITHOUT any upgrade (the outage regression)", async () => {
+  const idb = versionedIDB({ version: 1, stores: [STORE] }); // pre-R-0045 db
+  const db = await openWithStores(idb, [STORE]);
+  assert.ok(db.objectStoreNames.contains(STORE));
+  assert.deepEqual(idb._state.opens, [null], "exactly one VERSIONLESS open — no version request, nothing to block");
+  assert.equal(idb._state.version, 1, "the legacy db is left at v1");
+});
+
+test("boot open on a legacy v1 db succeeds even while old tabs would block upgrades", async () => {
+  const idb = versionedIDB({ version: 1, stores: [STORE], blockUpgrades: true });
+  const db = await openWithStores(idb, [STORE]); // never requests a version → never blocked
+  assert.ok(db.objectStoreNames.contains(STORE));
+});
+
+test("a fresh empty db upgrades once and creates both stores", async () => {
+  const idb = versionedIDB({ version: 1, stores: [] });
+  const db = await openWithStores(idb, [STORE]);
+  assert.ok(db.objectStoreNames.contains(STORE));
+  assert.ok(db.objectStoreNames.contains(MEDIA_STORE));
+  assert.equal(idb._state.version, 2);
+});
+
+test("a BLOCKED media upgrade rejects — and mediaStore degrades to null, never hangs", async () => {
+  const idb = versionedIDB({ version: 1, stores: [STORE], blockUpgrades: true });
+  await assert.rejects(() => openWithStores(idb, [STORE, MEDIA_STORE]), /blocked/);
+  const media = createMediaStore(idb);
+  assert.equal(await media.get("some-id"), null); // resolves, no hang (AC7 discipline)
+  await assert.doesNotReject(() => media.put("some-id", new Uint8Array([1])));
+});
+
+test("connections yield to future upgrades (onversionchange closes)", async () => {
+  const idb = versionedIDB({ version: 2, stores: [STORE, MEDIA_STORE] });
+  const db = await openWithStores(idb, [STORE]);
+  let closed = false;
+  db.close = () => { closed = true; };
+  db.onversionchange();
+  assert.ok(closed, "the handler closes the connection so a new tab can upgrade");
 });
