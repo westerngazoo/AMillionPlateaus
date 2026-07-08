@@ -140,6 +140,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Boot the app in headless Chrome (CDP: poll the HUD until drawn)
+      - name: Boot the app in headless Chrome (CDP-poll the HUD until drawn)
         working-directory: AMillionPlateaus
         run: ./scripts/smoke.sh
