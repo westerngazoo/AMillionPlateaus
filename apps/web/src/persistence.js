@@ -20,6 +20,71 @@ export const MEDIA_STORE = "media";
 // serialization changes, and old blobs are simply never read (clean discard).
 export const SNAPSHOT_KEY = "crdt-doc-v1";
 
+/**
+ * Open the app database, requiring `required` object stores — WITHOUT ever
+ * letting boot hang on a version upgrade. The R-0045 media store shipped as a
+ * blind `open(DB_NAME, 2)` at boot; an IndexedDB upgrade WAITS INDEFINITELY
+ * while any older tab / installed PWA holds version 1 open, and pre-R-0045
+ * clients never close their connection — so the app froze at "loading…" on
+ * every device with an old tab alive (the production black-screen outage).
+ *
+ * Strategy:
+ * 1. Open VERSIONLESS — attaches to v1 legacy and v2 databases alike, and can
+ *    never block. If the required stores exist (legacy v1 always has the
+ *    snapshot store), that's the answer.
+ * 2. Only when a store is genuinely missing, upgrade to `version + 1` —
+ *    a fresh browser (empty db), or the first MEDIA use on a legacy db.
+ * 3. Every connection we hand out auto-yields to future upgrades
+ *    (`onversionchange → close`), so new clients never become the blocker,
+ *    and an upgrade that IS blocked (an old tab still alive) REJECTS instead
+ *    of hanging — callers degrade (media reads null) and retry later.
+ */
+export function openWithStores(idb, required) {
+  return new Promise((resolve, reject) => {
+    const first = idb.open(DB_NAME); // versionless: never triggers an upgrade
+    first.onerror = () => reject(first.error);
+    first.onsuccess = () => {
+      const db = first.result;
+      db.onversionchange = () => db.close(); // yield: never block a future upgrade
+      const missing = required.filter((s) => !db.objectStoreNames.contains(s));
+      if (missing.length === 0) return resolve(db);
+
+      const nextVersion = Number(db.version || 1) + 1;
+      db.close();
+      let settled = false;
+      const up = idb.open(DB_NAME, nextVersion);
+      up.onupgradeneeded = () => {
+        const udb = up.result;
+        for (const s of [STORE, MEDIA_STORE]) {
+          if (!udb.objectStoreNames.contains(s)) udb.createObjectStore(s);
+        }
+      };
+      up.onblocked = () => {
+        // An old-version connection is alive elsewhere. Reject NOW (the caller
+        // degrades honestly); if the upgrade later completes, onsuccess closes
+        // the unused connection so we never hold the new version hostage.
+        if (!settled) {
+          settled = true;
+          reject(new Error("IndexedDB upgrade blocked by another open tab/app"));
+        }
+      };
+      up.onsuccess = () => {
+        const udb = up.result;
+        if (settled) return udb.close();
+        settled = true;
+        udb.onversionchange = () => udb.close();
+        resolve(udb);
+      };
+      up.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(up.error);
+        }
+      };
+    };
+  });
+}
+
 // createSnapshotStore({ idb, debounceMs, schedule }) →
 //   { load(): Promise<Uint8Array|null>, save(bytes): void, flush(): Promise<void> }
 export function createSnapshotStore({
@@ -35,19 +100,12 @@ export function createSnapshotStore({
   let armed = false; // a flush is scheduled
 
   function open() {
+    // BOOT-critical: requires only the snapshot store, which every db version
+    // has — so this never upgrades and NEVER blocks on other tabs.
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = idb.open(DB_NAME, 2);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-        if (!db.objectStoreNames.contains(MEDIA_STORE)) db.createObjectStore(MEDIA_STORE);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => {
-        dbPromise = null; // let a later call retry rather than cache the failure
-        reject(req.error);
-      };
+    dbPromise = openWithStores(idb, [STORE]).catch((e) => {
+      dbPromise = null; // let a later call retry rather than cache the failure
+      throw e;
     });
     return dbPromise;
   }
@@ -115,16 +173,13 @@ export function createMediaStore(idb = globalThis.indexedDB) {
   if (!idb) return { async get() { return null; }, async put() {} };
   let dbPromise = null;
   function open() {
+    // NON-boot: needs the media store, so a legacy v1 db upgrades HERE — at
+    // first media use, not at boot. If an old tab blocks the upgrade this
+    // rejects (get → null, put → swallowed) and retries on the next call.
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = idb.open(DB_NAME, 2);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-        if (!db.objectStoreNames.contains(MEDIA_STORE)) db.createObjectStore(MEDIA_STORE);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => { dbPromise = null; reject(req.error); };
+    dbPromise = openWithStores(idb, [STORE, MEDIA_STORE]).catch((e) => {
+      dbPromise = null;
+      throw e;
     });
     return dbPromise;
   }
