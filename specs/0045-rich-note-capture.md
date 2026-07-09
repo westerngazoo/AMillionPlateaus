@@ -25,7 +25,7 @@ on `main`;** this spec specifies slices 1–3 (issues #60 / #61 / #62).
 
 ### 2.0 External search deep-links (SHIPPED — AC0)
 
-`main.js`: `SEARCH_ENGINES` (Perplexity / Wikipedia / Scholar) + `renderSearchLinks(p)` — a
+`main.js`: `SEARCH_ENGINES` (Google / Gemini AI Mode / Wikipedia / Scholar) + `renderSearchLinks(p)` — a
 `#detail-search` row of `<a target="_blank" rel="noopener">` prefilled with the URL-encoded plateau
 name. The learner chooses to click; nothing is auto-sent.
 
