@@ -35,14 +35,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         Some("merge") if args.len() == 4 => {
             let bytes = std::fs::read(&args[3])?; // io::Error → Box<dyn Error>
             mp_host::merge(Path::new(&args[2]), &bytes)?;
-            println!("merged {} into {}", &args[3], &args[2]);
+            println!("merged {} into {}", args[3], args[2]);
         }
         Some("import") if args.len() == 4 => {
             // import <vault-dir> <out.bin> → a browser-loadable CrdtDoc save-blob.
             let s = mp_host::import(Path::new(&args[2]), Path::new(&args[3]))?;
             println!(
                 "imported {} → {} ({} notes · {} bridges · {} resources)",
-                &args[2], &args[3], s.notes, s.bridges, s.resources
+                args[2], args[3], s.notes, s.bridges, s.resources
             );
         }
         _ => {
