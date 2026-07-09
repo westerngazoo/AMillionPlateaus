@@ -145,6 +145,23 @@ test("a send before open is queued, then flushed on open (AC6)", async () => {
   assert.deepEqual([...gotB[0]], [7, 7], "queued message flushed on open");
 });
 
+test("a sendMedia before open is queued, then flushed on open (SPEC-0045)", async () => {
+  const net = fakeNetwork();
+  const gotB = [];
+  const peerA = createPeer({ rtcFactory: net.offerer });
+  const peerB = createPeer({ rtcFactory: net.answerer, onMediaMessage: (m) => gotB.push(m) });
+
+  const offer = await peerA.createOffer();
+  const answer = await peerB.acceptOffer(offer);
+  await peerA.acceptAnswer(answer);
+
+  peerA.sendMedia(new Uint8Array([8, 8])); // channel still "connecting" → queued
+  assert.equal(gotB.length, 0, "nothing delivered before open");
+
+  net.openAll(); // flush the outbox
+  assert.deepEqual([...gotB[0]], [8, 8], "queued media message flushed on open");
+});
+
 test("a malformed offer blob rejects (caught upstream, AC4)", async () => {
   const net = fakeNetwork();
   const peer = createPeer({ rtcFactory: net.answerer });
@@ -165,4 +182,38 @@ test("the channel label is the shared constant", async () => {
   // The offerer's channel was created with CHANNEL_LABEL.
   assert.equal(typeof CHANNEL_LABEL, "string");
   assert.ok(CHANNEL_LABEL.length > 0);
+});
+
+test("media bytes cross both ways and never ride the sync channel (SPEC-0045)", async () => {
+  const net = fakeNetwork();
+  const gotSyncA = [];
+  const gotSyncB = [];
+  const gotMediaA = [];
+  const gotMediaB = [];
+  
+  const peerA = createPeer({ 
+    rtcFactory: net.offerer, 
+    onMessage: (m) => gotSyncA.push(m),
+    onMediaMessage: (m) => gotMediaA.push(m)
+  });
+  const peerB = createPeer({ 
+    rtcFactory: net.answerer, 
+    onMessage: (m) => gotSyncB.push(m),
+    onMediaMessage: (m) => gotMediaB.push(m)
+  });
+
+  const offer = await peerA.createOffer();
+  const answer = await peerB.acceptOffer(offer);
+  await peerA.acceptAnswer(answer);
+  net.openAll();
+
+  peerA.sendMedia(new Uint8Array([1, 2, 3]));
+  assert.equal(gotMediaB.length, 1, "A→B media delivered");
+  assert.deepEqual([...gotMediaB[0]], [1, 2, 3]);
+  assert.equal(gotSyncB.length, 0, "sync channel untouched");
+
+  peerB.sendMedia(new Uint8Array([9]));
+  assert.equal(gotMediaA.length, 1, "B→A media delivered");
+  assert.deepEqual([...gotMediaA[0]], [9]);
+  assert.equal(gotSyncA.length, 0, "sync channel untouched");
 });
