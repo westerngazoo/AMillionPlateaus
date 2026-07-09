@@ -1439,7 +1439,7 @@ async function main() {
       studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz"));
     }),
     studyMenuBtn("🔎  Search the web", "", (h) =>
-      window.open(`https://www.perplexity.ai/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
     ),
   );
   document.body.append(studyMenu);
@@ -1618,7 +1618,10 @@ async function main() {
   // name is URL-encoded and set via textContent — never interpolated as HTML.
   const detailSearch = document.getElementById("detail-search");
   const SEARCH_ENGINES = [
-    { label: "Perplexity", url: (q) => `https://www.perplexity.ai/search?q=${q}` },
+    // Perplexity dropped (it gates answers behind a paid tier). Google is free,
+    // and its AI Mode (udm=50) is the free AI-answer engine that replaces it.
+    { label: "Google", url: (q) => `https://www.google.com/search?q=${q}` },
+    { label: "Gemini", url: (q) => `https://www.google.com/search?q=${q}&udm=50` },
     { label: "Wikipedia", url: (q) => `https://en.wikipedia.org/w/index.php?search=${q}` },
     { label: "Scholar", url: (q) => `https://scholar.google.com/scholar?q=${q}` },
   ];
