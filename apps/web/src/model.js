@@ -82,19 +82,21 @@ export const PRESETS = [
   },
   {
     // Google exposes an OpenAI-compatible surface for Gemini, so the same
-    // adapter reaches it with only a different base URL + key. The free AI
-    // Studio tier (aistudio.google.com/apikey) is generous enough for study
-    // (2.5-flash: 10 req/min, 250/day), and its endpoint returns permissive
-    // CORS headers, so the browser can call it directly — no proxy. Swap
-    // `model` for any Gemini you can access — `gemini-2.5-flash-lite` has the
-    // biggest free quota (15/min, 1000/day). NOTE: a RETIRED model id answers
-    // 429 for every request (gemini-2.0-flash died 2026-03-03 and shipped here
-    // as the default — every Gemini connect looked "rate limited").
+    // adapter reaches it with only a different base URL + key (free key at
+    // aistudio.google.com/apikey), and its endpoint returns permissive CORS so
+    // the browser calls it directly — no proxy. DEFAULT is `gemini-2.5-flash-lite`:
+    // the flash variant with the BIGGEST free quota (~15 req/min, 1,000/day) —
+    // 4× the daily headroom of plain 2.5-flash (~10/min, 250/day), so it is the
+    // most 429-resistant free choice. Swap `model` to `gemini-2.5-flash` for
+    // stronger answers if you don't hit the limit. NOTE: a RETIRED model id
+    // answers 429 to EVERY request (gemini-2.0-flash died 2026-03-03) — a single
+    // query 429ing usually means a stale saved id, not real quota; re-pick this
+    // preset in Model setup and Save to overwrite it.
     id: "gemini-free",
     kind: "openai-compatible",
-    label: "Google Gemini (free tier — paste a free key)",
+    label: "Google Gemini Flash (free tier — paste a free key)",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
     needsKey: true,
   },
   {
