@@ -2558,8 +2558,58 @@ async function main() {
     }
   });
 
+  // ── Layout Controls (Fullscreen / Split Screen) ─────────────────────────────
+  const layoutDefault = document.getElementById("layout-default");
+  const layoutFull = document.getElementById("layout-full");
+  const layoutSplit = document.getElementById("layout-split");
+  const iframeContainer = document.getElementById("split-iframe-container");
+  const iframeTitle = document.getElementById("iframe-title");
+  const iframeClose = document.getElementById("iframe-close");
+  const splitIframe = document.getElementById("split-iframe");
+
+  function setLayout(layout) {
+    document.body.dataset.layout = layout;
+    layoutDefault.classList.toggle("active", layout === "default");
+    layoutFull.classList.toggle("active", layout === "full");
+    layoutSplit.classList.toggle("active", layout === "split");
+    if (layout !== "split") {
+      iframeContainer.hidden = true;
+      splitIframe.src = "";
+    }
+  }
+
+  layoutDefault.addEventListener("click", () => setLayout("default"));
+  layoutFull.addEventListener("click", () => setLayout("full"));
+  layoutSplit.addEventListener("click", () => setLayout("split"));
+
+  iframeClose.addEventListener("click", () => {
+    iframeContainer.hidden = true;
+    splitIframe.src = "";
+  });
+
+  // Intercept links inside the plateau detail to open in iframe if in split mode
+  detail.addEventListener("click", (e) => {
+    const link = e.target.closest("a");
+    if (!link) return;
+    
+    const href = link.getAttribute("href");
+    if (href && href.startsWith("http")) {
+      if (document.body.dataset.layout === "split") {
+        e.preventDefault();
+        iframeContainer.hidden = false;
+        try {
+          iframeTitle.textContent = new URL(href).hostname;
+        } catch (_) {
+          iframeTitle.textContent = "Browser";
+        }
+        splitIframe.src = href;
+      }
+    }
+  });
+
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
+    setLayout("default");
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────
