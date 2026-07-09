@@ -256,11 +256,14 @@
       #plateau-detail[hidden] { display: none; }
       .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
       .detail-head h2 { margin: 0; font-size: 19px; color: #ffd166; }
-      #detail-close {
-        background: transparent; border: none; color: #9fb2c4;
-        font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px;
+      .detail-layout-controls { display: flex; align-items: center; gap: 4px; }
+      .detail-layout-controls button {
+        background: transparent; border: none; color: #8aa0b4;
+        font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1;
       }
-      #detail-close:hover { color: #e6eef6; }
+      .detail-layout-controls button:hover { color: #e6eef6; background: #1c2836; }
+      .detail-layout-controls button.active { color: #ffd166; background: #2a3a4c; }
+      #detail-close { font-size: 22px; margin-left: 4px; padding: 0 4px; }
       .detail-body { font-size: 14px; line-height: 1.55; color: #cdd9e6; }
       .detail-body h1, .detail-body h2, .detail-body h3,
       .detail-body h4, .detail-body h5, .detail-body h6 { color: #e6eef6; margin: 14px 0 6px; line-height: 1.25; }
@@ -514,6 +517,41 @@
       .dp-error { font-size: 12px; color: #ffb4a8; margin: 0; }
       .dp-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
 
+      /* Layout modes for Plateau Detail */
+      body[data-layout="full"] #plateau-detail {
+        width: 100vw;
+        max-width: 100vw;
+      }
+      body[data-layout="split"] #plateau-detail {
+        width: 50vw;
+        max-width: 50vw;
+        left: 0;
+        right: auto;
+        border-left: none;
+        border-right: 1px solid #2a3543;
+      }
+      #split-iframe-container {
+        position: fixed;
+        top: 0; right: 0; bottom: 0;
+        width: 50vw;
+        z-index: 25;
+        background: #0d1219;
+        display: flex;
+        flex-direction: column;
+      }
+      #split-iframe-container[hidden] { display: none; }
+      .iframe-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 14px;
+        background: #131b25; border-bottom: 1px solid #2a3543;
+      }
+      #iframe-title { font-size: 13px; color: #8aa0b4; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #iframe-close { background: transparent; border: none; color: #9fb2c4; font-size: 18px; cursor: pointer; padding: 0 4px; }
+      #iframe-close:hover { color: #e6eef6; }
+      #split-iframe {
+        flex: 1; width: 100%; border: none; background: #fff;
+      }
+
       /* ── Mobile (R-0037 / SPEC-0037) ────────────────────────────────────────
          One phone breakpoint. These rules ONLY override at narrow widths — the
          desktop layout above is untouched. */
@@ -557,6 +595,10 @@
       <button id="travel-toggle">Travel</button>
       <button id="paths-toggle">Paths</button>
       <button id="model-setup">Model setup</button>
+      <!-- Local ⇄ hosted quick-switch (R-0049): flips between the last saved
+           local runtime (free) and the last saved hosted key — no re-pasting.
+           Hidden until a config exists on the other side. -->
+      <button id="model-flip" hidden>⇄ Local model</button>
       <button id="draft-plateau-toggle">Draft a plateau</button>
       <button id="draft-bridge-toggle">Draft a bridge</button>
       <button id="drop-marker-toggle">Drop a marker</button>
@@ -917,7 +959,12 @@
     <aside id="plateau-detail" hidden>
       <div class="detail-head">
         <h2 id="detail-name">Topic</h2>
-        <button id="detail-close" type="button" aria-label="Close">×</button>
+        <div class="detail-layout-controls">
+          <button id="layout-default" type="button" aria-label="Default View" title="Default view" class="active">◧</button>
+          <button id="layout-full" type="button" aria-label="Fullscreen" title="Fullscreen">□</button>
+          <button id="layout-split" type="button" aria-label="Split Screen" title="Split Screen">◫</button>
+          <button id="detail-close" type="button" aria-label="Close">×</button>
+        </div>
       </div>
 
       <!-- Connection view (R-0029): shown only in bridge mode (data-mode="bridge"),
@@ -1008,6 +1055,15 @@
         <p id="detail-add-error" class="dp-error" hidden></p>
       </form>
     </aside>
+
+    <!-- Split screen iframe container for browsing links -->
+    <div id="split-iframe-container" hidden>
+      <div class="iframe-head">
+        <span id="iframe-title">Browser</span>
+        <button id="iframe-close" type="button" aria-label="Close browser">×</button>
+      </div>
+      <iframe id="split-iframe" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+    </div>
     <p class="note">
       You hold a <strong>wizard key</strong> (Nostr/BIP340) minted in this browser:
       its public half is your stable id; the secret stays local and is never

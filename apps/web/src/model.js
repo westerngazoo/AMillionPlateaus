@@ -147,13 +147,56 @@ export function parseResponse(cfg, json) {
 
 // A config is usable iff it names a known provider with an endpoint+model, and
 // supplies a key when the provider needs one. The setup screen uses this to
-// decide whether the companion is "connected" (R-0007 AC1).
+// decide whether the companion is "connected" (R-0007 AC1). A LOCAL endpoint
+// never needs a key (Ollama/LM Studio are keyless) — without this exemption a
+// keyless local save silently fell back to offline (bug found by R-0049 tests).
 export function isConfigured(cfg) {
   if (!cfg || !PROVIDERS[cfg.kind]) return false;
   if (cfg.kind === "fake") return true;
   if (!cfg.endpoint || !cfg.model) return false;
-  if (PROVIDERS[cfg.kind].needsKey && !cfg.apiKey) return false;
+  if (PROVIDERS[cfg.kind].needsKey && !cfg.apiKey && !isLocalConfig(cfg)) return false;
   return true;
+}
+
+// ── Local ⇄ hosted quick-switch (R-0049) ───────────────────────────────────
+// The app remembers the last LOCAL config (a runtime on this machine — free)
+// and the last HOSTED one (a pasted key — may cost money), so switching is one
+// click with no re-pasting. Slots are plain data the UI persists next to the
+// active config, under the SAME trust boundary: this browser only, never
+// synced, never on the wire except as the request the active config builds
+// (R-0007 AC5). All three functions are pure.
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
+
+/** True iff the config points at a runtime on this machine (free to call). */
+export function isLocalConfig(cfg) {
+  if (!cfg || cfg.kind === "fake" || !cfg.endpoint) return false;
+  try {
+    return LOCAL_HOSTS.has(new URL(cfg.endpoint).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Store a just-saved usable config in its slot; fake/incomplete change nothing. */
+export function rememberSlot(slots, cfg) {
+  const next = { local: slots?.local ?? null, hosted: slots?.hosted ?? null };
+  if (!isConfigured(cfg) || cfg.kind === "fake") return next;
+  next[isLocalConfig(cfg) ? "local" : "hosted"] = cfg;
+  return next;
+}
+
+/**
+ * The config a flip would switch TO, or null when nothing is saved on the
+ * other side. From local → the hosted slot; from hosted → the local slot.
+ * From offline (fake) prefer LOCAL — the cost-free neighbour — falling back
+ * to hosted only if no local runtime was ever saved.
+ */
+export function flipTarget(slots, cfg) {
+  const usable = (c) => (c && isConfigured(c) ? c : null);
+  if (isLocalConfig(cfg)) return usable(slots?.hosted);
+  if (cfg?.kind === "fake") return usable(slots?.local) ?? usable(slots?.hosted);
+  return usable(slots?.local);
 }
 
 export function visionMessages(imageDataUri, prompt) {

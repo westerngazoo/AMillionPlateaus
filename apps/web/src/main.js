@@ -62,7 +62,15 @@ import {
   gapMapPrompt,
   feynmanPrompt,
 } from "./study-prompts.js";
-import { PRESETS, PROVIDERS, isConfigured, visionMessages } from "./model.js";
+import {
+  PRESETS,
+  PROVIDERS,
+  isConfigured,
+  visionMessages,
+  isLocalConfig,
+  rememberSlot,
+  flipTarget,
+} from "./model.js";
 import { shouldRegister, warmList, VENDOR_WARM } from "./pwa.js";
 import { buildGroundingContext } from "./companion-context.js";
 import { voiceFor } from "./companion-voice.js";
@@ -124,6 +132,22 @@ function loadConfig() {
 }
 function saveConfig(cfg) {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); // local only — never on the wire
+}
+
+// Local ⇄ hosted quick-switch slots (R-0049): the last saved config of each
+// class, so flipping runtimes never means re-pasting a key. Same trust
+// boundary as the active config: this browser only, never synced.
+const SLOTS_KEY = "mp.modelSlots";
+function loadSlots() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SLOTS_KEY)) || {};
+    return { local: s.local ?? null, hosted: s.hosted ?? null };
+  } catch {
+    return { local: null, hosted: null };
+  }
+}
+function saveSlots(slots) {
+  localStorage.setItem(SLOTS_KEY, JSON.stringify(slots)); // local only — never on the wire
 }
 
 // The most-recently authored persona is also a LOCAL lens (SPEC-0009 §2.5). We
@@ -392,6 +416,10 @@ async function main() {
 
   // Companion state — all LOCAL, never synced (R-0007 AC5).
   let modelConfig = loadConfig();
+  // Adopt a pre-R-0049 active config into its slot so the flip works for
+  // visitors who configured a model before the switch existed.
+  let modelSlots = rememberSlot(loadSlots(), modelConfig);
+  saveSlots(modelSlots);
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
@@ -907,10 +935,35 @@ async function main() {
   }
 
   document.getElementById("model-setup").addEventListener("click", openSetup);
+
+  // Local ⇄ hosted quick-switch (R-0049). The button names the side it would
+  // switch TO and hides when nothing is saved there. Local runtimes are free;
+  // this keeps "stop spending" one click away when a paid key is active.
+  const flipBtn = document.getElementById("model-flip");
+  function refreshFlipButton() {
+    const target = flipTarget(modelSlots, modelConfig);
+    flipBtn.hidden = !target;
+    if (target) {
+      const toLocal = isLocalConfig(target);
+      flipBtn.textContent = toLocal ? "⇄ Local model" : "⇄ Hosted model";
+      flipBtn.title = `Switch the companion to ${target.model} at ${target.endpoint}${toLocal ? " (free, on this machine)" : ""}`;
+    }
+  }
+  flipBtn.addEventListener("click", () => {
+    const target = flipTarget(modelSlots, modelConfig);
+    if (!target) return;
+    modelConfig = { ...target };
+    saveConfig(modelConfig);
+    refreshCompanionStatus();
+    refreshFlipButton();
+  });
+  refreshFlipButton();
+
   document.getElementById("setup-offline").addEventListener("click", () => {
     modelConfig = { ...OFFLINE_CONFIG };
     saveConfig(modelConfig);
     refreshCompanionStatus();
+    refreshFlipButton();
     setup.hidden = true;
   });
   document.getElementById("setup-save").addEventListener("click", () => {
@@ -923,7 +976,10 @@ async function main() {
     // Fall back to offline if the form is incomplete (keeps the UI usable).
     modelConfig = isConfigured(candidate) ? candidate : { ...OFFLINE_CONFIG };
     saveConfig(modelConfig);
+    modelSlots = rememberSlot(modelSlots, modelConfig); // file it for the flip (R-0049)
+    saveSlots(modelSlots);
     refreshCompanionStatus();
+    refreshFlipButton();
     setup.hidden = true;
   });
 
@@ -2502,8 +2558,58 @@ async function main() {
     }
   });
 
+  // ── Layout Controls (Fullscreen / Split Screen) ─────────────────────────────
+  const layoutDefault = document.getElementById("layout-default");
+  const layoutFull = document.getElementById("layout-full");
+  const layoutSplit = document.getElementById("layout-split");
+  const iframeContainer = document.getElementById("split-iframe-container");
+  const iframeTitle = document.getElementById("iframe-title");
+  const iframeClose = document.getElementById("iframe-close");
+  const splitIframe = document.getElementById("split-iframe");
+
+  function setLayout(layout) {
+    document.body.dataset.layout = layout;
+    layoutDefault.classList.toggle("active", layout === "default");
+    layoutFull.classList.toggle("active", layout === "full");
+    layoutSplit.classList.toggle("active", layout === "split");
+    if (layout !== "split") {
+      iframeContainer.hidden = true;
+      splitIframe.src = "";
+    }
+  }
+
+  layoutDefault.addEventListener("click", () => setLayout("default"));
+  layoutFull.addEventListener("click", () => setLayout("full"));
+  layoutSplit.addEventListener("click", () => setLayout("split"));
+
+  iframeClose.addEventListener("click", () => {
+    iframeContainer.hidden = true;
+    splitIframe.src = "";
+  });
+
+  // Intercept links inside the plateau detail to open in iframe if in split mode
+  detail.addEventListener("click", (e) => {
+    const link = e.target.closest("a");
+    if (!link) return;
+    
+    const href = link.getAttribute("href");
+    if (href && href.startsWith("http")) {
+      if (document.body.dataset.layout === "split") {
+        e.preventDefault();
+        iframeContainer.hidden = false;
+        try {
+          iframeTitle.textContent = new URL(href).hostname;
+        } catch (_) {
+          iframeTitle.textContent = "Browser";
+        }
+        splitIframe.src = href;
+      }
+    }
+  });
+
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
+    setLayout("default");
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────

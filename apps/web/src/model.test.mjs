@@ -53,6 +53,9 @@ test("isConfigured gates on endpoint/model and key-when-needed", () => {
   assert.equal(isConfigured({ kind: "fake" }), true); // offline fallback is always usable
   assert.equal(isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m" }), false); // hosted needs a key
   assert.equal(isConfigured({ kind: "openai-compatible", endpoint: "http://x/v1", model: "m", apiKey: "k" }), true);
+  // a LOCAL endpoint is usable with NO key (Ollama/LM Studio are keyless) —
+  // regression guard: this used to fall back to offline on save (R-0049)
+  assert.equal(isConfigured({ kind: "openai-compatible", endpoint: "http://localhost:11434/v1", model: "llama3.1" }), true);
 });
 
 test("presets offer at least two options including a key-less local one", () => {
@@ -88,6 +91,49 @@ test("httpHint explains the statuses a BYO-key learner actually hits", async () 
   assert.match(httpHint(404), /retired/);
   assert.match(httpHint(500), /outage/);
   assert.equal(httpHint(418), "");
+});
+
+test("isLocalConfig: this-machine endpoints are local; hosted, fake and junk are not", async () => {
+  const { isLocalConfig } = await import("./model.js");
+  const local = { kind: "openai-compatible", endpoint: "http://localhost:11434/v1", model: "llama3.1" };
+  const loop = { kind: "openai-compatible", endpoint: "http://127.0.0.1:1234/v1", model: "m" };
+  const hosted = { kind: "openai-compatible", endpoint: "https://api.groq.com/openai/v1", model: "m", apiKey: "k" };
+  assert.equal(isLocalConfig(local), true);
+  assert.equal(isLocalConfig(loop), true);
+  assert.equal(isLocalConfig(hosted), false);
+  assert.equal(isLocalConfig({ kind: "fake", model: "offline" }), false);
+  assert.equal(isLocalConfig({ kind: "openai-compatible", endpoint: "not a url", model: "m" }), false);
+  // a look-alike host must NOT count as local
+  assert.equal(isLocalConfig({ kind: "openai-compatible", endpoint: "https://localhost.evil.test/v1", model: "m" }), false);
+});
+
+test("rememberSlot files usable configs by class, ignores fake/incomplete, never mutates", async () => {
+  const { rememberSlot } = await import("./model.js");
+  const local = { kind: "openai-compatible", endpoint: "http://localhost:11434/v1", model: "llama3.1" };
+  const hosted = { kind: "openai-compatible", endpoint: "https://api.groq.com/openai/v1", model: "m", apiKey: "k" };
+  const s0 = { local: null, hosted: null };
+  const s1 = rememberSlot(s0, local);
+  const s2 = rememberSlot(s1, hosted);
+  assert.equal(s2.local, local);
+  assert.equal(s2.hosted, hosted);
+  assert.deepEqual(s0, { local: null, hosted: null }, "input slots untouched");
+  // fake and key-less hosted (unusable) change nothing
+  assert.deepEqual(rememberSlot(s2, { kind: "fake", model: "offline" }), s2);
+  assert.deepEqual(rememberSlot(s2, { kind: "openai-compatible", endpoint: "https://x/v1", model: "m" }), s2);
+});
+
+test("flipTarget crosses to the other side; offline prefers the cost-free local slot", async () => {
+  const { flipTarget } = await import("./model.js");
+  const local = { kind: "openai-compatible", endpoint: "http://localhost:11434/v1", model: "llama3.1" };
+  const hosted = { kind: "openai-compatible", endpoint: "https://api.groq.com/openai/v1", model: "m", apiKey: "k" };
+  const both = { local, hosted };
+  assert.equal(flipTarget(both, local), hosted);
+  assert.equal(flipTarget(both, hosted), local);
+  assert.equal(flipTarget(both, { kind: "fake", model: "offline" }), local, "offline flips to the free side first");
+  assert.equal(flipTarget({ local: null, hosted }, { kind: "fake" }), hosted, "…or hosted if no local was ever saved");
+  assert.equal(flipTarget({ local: null, hosted: null }, hosted), null, "nothing saved → no flip offered");
+  // a corrupt slot (e.g. hand-edited storage) is never offered
+  assert.equal(flipTarget({ local: { kind: "openai-compatible" }, hosted: null }, hosted), null);
 });
 
 test("Groq ships as a key-bearing free-tier preset on the OpenAI-compatible adapter", () => {
