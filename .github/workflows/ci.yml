@@ -98,7 +98,10 @@ jobs:
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
         with:
-          version: latest
+          # Pinned: 'latest' resolves via the GitHub API and silently falls back
+          # to an ancient bundled wasm-pack on rate-limit — which then can't
+          # parse workspace-inherited manifest fields (broke the smoke job).
+          version: 'v0.13.1'
       # Build-only check; pkg/ stays gitignored (never committed).
       - name: wasm-pack build crates/mp-wasm
         working-directory: AMillionPlateaus
@@ -132,7 +135,10 @@ jobs:
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
         with:
-          version: latest
+          # Pinned: 'latest' resolves via the GitHub API and silently falls back
+          # to an ancient bundled wasm-pack on rate-limit — which then can't
+          # parse workspace-inherited manifest fields (broke the smoke job).
+          version: 'v0.13.1'
       - name: Build the wasm bundle
         working-directory: AMillionPlateaus
         run: wasm-pack build crates/mp-wasm --target web --out-dir ../../apps/web/pkg
