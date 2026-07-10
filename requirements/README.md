@@ -81,3 +81,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0049](0049-model-quick-switch.md) | Local ⇄ hosted model quick-switch: one click between the free local runtime and the pasted-key provider, no re-pasting | POC — Reach | Accepted |
 | [R-0050](0050-audio-overview.md) | Audio overview (🎧 model-written two-host episode + browser TTS, $0) + study pack: study guide, FAQ, flashcards, briefing, timeline | POC — Knowledge content | Accepted |
 | [R-0051](0051-personal-library.md) | Personal library: pin your own PDFs (device-local, browser viewer, $0) + Drive links readable in the split pane | POC — Knowledge content | Accepted |
+| [R-0052](0052-private-shelf.md) | Private shelf: per-plateau resources that never enter the CRDT — Boox notes + private book collection, publish-when-ready | POC — Knowledge content | Accepted |
