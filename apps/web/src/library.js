@@ -65,3 +65,21 @@ export function frameableURL(href) {
     return href;
   }
 }
+
+/**
+ * What (if anything) a clicked link should load into the split reader pane.
+ * Returns null → let the browser handle the click normally (new tab / no-op).
+ * Returns { src, sandboxed } → intercept and load `src` in the pane:
+ *   - http(s) links load in their embeddable form, SANDBOXED (untrusted web);
+ *   - blob: links (a device-local PDF, R-0051) load UNsandboxed — Chromium's
+ *     built-in PDF viewer refuses to render inside a sandboxed iframe, and the
+ *     blob is the learner's own file, already openable in a plain tab. This is
+ *     what makes a local book on the Boox readable beside its topic.
+ * Only the split layout intercepts; every other layout returns null.
+ */
+export function paneTarget(href, layout) {
+  if (layout !== "split" || !href) return null;
+  if (href.startsWith("blob:")) return { src: href, sandboxed: false };
+  if (/^https?:\/\//i.test(href)) return { src: frameableURL(href), sandboxed: true };
+  return null; // mailto:, relative, javascript: (already sanitised upstream) …
+}

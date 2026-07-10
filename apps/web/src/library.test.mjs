@@ -4,7 +4,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { MAX_PDF_BYTES, pdfCheck, frameableURL } from "./library.js";
+import { MAX_PDF_BYTES, pdfCheck, frameableURL, paneTarget } from "./library.js";
+
+test("paneTarget: split layout routes http (embeddable+sandboxed) and blob (unsandboxed)", () => {
+  const web = paneTarget("https://drive.google.com/file/d/A1/view", "split");
+  assert.deepEqual(web, { src: "https://drive.google.com/file/d/A1/preview", sandboxed: true });
+  const pdf = paneTarget("blob:http://localhost/abc-123", "split");
+  assert.deepEqual(pdf, { src: "blob:http://localhost/abc-123", sandboxed: false });
+});
+
+test("paneTarget: every other layout — and non-web schemes — leave the click alone", () => {
+  assert.equal(paneTarget("https://example.com", "default"), null);
+  assert.equal(paneTarget("https://example.com", "full"), null);
+  assert.equal(paneTarget("blob:http://x/1", "default"), null);
+  assert.equal(paneTarget("mailto:a@b.c", "split"), null);
+  assert.equal(paneTarget("", "split"), null);
+  assert.equal(paneTarget(null, "split"), null);
+});
 
 test("pdfCheck: accepts by MIME and derives the title from the filename", () => {
   const r = pdfCheck({ name: "Sheaves in Geometry.pdf", type: "application/pdf", size: 1024 });
