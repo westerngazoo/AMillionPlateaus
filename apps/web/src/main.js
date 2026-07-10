@@ -68,6 +68,7 @@ import {
   timelinePrompt,
 } from "./study-prompts.js";
 import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
+import { pdfCheck, frameableURL } from "./library.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -1824,29 +1825,53 @@ async function main() {
 
       const imgUri = safeImageSrc(r.uri);
       if (imgUri) {
-        const img = document.createElement("img");
-        img.className = "res-image";
-        img.alt = r.title;
+        // A local media blob: could be a QR note photo (image) or a pinned PDF
+        // (R-0051). Branch on the STORED blob's type — the URI can't tell.
         const localId = r.uri.replace("resource://local/", "");
+        const container = document.createElement("div");
+        container.className = "res-image-container";
+        li.append(container);
         mediaStore.get(localId).then((blob) => {
-          if (blob) img.src = URL.createObjectURL(blob);
-        });
+          if (!blob) {
+            // The row synced but the bytes live in another browser's store.
+            const note = document.createElement("span");
+            note.className = "res-elsewhere";
+            note.textContent = `${r.title} — stored on another device`;
+            container.append(note);
+            return;
+          }
+          if (blob.type === "application/pdf") {
+            // R-0051: open in the browser's own PDF viewer (object URL) —
+            // offline, no renderer dependency, Boox-native reading.
+            const a = document.createElement("a");
+            a.className = "res-pdf-link";
+            a.textContent = `📄 ${r.title} — open PDF`;
+            a.href = URL.createObjectURL(blob);
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            container.append(a);
+            return;
+          }
+          const img = document.createElement("img");
+          img.className = "res-image";
+          img.alt = r.title;
+          img.src = URL.createObjectURL(blob);
 
-        const readBtn = document.createElement("button");
-        readBtn.type = "button";
-        readBtn.className = "res-read-btn";
-        readBtn.textContent = "Read it";
-        readBtn.addEventListener("click", () => {
-          mediaStore.get(localId).then((blob) => {
-            if (!blob) return;
+          const readBtn = document.createElement("button");
+          readBtn.type = "button";
+          readBtn.className = "res-read-btn";
+          readBtn.textContent = "Read it";
+          readBtn.addEventListener("click", () => {
             const reader = new FileReader();
             reader.onload = async () => {
               detailReply.textContent = "Reading image...";
               detailReply.hidden = false;
               try {
                 const msgs = visionMessages(reader.result, "Extract and format the math or notes from this image as Markdown. Respond ONLY with the extracted text, no conversational filler.");
-                const conf = JSON.parse(localStorage.getItem("mp-model") || "{\"kind\":\"fake\"}");
-                const res = await sendVisionTurn(conf, msgs);
+                // The ACTIVE config (was: a stale read of the never-written
+                // "mp-model" localStorage key, so OCR silently ran offline
+                // even with a multimodal model connected).
+                const res = await sendVisionTurn(modelConfig, msgs);
                 detailReply.innerHTML = renderMarkdown(res);
                 typesetMath(detailReply);
               } catch (e) {
@@ -1855,12 +1880,8 @@ async function main() {
             };
             reader.readAsDataURL(blob);
           });
+          container.append(img, readBtn);
         });
-
-        const container = document.createElement("div");
-        container.className = "res-image-container";
-        container.append(img, readBtn);
-        li.append(container);
       } else {
         const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
         if (href) {
@@ -2029,6 +2050,37 @@ async function main() {
     renderAlsoPin(studyPlateau.id); // reset the checklist (unchecked)
     addTitle.value = "";
     addUri.value = "";
+  });
+
+  // Pin a PDF from THIS device (R-0051): picked file → media-store blob →
+  // "Paper" resource at resource://local/<id>. The CRDT syncs only the row
+  // (title + local URI); the bytes stay in this browser's IndexedDB — other
+  // devices see the row honestly labelled as stored elsewhere. Works offline;
+  // on the Boox the PDFs already live on the device, so this IS the library.
+  const addPdfBtn = document.getElementById("detail-add-pdf-btn");
+  const addPdfInput = document.getElementById("detail-add-pdf");
+  addPdfBtn.addEventListener("click", () => addPdfInput.click());
+  addPdfInput.addEventListener("change", async () => {
+    const file = addPdfInput.files?.[0];
+    addPdfInput.value = ""; // so re-picking the same file re-fires `change`
+    if (!studyPlateau || !file) return;
+    const check = pdfCheck(file);
+    if (!check.ok) {
+      addError.textContent = check.error;
+      addError.hidden = false;
+      return;
+    }
+    addError.hidden = true;
+    const id = crypto.randomUUID();
+    await mediaStore.put(id, file); // a File IS a Blob; type survives for the viewer
+    const title = addTitle.value.trim() || check.title;
+    doc.add_resource(studyPlateau.id, title, "Paper", `resource://local/${id}`);
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    renderStudyResources();
+    addTitle.value = "";
   });
 
   // Study with the companion (R-0023 AC4): each action sends a prompt grounded in
@@ -2755,7 +2807,9 @@ async function main() {
         } catch (_) {
           iframeTitle.textContent = "Browser";
         }
-        splitIframe.src = href;
+        // R-0051: Drive refuses framing of /view links but serves the same
+        // file at /preview — rewrite so a pinned Drive PDF reads in-pane.
+        splitIframe.src = frameableURL(href);
       }
     }
   });

@@ -359,6 +359,11 @@
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
       }
       .detail-reply[hidden] { display: none; }
+      /* Personal library rows (R-0051): a device-local PDF and its honest
+         other-device counterpart. */
+      .res-pdf-link { color: #9fd0ff; text-decoration: underline; }
+      .res-pdf-link:hover { color: #cfe8ff; }
+      .res-elsewhere { font-size: 12px; color: #8aa0b4; font-style: italic; }
       /* Audio overview player (R-0050): two-host script + browser TTS controls. */
       .detail-podcast {
         display: flex; flex-direction: column; gap: 8px;
@@ -1079,6 +1084,10 @@
         </div>
         <div class="detail-add-qr">
           <button type="button" id="detail-add-qr-btn">Scan Note (QR)</button>
+          <!-- Personal library (R-0051): pin a PDF from THIS device. The bytes
+               stay in this browser's IndexedDB; only the row syncs. -->
+          <button type="button" id="detail-add-pdf-btn">📄 Add a PDF</button>
+          <input id="detail-add-pdf" type="file" accept="application/pdf,.pdf" hidden />
           <canvas id="detail-add-qr-canvas" width="210" height="210" hidden></canvas>
         </div>
         <!-- Pin the same link to other topics too (R-0028): one book across many. -->
