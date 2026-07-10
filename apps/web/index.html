@@ -359,6 +359,27 @@
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
       }
       .detail-reply[hidden] { display: none; }
+      /* Audio overview player (R-0050): two-host script + browser TTS controls. */
+      .detail-podcast {
+        display: flex; flex-direction: column; gap: 8px;
+        background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
+      }
+      .detail-podcast[hidden] { display: none; }
+      .podcast-controls { display: flex; align-items: center; gap: 6px; }
+      .podcast-controls button {
+        background: #27415f; border: 1px solid #3c5a7d; color: #dbe7f3;
+        border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+      }
+      .podcast-controls button:hover { background: #345780; }
+      #podcast-status { font-size: 11px; color: #8aa0b4; }
+      .podcast-script {
+        max-height: 240px; overflow-y: auto; display: flex; flex-direction: column;
+        gap: 6px; font-size: 13px; line-height: 1.5;
+      }
+      .pod-line { padding: 4px 8px; border-radius: 6px; }
+      .pod-a { color: #ffd166; }
+      .pod-b { color: #9fd0ff; }
+      .pod-line.playing { background: #1c2836; }
       /* "Also covers" cross-links on a resource row (R-0028). */
       .res-also { font-size: 12px; color: #8aa0b4; margin-top: 3px; }
       .res-also-link {
@@ -383,6 +404,8 @@
       #plateau-detail[data-mode="bridge"] #detail-solve,
       #plateau-detail[data-mode="bridge"] #detail-proofs,
       #plateau-detail[data-mode="bridge"] #detail-search,
+      #plateau-detail[data-mode="bridge"] #detail-deep-study, /* R-0048 row (gap: was left visible) */
+      #plateau-detail[data-mode="bridge"] #detail-podcast, /* R-0050 player */
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -1026,6 +1049,17 @@
            control, and everyone's published proofs for this topic. Filled by main.js;
            empty (and hidden) until you've earned a proof/solution here. -->
       <div id="detail-proofs" class="detail-proofs"><!-- saved + published proofs, by main.js --></div>
+
+      <!-- Audio overview (R-0050): the model-written two-host episode, read by
+           the browser's speechSynthesis. Hidden until an episode is generated. -->
+      <div id="detail-podcast" class="detail-podcast" hidden>
+        <div class="podcast-controls">
+          <button id="podcast-play" type="button">▶ Play</button>
+          <button id="podcast-stop" type="button">■ Stop</button>
+          <span id="podcast-status"></span>
+        </div>
+        <div id="podcast-script" class="podcast-script"><!-- parsed lines, by main.js --></div>
+      </div>
 
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>

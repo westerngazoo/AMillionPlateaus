@@ -61,7 +61,13 @@ import {
   hiddenConnectionsPrompt,
   gapMapPrompt,
   feynmanPrompt,
+  studyGuidePrompt,
+  faqPrompt,
+  flashcardsPrompt,
+  briefingPrompt,
+  timelinePrompt,
 } from "./study-prompts.js";
+import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -1603,6 +1609,7 @@ async function main() {
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
+    hidePodcast(); // R-0050: a different topic — stop speech, clear the player
     hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
     hideSolveBox(); // R-0034: same — clear+hide any prior solve problem
     renderStudyResources();
@@ -2126,6 +2133,7 @@ async function main() {
   }
   function deepStudy(action) {
     if (!studyPlateau || !activePersona) return;
+    if (action.key === "podcast") return runPodcast(); // R-0050 — script → player, not chat
     if (action.scope === "template") {
       // The learner's words are the payload: prefill the companion input with
       // the template (placeholder included), open it, and let THEM send.
@@ -2141,21 +2149,28 @@ async function main() {
     }
     try {
       const ctx = deepStudyContext(action.scope);
-      const prompt =
-        action.key === "models"
-          ? mentalModelsPrompt(ctx)
-          : action.key === "disagree"
-            ? disagreementsPrompt()
-            : action.key === "deepquiz"
-              ? deepQuizPrompt(ctx)
-              : action.key === "connections"
-                ? hiddenConnectionsPrompt(ctx)
-                : gapMapPrompt(ctx);
-      studyAction({ key: action.key, label: action.label, prompt });
+      const build = DEEP_PROMPTS[action.key];
+      if (!build) return; // unknown key — nothing sensible to send
+      studyAction({ key: action.key, label: action.label, prompt: build(ctx) });
     } catch (err) {
       showStudyReply(`⚠ ${err.message}`); // context building must never die silently
     }
   }
+  // key → prompt builder, ctx per the action's scope. The podcast verb is NOT
+  // here — its reply is a script for the audio player, not a chat answer
+  // (deepStudy branches to runPodcast before reaching this map).
+  const DEEP_PROMPTS = {
+    models: (ctx) => mentalModelsPrompt(ctx),
+    disagree: () => disagreementsPrompt(),
+    deepquiz: (ctx) => deepQuizPrompt(ctx),
+    connections: (ctx) => hiddenConnectionsPrompt(ctx),
+    gaps: (ctx) => gapMapPrompt(ctx),
+    studyguide: () => studyGuidePrompt(),
+    faq: () => faqPrompt(),
+    flashcards: () => flashcardsPrompt(),
+    briefing: (ctx) => briefingPrompt(ctx),
+    timeline: (ctx) => timelinePrompt(ctx),
+  };
   const deepRow = document.getElementById("detail-deep-study");
   for (const a of DEEP_STUDY_ACTIONS) {
     const btn = document.createElement("button");
@@ -2163,6 +2178,141 @@ async function main() {
     btn.textContent = a.label;
     btn.addEventListener("click", () => deepStudy(a));
     deepRow.append(btn);
+  }
+
+  // ── Audio overview (R-0050): the podcast player ──────────────────────────────
+  // The model writes the episode (podcast.js builds the prompt and parses the
+  // script — pure); THIS block is the one impure edge: speechSynthesis. Two
+  // hosts get two voices (or one voice pitched apart when only one exists).
+  // Free, keyless, and — once the script is on screen — fully offline.
+  const podcastBox = document.getElementById("detail-podcast");
+  const podcastScriptEl = document.getElementById("podcast-script");
+  const podcastStatus = document.getElementById("podcast-status");
+  const podcastPlayBtn = document.getElementById("podcast-play");
+  const podcastStopBtn = document.getElementById("podcast-stop");
+  let podcastLines = []; // the parsed episode currently loaded in the player
+
+  function stopPodcast() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    podcastPlayBtn.textContent = "▶ Play";
+    for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+  }
+  function hidePodcast() {
+    stopPodcast();
+    podcastBox.hidden = true;
+    podcastScriptEl.replaceChildren();
+    podcastLines = [];
+    podcastStatus.textContent = "";
+  }
+  function renderPodcast(lines) {
+    podcastLines = lines;
+    podcastScriptEl.replaceChildren(
+      ...lines.map((l, i) => {
+        const div = document.createElement("div");
+        div.className = `pod-line pod-${l.host.toLowerCase()}`;
+        div.dataset.line = String(i);
+        div.textContent = `${l.host === "A" ? "🎙 A" : "🎙 B"} — ${l.text}`; // textContent: model text stays inert
+        return div;
+      }),
+    );
+    const canSpeak = "speechSynthesis" in window;
+    podcastPlayBtn.hidden = !canSpeak;
+    podcastStopBtn.hidden = !canSpeak;
+    podcastStatus.textContent = canSpeak
+      ? `${lines.length} exchanges — press Play`
+      : `${lines.length} exchanges (this browser has no speech synthesis — read along instead)`;
+    podcastBox.hidden = false;
+  }
+  function playPodcast() {
+    if (!podcastLines.length || !("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    if (synth.speaking && !synth.paused) {
+      synth.pause();
+      podcastPlayBtn.textContent = "▶ Resume";
+      return;
+    }
+    if (synth.paused) {
+      synth.resume();
+      podcastPlayBtn.textContent = "⏸ Pause";
+      return;
+    }
+    const { a, b } = pickVoices(synth.getVoices());
+    podcastLines.forEach((line, i) => {
+      const u = new SpeechSynthesisUtterance(line.text);
+      const voice = line.host === "A" ? a : b;
+      if (voice) u.voice = voice;
+      // Keep the hosts tellable-apart even when one voice serves both.
+      u.pitch = line.host === "A" ? 1.06 : 0.88;
+      u.rate = 1.0;
+      u.onstart = () => {
+        for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+        const el = podcastScriptEl.querySelector(`[data-line="${i}"]`);
+        if (el) {
+          el.classList.add("playing");
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        podcastStatus.textContent = `playing ${i + 1}/${podcastLines.length}`;
+      };
+      if (i === podcastLines.length - 1) {
+        u.onend = () => {
+          podcastPlayBtn.textContent = "▶ Play";
+          podcastStatus.textContent = "episode finished";
+          for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+        };
+      }
+      synth.speak(u); // speechSynthesis queues natively — one utterance per turn
+    });
+    podcastPlayBtn.textContent = "⏸ Pause";
+  }
+  podcastPlayBtn.addEventListener("click", playPodcast);
+  podcastStopBtn.addEventListener("click", () => {
+    stopPodcast();
+    podcastStatus.textContent = `${podcastLines.length} exchanges — press Play`;
+  });
+
+  function runPodcast() {
+    hidePodcast(); // a fresh episode replaces any prior one (and stops speech)
+    // Offline (no model): honest — a dialogue can't be extracted from notes.
+    if (modelConfig.kind === "fake") {
+      showStudyReply(
+        "The audio overview needs a connected model to write the episode — connect one in Model setup (or flip with ⇄). The other study verbs still work offline.",
+      );
+      return;
+    }
+    let prompt;
+    try {
+      const ctx = deepStudyContext("domain");
+      prompt = podcastPrompt({
+        domainLabel: ctx.domainLabel,
+        focusName: studyPlateau.name,
+        topics: ctx.topics,
+      });
+    } catch (err) {
+      showStudyReply(`⚠ ${err.message}`);
+      return;
+    }
+    showStudyReply("🎧 Writing the episode…");
+    // Same grounded send as studyAction, but the reply feeds the PLAYER — the
+    // full script is deliberately kept out of the chat log/history (it would
+    // dominate the companion's context for every later turn).
+    const rs = doc.to_graph().resources().filter((r) => r.plateau_id === studyPlateau.id);
+    const groundPlateau = {
+      name: studyPlateau.name,
+      description: stripChallenges(studyPlateau.description || ""),
+    };
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        const lines = parseScript(reply);
+        if (!lines.length) {
+          showStudyReply("⚠ the model returned no readable script — try once more");
+          return;
+        }
+        detailReply.hidden = true; // the player takes over from the "writing…" note
+        renderPodcast(lines);
+      })
+      .catch((err) => showStudyReply(`⚠ ${err.message}`));
   }
 
   // ── Rhizome drill-down (R-0044) ──────────────────────────────────────────────
@@ -2613,6 +2763,7 @@ async function main() {
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
     setLayout("default");
+    stopPodcast(); // R-0050: never keep talking behind a closed drawer
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────

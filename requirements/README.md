@@ -79,3 +79,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0047](0047-installable-pwa.md) | Installable offline PWA: install to desktop/phone/Boox; the whole app works with no network after one load | POC — Reach | Accepted |
 | [R-0048](0048-deep-study-prompts.md) | Deep study: the NotebookLM prompt patterns (mental models, disagreements, deep quiz, hidden connections, gap map, Feynman), graph-grounded | POC — Knowledge content | Accepted |
 | [R-0049](0049-model-quick-switch.md) | Local ⇄ hosted model quick-switch: one click between the free local runtime and the pasted-key provider, no re-pasting | POC — Reach | Accepted |
+| [R-0050](0050-audio-overview.md) | Audio overview (🎧 model-written two-host episode + browser TTS, $0) + study pack: study guide, FAQ, flashcards, briefing, timeline | POC — Knowledge content | Accepted |
