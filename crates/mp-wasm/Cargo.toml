@@ -2,7 +2,10 @@
 name = "mp-wasm"
 version = "0.1.0"
 edition.workspace = true
-license.workspace = true
+# Inlined (not `license.workspace = true`): wasm-pack parses this manifest with
+# its own TOML reader, and some releases reject workspace-inherited maps here
+# ("invalid type: map, expected a string for key `package.license`").
+license = "MIT"
 authors.workspace = true
 
 [lib]
