@@ -74,3 +74,8 @@ non-goal per R-0050's decision.)
   browser viewer), other-device honesty row, Drive `/preview` rewrite in split view. Also fixed
   in passing: the R-0045 "Read it" OCR button read a never-written config key (`mp-model`) and
   silently never reached the connected model; it now uses the active config.
+- 2026-07-10 responsiveness + reader (follow-up PR): layout panels anchored by edges (100vw
+  included the scrollbar and clipped fullscreen); fullscreen centres a ~900px reading column;
+  split STACKS on portrait/narrow screens (Boox upright: topic top, reader below); a pinned PDF
+  clicked in split mode opens IN the reader pane (unsandboxed blob — Chromium PDF viewer refuses
+  sandboxed iframes; web links re-arm the sandbox).

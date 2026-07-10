@@ -68,7 +68,7 @@ import {
   timelinePrompt,
 } from "./study-prompts.js";
 import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
-import { pdfCheck, frameableURL } from "./library.js";
+import { pdfCheck, paneTarget } from "./library.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -2792,26 +2792,36 @@ async function main() {
     splitIframe.src = "";
   });
 
-  // Intercept links inside the plateau detail to open in iframe if in split mode
+  // Split mode: links inside the plateau detail load into the reader pane.
+  // paneTarget (pure, R-0051) decides what qualifies and how: http(s) links
+  // load embeddable (Drive → /preview) and SANDBOXED; a device-local PDF
+  // (blob:) loads UNsandboxed — Chromium's PDF viewer refuses to render in a
+  // sandboxed iframe, and the blob is the learner's own file. Every other
+  // layout leaves clicks to the browser.
   detail.addEventListener("click", (e) => {
     const link = e.target.closest("a");
     if (!link) return;
-    
     const href = link.getAttribute("href");
-    if (href && href.startsWith("http")) {
-      if (document.body.dataset.layout === "split") {
-        e.preventDefault();
-        iframeContainer.hidden = false;
-        try {
-          iframeTitle.textContent = new URL(href).hostname;
-        } catch (_) {
-          iframeTitle.textContent = "Browser";
-        }
-        // R-0051: Drive refuses framing of /view links but serves the same
-        // file at /preview — rewrite so a pinned Drive PDF reads in-pane.
-        splitIframe.src = frameableURL(href);
+    const target = paneTarget(href, document.body.dataset.layout);
+    if (!target) return;
+    e.preventDefault();
+    iframeContainer.hidden = false;
+    if (href.startsWith("blob:")) {
+      iframeTitle.textContent = link.textContent || "PDF";
+    } else {
+      try {
+        iframeTitle.textContent = new URL(href).hostname;
+      } catch (_) {
+        iframeTitle.textContent = "Reader";
       }
     }
+    // Toggling sandbox only applies on the NEXT load — set it before src.
+    if (target.sandboxed) {
+      splitIframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups");
+    } else {
+      splitIframe.removeAttribute("sandbox");
+    }
+    splitIframe.src = target.src;
   });
 
   document.getElementById("detail-close").addEventListener("click", () => {
