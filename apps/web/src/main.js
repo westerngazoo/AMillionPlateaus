@@ -69,6 +69,7 @@ import {
 } from "./study-prompts.js";
 import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
 import { pdfCheck, paneTarget } from "./library.js";
+import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -427,6 +428,9 @@ async function main() {
   // visitors who configured a model before the switch existed.
   let modelSlots = rememberSlot(loadSlots(), modelConfig);
   saveSlots(modelSlots);
+  // The private shelf (R-0052): per-plateau resources that NEVER enter the
+  // CRDT — another local lens, same trust boundary as the model config above.
+  let privateShelf = loadShelf(localStorage);
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
@@ -1614,6 +1618,7 @@ async function main() {
     hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
     hideSolveBox(); // R-0034: same — clear+hide any prior solve problem
     renderStudyResources();
+    renderPrivateShelf(); // R-0052 your rows on this topic (this browser only)
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
@@ -2032,6 +2037,25 @@ async function main() {
       return;
     }
     addError.hidden = true;
+    // Private shelf (R-0052): ticked → the row stays in THIS browser only —
+    // never doc.add_resource, never synced, never visible to peers. Also-pins
+    // shelve privately too (one private row per checked topic).
+    if (document.getElementById("detail-add-private").checked) {
+      privateShelf = addToShelf(privateShelf, spec.plateau, {
+        id: crypto.randomUUID(), title: spec.title, kind: spec.kind, uri: spec.uri,
+      });
+      for (const cb of alsoPinList.querySelectorAll("input:checked")) {
+        privateShelf = addToShelf(privateShelf, cb.value, {
+          id: crypto.randomUUID(), title: spec.title, kind: spec.kind, uri: spec.uri,
+        });
+      }
+      saveShelf(localStorage, privateShelf); // local only — never on the wire
+      renderPrivateShelf();
+      renderAlsoPin(studyPlateau.id);
+      addTitle.value = "";
+      addUri.value = "";
+      return;
+    }
     doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri); // R-0014 binding
     // Also pin the same link to each checked topic (best-effort, per-id — a stale
     // id must not abort the rest or the pump/persist, parity with the stone path).
@@ -2074,6 +2098,17 @@ async function main() {
     const id = crypto.randomUUID();
     await mediaStore.put(id, file); // a File IS a Blob; type survives for the viewer
     const title = addTitle.value.trim() || check.title;
+    // Private shelf (R-0052): a ticked private box keeps even the ROW out of
+    // the shared world — the natural home for a personal book collection.
+    if (document.getElementById("detail-add-private").checked) {
+      privateShelf = addToShelf(privateShelf, studyPlateau.id, {
+        id: crypto.randomUUID(), title, kind: "Paper", uri: `resource://local/${id}`,
+      });
+      saveShelf(localStorage, privateShelf);
+      renderPrivateShelf();
+      addTitle.value = "";
+      return;
+    }
     doc.add_resource(studyPlateau.id, title, "Paper", `resource://local/${id}`);
     sync.pump();
     pumpPeer();
@@ -2083,6 +2118,98 @@ async function main() {
     addTitle.value = "";
   });
 
+  // ── Private shelf (R-0052) ───────────────────────────────────────────────────
+  // Rows shelved on this plateau in THIS browser. Rendered like resources but
+  // with no stones/votes (there is no community in private), a ✕ (private CAN
+  // delete — grow-only guards the SHARED log, not your shelf), and a Publish
+  // that promotes the row into the shared graph (the R-0036 proof pattern).
+  const privateList = document.getElementById("detail-private");
+  function renderPrivateShelf() {
+    if (!studyPlateau) return;
+    privateList.replaceChildren();
+    const rows = shelfFor(privateShelf, studyPlateau.id);
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "priv-empty";
+      empty.textContent = "Nothing shelved yet — tick “Private” below when pinning.";
+      privateList.append(empty);
+      return;
+    }
+    const ul = document.createElement("ul");
+    for (const row of rows) {
+      const li = document.createElement("li");
+      const kind = document.createElement("span");
+      kind.className = "res-kind";
+      kind.textContent = row.kind; // textContent — shelf data stays inert
+      li.append(kind, document.createTextNode(" "));
+      const localId = row.uri?.startsWith("resource://local/")
+        ? row.uri.replace("resource://local/", "")
+        : null;
+      if (localId) {
+        const holder = document.createElement("span");
+        li.append(holder);
+        mediaStore.get(localId).then((blob) => {
+          if (!blob) {
+            holder.className = "res-elsewhere";
+            holder.textContent = `${row.title} — stored on another device`;
+            return;
+          }
+          const a = document.createElement("a");
+          a.className = "res-pdf-link";
+          a.textContent = blob.type === "application/pdf" ? `📄 ${row.title} — open PDF` : row.title;
+          a.href = URL.createObjectURL(blob);
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          holder.append(a);
+        });
+      } else {
+        const href = safeHref(row.uri); // http(s)/mailto only — else plain, inert title
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = row.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(row.title));
+        }
+      }
+      const pub = document.createElement("button");
+      pub.type = "button";
+      pub.className = "priv-btn";
+      pub.textContent = "Publish";
+      pub.title = "Promote into the shared world — peers will see it; it can't be unshared";
+      pub.addEventListener("click", () => {
+        doc.add_resource(studyPlateau.id, row.title, row.kind, row.uri); // grow-only from here on
+        privateShelf = removeFromShelf(privateShelf, studyPlateau.id, row.id);
+        saveShelf(localStorage, privateShelf);
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        renderStudyResources();
+        renderPrivateShelf();
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "priv-btn";
+      del.textContent = "✕";
+      del.title = "Remove from your shelf (this browser only)";
+      del.addEventListener("click", () => {
+        privateShelf = removeFromShelf(privateShelf, studyPlateau.id, row.id);
+        saveShelf(localStorage, privateShelf);
+        renderPrivateShelf();
+      });
+      const actions = document.createElement("span");
+      actions.className = "priv-actions";
+      actions.append(pub, del);
+      li.append(document.createTextNode(" "), actions);
+      ul.append(li);
+    }
+    privateList.append(ul);
+  }
+
   // Study with the companion (R-0023 AC4): each action sends a prompt grounded in
   // a PLATEAU-SCOPED context (this topic's body + its resources) through the same
   // bring-your-own model turn the global companion uses. The plateau body —
@@ -2090,10 +2217,15 @@ async function main() {
   // the SAME trust boundary as R-0007 (the visitor's own endpoint, key in-browser).
   function studyAction(action) {
     if (!studyPlateau || !activePersona) return;
-    const rs = doc
-      .to_graph()
-      .resources()
-      .filter((r) => r.plateau_id === studyPlateau.id);
+    const rs = [
+      ...doc
+        .to_graph()
+        .resources()
+        .filter((r) => r.plateau_id === studyPlateau.id),
+      // Private shelf rows ground YOUR companion too (R-0052): they ride only
+      // to the model YOU configured — never to peers, never into the CRDT.
+      ...shelfFor(privateShelf, studyPlateau.id),
+    ];
     companion.hidden = false;
     appendMessage("user", action.prompt);
     // OFFLINE (no model): a real, local extractive digest of THIS plateau's notes
@@ -2347,7 +2479,10 @@ async function main() {
     // Same grounded send as studyAction, but the reply feeds the PLAYER — the
     // full script is deliberately kept out of the chat log/history (it would
     // dominate the companion's context for every later turn).
-    const rs = doc.to_graph().resources().filter((r) => r.plateau_id === studyPlateau.id);
+    const rs = [
+      ...doc.to_graph().resources().filter((r) => r.plateau_id === studyPlateau.id),
+      ...shelfFor(privateShelf, studyPlateau.id), // R-0052: your model, your rows
+    ];
     const groundPlateau = {
       name: studyPlateau.name,
       description: stripChallenges(studyPlateau.description || ""),

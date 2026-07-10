@@ -364,6 +364,18 @@
       .res-pdf-link { color: #9fd0ff; text-decoration: underline; }
       .res-pdf-link:hover { color: #cfe8ff; }
       .res-elsewhere { font-size: 12px; color: #8aa0b4; font-style: italic; }
+      /* Private shelf (R-0052): per-row Publish/✕ actions, the empty hint,
+         and the private checkbox on the pin form. */
+      .priv-actions { margin-left: 6px; display: inline-flex; gap: 4px; }
+      .priv-btn {
+        font-size: 11px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+      }
+      .priv-btn:hover { background: #24384c; }
+      .priv-empty { font-size: 12px; color: #8aa0b4; font-style: italic; }
+      .detail-add-privacy {
+        font-size: 12px; color: #8aa0b4; display: flex; gap: 6px; align-items: center;
+      }
       /* Audio overview player (R-0050): two-host script + browser TTS controls. */
       .detail-podcast {
         display: flex; flex-direction: column; gap: 8px;
@@ -411,6 +423,7 @@
       #plateau-detail[data-mode="bridge"] #detail-search,
       #plateau-detail[data-mode="bridge"] #detail-deep-study, /* R-0048 row (gap: was left visible) */
       #plateau-detail[data-mode="bridge"] #detail-podcast, /* R-0050 player */
+      #plateau-detail[data-mode="bridge"] #detail-private, /* R-0052 shelf */
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -1090,6 +1103,12 @@
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
 
+      <!-- Private shelf (R-0052): YOUR rows on this topic — localStorage only,
+           never in the CRDT, never synced. Boox notes + the private book
+           collection live here; Publish promotes a row into the shared world. -->
+      <h3 class="detail-res-title">Private shelf — this browser only</h3>
+      <div id="detail-private" class="detail-resources detail-private"><!-- private rows, by main.js --></div>
+
       <!-- Look this topic up elsewhere (R-0044-adjacent): deep-links prefilled with
            the plateau name. Opens in a new tab — the learner chooses to click. -->
       <h3 class="detail-res-title">Look it up</h3>
@@ -1111,6 +1130,12 @@
           <input id="detail-add-pdf" type="file" accept="application/pdf,.pdf" hidden />
           <canvas id="detail-add-qr-canvas" width="210" height="210" hidden></canvas>
         </div>
+        <!-- Private shelf (R-0052): ticked → the pin (link OR PDF) stays in
+             this browser only. Default off = shared, as always. -->
+        <label class="detail-add-privacy">
+          <input type="checkbox" id="detail-add-private" />
+          Private — stays in this browser, never shared or synced
+        </label>
         <!-- Pin the same link to other topics too (R-0028): one book across many. -->
         <details class="detail-add-also">
           <summary>Also pin to other topics</summary>
