@@ -5,7 +5,73 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { pickSuggested, buildSuggestedRoute } from "./suggest-path.js";
+import { pickSuggested, buildSuggestedRoute, lensWeights, lensDistance } from "./suggest-path.js";
+
+// ── Lens-weighted proximity (R-0053 v2) ─────────────────────────────────────
+
+test("lensWeights: emphasis normalises to sum 3, floors dead axes, null → plain", () => {
+  const plain = lensWeights(null);
+  assert.deepEqual(plain, [1, 1, 1]);
+  const formal = lensWeights({ e1: 1, e2: 0, e3: 0 });
+  assert.ok(formal[0] > formal[1] && formal[0] > formal[2], "formal axis dominates");
+  assert.ok(formal[1] >= 0.1 && formal[2] >= 0.1, "dead axes floored, never zero");
+  assert.ok(Math.abs(formal[0] + formal[1] + formal[2] - 3) < 1e-9, "sums to 3");
+});
+
+test("lensDistance: the SAME pair is near or far depending on the lens", () => {
+  const a = { e1: 0, e2: 0, e3: 0 };
+  const bFormalFar = { e1: 1, e2: 0, e3: 0.1 }; // far along Formal, near Creative
+  const bCreativeFar = { e1: 0.1, e2: 0, e3: 1 }; // near Formal, far Creative
+  const formal = lensWeights({ e1: 1, e2: 0, e3: 0 });
+  const creative = lensWeights({ e1: 0, e2: 0, e3: 1 });
+  // Under a FORMAL lens the formal-far topic is the distant one…
+  assert.ok(lensDistance(a, bFormalFar, formal) > lensDistance(a, bCreativeFar, formal));
+  // …and under a CREATIVE lens the ranking flips.
+  assert.ok(lensDistance(a, bCreativeFar, creative) > lensDistance(a, bFormalFar, creative));
+});
+
+test("buildSuggestedRoute with a lens: order follows lens-proximity, not names", () => {
+  // s at the origin bridges to both; A is Creative-near/Formal-far, B the reverse.
+  // Names are chosen so v1's alphabetical order (A first) DIFFERS from the
+  // formal lens's choice (B first) — proving the lens, not the name, decides.
+  const plateaus = [
+    { id: "s", name: "Start", domain_id: "M", position: { e1: 0, e2: 0, e3: 0 } },
+    { id: "A", name: "Aaa", domain_id: "M", position: { e1: 1.0, e2: 0, e3: 0.1 } },
+    { id: "B", name: "Bbb", domain_id: "M", position: { e1: 0.1, e2: 0, e3: 1.0 } },
+  ];
+  const bridges = [
+    { from: "s", to: "A" },
+    { from: "s", to: "B" },
+  ];
+  const mastered = new Set(["s"]);
+  const formal = buildSuggestedRoute({ plateaus, bridges, mastered, startId: "s", domainId: "M", lens: { e1: 1, e2: 0, e3: 0 } });
+  assert.deepEqual(formal, ["B", "A"], "formal lens: the formal-near topic comes first");
+  const creative = buildSuggestedRoute({ plateaus, bridges, mastered, startId: "s", domainId: "M", lens: { e1: 0, e2: 0, e3: 1 } });
+  assert.deepEqual(creative, ["A", "B"], "creative lens: the creative-near topic comes first");
+  const noLens = buildSuggestedRoute({ plateaus, bridges, mastered, startId: "s", domainId: "M" });
+  assert.deepEqual(noLens, ["A", "B"], "no lens: v1 BFS/name order unchanged");
+});
+
+test("buildSuggestedRoute with a lens: CHAINS from the last step, not the start", () => {
+  // From s, B is nearest; from B, C is nearer than A — the chain must go
+  // s → B → C → A even though A is closer to the START than C is.
+  const plateaus = [
+    { id: "s", name: "Start", domain_id: "M", position: { e1: 0, e2: 0, e3: 0 } },
+    { id: "A", name: "Aaa", domain_id: "M", position: { e1: 3, e2: 0, e3: 0 } },
+    { id: "B", name: "Bbb", domain_id: "M", position: { e1: 1, e2: 0, e3: 0 } },
+    { id: "C", name: "Ccc", domain_id: "M", position: { e1: 5, e2: 0, e3: 0 } },
+  ];
+  const bridges = [
+    { from: "s", to: "A" },
+    { from: "s", to: "B" },
+    { from: "B", to: "C" },
+  ];
+  const route = buildSuggestedRoute({
+    plateaus, bridges, mastered: new Set(["s"]), startId: "s", domainId: "M", lens: { e1: 1, e2: 0, e3: 0 },
+  });
+  // s→B (d=1). From B: A at d=2, C at d=4 → A next; from A: C at d=2.
+  assert.deepEqual(route, ["B", "A", "C"]);
+});
 
 // A tiny world: domain M (math) topics m1..m4, domain P (physics) topic px.
 const PLATEAUS = [

@@ -3466,9 +3466,49 @@ async function main() {
     }
   }
 
+  // Fly the camera to a plateau (R-0053 v2): a short eased pan instead of a
+  // teleport — clicking a suggestion should FLY you to the island. A newer
+  // flight supersedes any in-progress one. If requestAnimationFrame never
+  // fires (hidden tab, some reduced-motion setups), a watchdog snaps straight
+  // to the target so the click's INTENT (arrive + continue) always completes.
+  let flightSeq = 0;
+  function flyTo(position, done) {
+    const target = centerOn(position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    const from = { cx: VIEW.cx, cy: VIEW.cy };
+    const id = ++flightSeq;
+    const t0 = performance.now();
+    const MS = 650;
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2); // cubic in-out
+    let animating = false;
+    const arrive = () => {
+      VIEW.cx = target.cx;
+      VIEW.cy = target.cy;
+      draw();
+      if (done) done();
+    };
+    const watchdog = setTimeout(() => {
+      if (id === flightSeq && !animating) arrive(); // rAF suspended — snap
+    }, 250);
+    const step = (now) => {
+      if (id !== flightSeq) return; // superseded
+      animating = true;
+      clearTimeout(watchdog);
+      const t = Math.min(1, (now - t0) / MS);
+      const k = ease(t);
+      VIEW.cx = from.cx + (target.cx - from.cx) * k;
+      VIEW.cy = from.cy + (target.cy - from.cy) * k;
+      draw();
+      if (t < 1) requestAnimationFrame(step);
+      else if (done) done();
+    };
+    requestAnimationFrame(step);
+  }
+
   // ── Suggested path (R-0053): the app proposes your next route ───────────────
   // Grounded, deterministic, $0 — real mastery + real bridges + where you
   // stand (suggest-path.js is pure; this glue gathers state, renders a card).
+  // v2: proximity is LENS-WEIGHTED — the axes your lens emphasises decide what
+  // counts as "related" — and every step is clickable: it flies you there.
   const pathSuggestedEl = document.getElementById("path-suggested");
   function renderSuggestedPath() {
     pathSuggestedEl.replaceChildren();
@@ -3478,7 +3518,17 @@ async function main() {
       plateaus.find((p) => p.id === myPlateau)?.domain_id ??
       activePersona?.orient?.[0]?.domain ??
       null;
-    const card = (label, meta, btnText, onClick) => {
+    // The lens: the persona's orientation for THIS domain (fallback: their
+    // first faced axis). This is "el enfoque" — it re-weights proximity.
+    const lens =
+      activePersona?.orient?.find((o) => o.domain === domainId)?.dir ??
+      activePersona?.orient?.[0]?.dir ??
+      null;
+    const flyOpen = (id) => {
+      const p = plateauById(id);
+      if (p) flyTo(p.position, () => openPlateau(p));
+    };
+    const card = (label, meta, btnText, onClick, chips = []) => {
       const box = document.createElement("div");
       box.className = "path-suggested-card";
       const head = document.createElement("div");
@@ -3488,6 +3538,21 @@ async function main() {
       sub.className = "path-suggested-meta";
       sub.textContent = meta;
       box.append(head, sub);
+      if (chips.length) {
+        const row = document.createElement("div");
+        row.className = "path-step-chips";
+        chips.forEach((c, i) => {
+          if (i > 0) row.append(document.createTextNode(" → "));
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "path-step-chip";
+          chip.textContent = c.label;
+          chip.title = "Fly to this topic";
+          chip.addEventListener("click", c.onClick);
+          row.append(chip);
+        });
+        box.append(row);
+      }
       if (btnText) {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -3508,19 +3573,7 @@ async function main() {
           `Continue “${cur.title}”`,
           `${prog.done}/${prog.total} mastered — next: ${plateauById(next)?.name ?? "?"}`,
           "Go to next step",
-          () => {
-            const p = plateauById(next);
-            if (!p) return;
-            const { cx, cy } = centerOn(
-              p.position,
-              { width: canvas.width, height: canvas.height },
-              VIEW.scale,
-            );
-            VIEW.cx = cx;
-            VIEW.cy = cy;
-            draw();
-            openPlateau(p);
-          },
+          () => flyOpen(next),
         );
         return;
       }
@@ -3543,13 +3596,15 @@ async function main() {
       );
       return;
     }
-    // Nothing authored fits — generate a walk from where you stand.
+    // Nothing authored fits — generate a walk from where you stand: bridges
+    // decide what's REACHABLE, your lens orders it by what's RELATED to you.
     const route = buildSuggestedRoute({
       plateaus,
       bridges: g.bridges(),
       mastered,
       startId: myPlateau,
       domainId,
+      lens,
     });
     if (!route.length) {
       card(
@@ -3562,12 +3617,12 @@ async function main() {
     }
     card(
       `Suggested route through ${domainLabelOf(domainId) ?? "your domain"}`,
-      route.map((id) => plateauById(id)?.name ?? "?").join(" → "),
+      "Ordered by YOUR lens — tap a step to fly there:",
       "Save & follow",
       () => {
         const path = buildPath({
           title: `Suggested: ${domainLabelOf(domainId) ?? "your next steps"}`,
-          goal: "Auto-suggested from where you stand — unmastered topics, nearest bridges first.",
+          goal: "Auto-suggested from where you stand — unmastered topics, lens-nearest first.",
           steps: route,
         });
         const allNow = loadPaths();
@@ -3579,6 +3634,7 @@ async function main() {
         loadDraftFromPick();
         renderSuggestedPath();
       },
+      route.map((id) => ({ label: plateauById(id)?.name ?? "?", onClick: () => flyOpen(id) })),
     );
   }
 
@@ -3632,20 +3688,12 @@ async function main() {
     const id = pathPick.value;
     if (!id || !loadPaths()[id]) return;
     followPathId = id;
+    draw(); // highlight the followed path immediately…
     const next = followNext();
     if (next) {
       const p = plateauById(next);
-      if (p) {
-        const { cx, cy } = centerOn(
-          p.position,
-          { width: canvas.width, height: canvas.height },
-          VIEW.scale,
-        );
-        VIEW.cx = cx;
-        VIEW.cy = cy;
-      }
+      if (p) flyTo(p.position); // …then FLY to the next step (R-0053 v2)
     }
-    draw();
   });
 
   document.getElementById("path-unfollow").addEventListener("click", () => {
