@@ -512,6 +512,19 @@
       .path-steps-list { margin: 8px 0; padding-left: 20px; font-size: 13px; color: #cdd9e6; }
       .path-published { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #cdd9e6; }
       .path-published-item { padding: 6px 8px; background: #1b2330; border-radius: 6px; }
+      /* Suggested path card (R-0053). */
+      .path-suggested-card {
+        display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+        padding: 10px 12px; border: 1px solid #3c5a7d; border-radius: 8px;
+        background: #16222f; font-size: 13px;
+      }
+      .path-suggested-title { color: #ffd166; font-weight: 600; }
+      .path-suggested-meta { color: #9fb2c4; font-size: 12px; line-height: 1.45; }
+      .path-suggested-card button {
+        margin-top: 4px; font-size: 12px; padding: 4px 12px; border-radius: 6px;
+        cursor: pointer; border: 1px solid #3c5a7d; background: #27415f; color: #dbe7f3;
+      }
+      .path-suggested-card button:hover { background: #345780; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -835,6 +848,10 @@
       <summary>Learning paths</summary>
       <div class="draft-plateau-body">
         <p class="author-hint">Author an ordered route, follow it on the map, or publish deliberately to the signed log.</p>
+        <!-- Suggested path (R-0053): the app's own proposal — continue what you
+             started, else the best existing path for your lens, else a route
+             generated from your position + mastery + the bridges. -->
+        <div id="path-suggested" class="path-suggested"><!-- card, by main.js --></div>
         <div class="dp-row">
           <label for="path-pick">Your paths</label>
           <select id="path-pick"><option value="">— new path —</option></select>
