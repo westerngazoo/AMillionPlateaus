@@ -115,6 +115,7 @@ import {
   publishedPaths,
   PATH_KIND,
 } from "./paths.js";
+import { pickSuggested, buildSuggestedRoute } from "./suggest-path.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -3465,6 +3466,122 @@ async function main() {
     }
   }
 
+  // ── Suggested path (R-0053): the app proposes your next route ───────────────
+  // Grounded, deterministic, $0 — real mastery + real bridges + where you
+  // stand (suggest-path.js is pure; this glue gathers state, renders a card).
+  const pathSuggestedEl = document.getElementById("path-suggested");
+  function renderSuggestedPath() {
+    pathSuggestedEl.replaceChildren();
+    const g = doc.to_graph();
+    const plateaus = g.plateaus();
+    const domainId =
+      plateaus.find((p) => p.id === myPlateau)?.domain_id ??
+      activePersona?.orient?.[0]?.domain ??
+      null;
+    const card = (label, meta, btnText, onClick) => {
+      const box = document.createElement("div");
+      box.className = "path-suggested-card";
+      const head = document.createElement("div");
+      head.className = "path-suggested-title";
+      head.textContent = label; // graph/user data — textContent keeps it inert
+      const sub = document.createElement("div");
+      sub.className = "path-suggested-meta";
+      sub.textContent = meta;
+      box.append(head, sub);
+      if (btnText) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = btnText;
+        btn.addEventListener("click", onClick);
+        box.append(btn);
+      }
+      pathSuggestedEl.append(box);
+    };
+    const all = loadPaths();
+    // Already walking one? The best suggestion is: keep going.
+    if (followPathId && all[followPathId]) {
+      const cur = all[followPathId];
+      const next = followNext();
+      if (next) {
+        const prog = pathProgress(cur.steps, mastered);
+        card(
+          `Continue “${cur.title}”`,
+          `${prog.done}/${prog.total} mastered — next: ${plateauById(next)?.name ?? "?"}`,
+          "Go to next step",
+          () => {
+            const p = plateauById(next);
+            if (!p) return;
+            const { cx, cy } = centerOn(
+              p.position,
+              { width: canvas.width, height: canvas.height },
+              VIEW.scale,
+            );
+            VIEW.cx = cx;
+            VIEW.cy = cy;
+            draw();
+            openPlateau(p);
+          },
+        );
+        return;
+      }
+    }
+    // Best existing path (momentum → your domain → closest to done).
+    const pick = pickSuggested({ paths: Object.values(all), plateaus, mastered, domainId });
+    if (pick) {
+      const prog = pathProgress(pick.steps, mastered);
+      const firstId = nextPathStep(pick.steps, mastered);
+      card(
+        `Suggested for you: “${pick.title}”`,
+        `${prog.done}/${prog.total} mastered — starts at ${plateauById(firstId)?.name ?? "?"}`,
+        "Follow",
+        () => {
+          pathPick.value = pick.id;
+          document.getElementById("path-follow").click(); // the ONE follow path
+          loadDraftFromPick();
+          renderSuggestedPath();
+        },
+      );
+      return;
+    }
+    // Nothing authored fits — generate a walk from where you stand.
+    const route = buildSuggestedRoute({
+      plateaus,
+      bridges: g.bridges(),
+      mastered,
+      startId: myPlateau,
+      domainId,
+    });
+    if (!route.length) {
+      card(
+        "Nothing left to suggest here",
+        "Everything in reach of this lens is mastered — draft a new path, or change lens.",
+        null,
+        null,
+      );
+      return;
+    }
+    card(
+      `Suggested route through ${domainLabelOf(domainId) ?? "your domain"}`,
+      route.map((id) => plateauById(id)?.name ?? "?").join(" → "),
+      "Save & follow",
+      () => {
+        const path = buildPath({
+          title: `Suggested: ${domainLabelOf(domainId) ?? "your next steps"}`,
+          goal: "Auto-suggested from where you stand — unmastered topics, nearest bridges first.",
+          steps: route,
+        });
+        const allNow = loadPaths();
+        allNow[path.id] = path;
+        savePaths(allNow); // local only — publish stays an explicit separate act
+        refreshPathPick();
+        pathPick.value = path.id;
+        document.getElementById("path-follow").click();
+        loadDraftFromPick();
+        renderSuggestedPath();
+      },
+    );
+  }
+
   document.getElementById("paths-toggle").addEventListener("click", () => {
     pathsPanel.hidden = !pathsPanel.hidden;
     if (!pathsPanel.hidden) {
@@ -3476,6 +3593,7 @@ async function main() {
       if (!pathPick.value && FLAGSHIP_PATH_ID && loadPaths()[FLAGSHIP_PATH_ID]) {
         pathPick.value = FLAGSHIP_PATH_ID;
       }
+      renderSuggestedPath(); // R-0053 — the app's proposal, above the picker
       renderPublishedPaths();
       loadDraftFromPick();
     }
@@ -3533,6 +3651,7 @@ async function main() {
   document.getElementById("path-unfollow").addEventListener("click", () => {
     followPathId = null;
     draw();
+    renderSuggestedPath(); // the card flips from "continue" back to a proposal
   });
 
   document.getElementById("path-publish").addEventListener("click", () => {
