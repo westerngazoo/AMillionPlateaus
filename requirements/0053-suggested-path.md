@@ -56,10 +56,10 @@ offline, and honest — the same data that colours the progress map decides the 
 
 ## 4. Constraints & non-goals
 
-Non-goals: GA-distance-weighted routing (bridge hops are the v1 metric; the meet-based
-intersection work stays with RFC-0002/R-0039); model-written route rationales; suggesting
-PUBLISHED peers' paths ahead of local ones (published paths surface in their own list);
-cross-domain routes (v1 keeps the suggestion inside the learner's lens).
+Non-goals: model-written route rationales; suggesting PUBLISHED peers' paths ahead of local
+ones (published paths surface in their own list); cross-domain routes (the suggestion stays
+inside the learner's lens); full meet-based intersection routing (stays with RFC-0002/R-0039 —
+v2's lens-weighted metric is the per-learner half of that story, not the domain-meet half).
 
 ## 5. Decision log
 
@@ -69,8 +69,14 @@ cross-domain routes (v1 keeps the suggestion inside the learner's lens).
 | 2026-07-11 | Momentum outranks domain match | An abandoned half-path is the highest-value nudge the app can give |
 | 2026-07-11 | Generated route capped at 7 | A suggestion is a walk, not a syllabus; the full curriculum lives in authored paths |
 | 2026-07-11 | Save & follow creates a NORMAL local path | One path machinery; publishing stays explicit (R-0039's trust posture) |
+| 2026-07-12 | v2: proximity is LENS-WEIGHTED (owner: "según el lens, dependerá del enfoque") | "Related" depends on the looker: the orientation's axes re-weight the Grade-1 metric, so a Formal-facing lens and a Creative-facing lens get DIFFERENT orders over the same graph. Bridges still gate reachability; the lens orders it |
+| 2026-07-12 | v2: greedy chain from the LAST step, not rings from the start | A route should read as a walk — each hop to the lens-nearest related topic ("ligados más cerca") |
+| 2026-07-12 | v2: clicking a suggestion FLIES the camera (eased pan) | The map is a world; travel should read as travel, not teleport (owner: "que lo cliquees y te vuele al plateau") |
 
 ## Changelog
 
 - 2026-07-11 created (Accepted) + implemented — Suggested card in the Paths panel with the three
   levels (continue / best existing / bridge-BFS generated), pure rankers + 7 tests.
+- 2026-07-12 v2 — lens-weighted proximity (lensWeights/lensDistance; the generated route is a
+  greedy lens-nearest chain; no lens → v1 order unchanged), every route step is a clickable chip,
+  and Follow / Go-to-next-step FLY the camera to the plateau (eased pan, superseding flights).

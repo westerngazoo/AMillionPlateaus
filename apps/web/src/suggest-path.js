@@ -48,14 +48,46 @@ export function pickSuggested({ paths = [], plateaus = [], mastered = new Set(),
   return candidates[0]?.p ?? null;
 }
 
+// ── Lens-weighted proximity (R-0053 v2) ─────────────────────────────────────
+// "Related" DEPENDS ON THE LENS: a persona's orientation (orient[].dir, a
+// Grade-1 direction over Formal e1 / Empirical e2 / Creative e3) says which
+// axes matter to them. Two topics far apart along an axis the lens emphasises
+// are UNRELATED for that learner; distance along axes the lens ignores barely
+// counts. So the metric weights each axis by the lens's emphasis.
+
 /**
- * Generate a route when no existing path fits: breadth-first from `startId`
- * over the bridge graph (bridges are the graph's own "learn these together"
- * signal), keeping the UNMASTERED plateaus of `domainId` in first-reached
- * order, capped at `max`. Out-of-domain neighbours still traverse (they
- * connect regions) but never enter the route. Deterministic: neighbours are
- * visited name-sorted. Missing/foreign `startId` falls back to the domain's
- * first plateau by id. Returns [] when everything in reach is mastered.
+ * Per-axis weights from a lens direction. Normalised to sum 3 (so the unit
+ * lens ≡ plain Euclidean), floored at 0.15 per axis so no axis fully vanishes
+ * (a Formal-only lens still distinguishes topics that differ only Creatively).
+ * Null/zero lens → [1, 1, 1] (no preference — plain distance).
+ */
+export function lensWeights(dir) {
+  const raw = [Math.abs(dir?.e1 ?? 0), Math.abs(dir?.e2 ?? 0), Math.abs(dir?.e3 ?? 0)];
+  const sum = raw[0] + raw[1] + raw[2];
+  if (!sum) return [1, 1, 1];
+  const floored = raw.map((v) => Math.max(0.15, (v / sum) * 3));
+  const s2 = floored[0] + floored[1] + floored[2];
+  return floored.map((v) => (v / s2) * 3);
+}
+
+/** Lens-weighted distance between two Grade-1 positions ({e1,e2,e3}). */
+export function lensDistance(a, b, w = [1, 1, 1]) {
+  const d1 = (a?.e1 ?? 0) - (b?.e1 ?? 0);
+  const d2 = (a?.e2 ?? 0) - (b?.e2 ?? 0);
+  const d3 = (a?.e3 ?? 0) - (b?.e3 ?? 0);
+  return Math.sqrt(w[0] * d1 * d1 + w[1] * d2 * d2 + w[2] * d3 * d3);
+}
+
+/**
+ * Generate a route when no existing path fits. Bridges decide WHAT is
+ * reachable (breadth-first from `startId` — they are the graph's own "learn
+ * these together" signal; out-of-domain neighbours traverse as connectors but
+ * never enter the route); the LENS decides the ORDER: with a `lens` direction,
+ * the route is a greedy chain that always hops to the lens-nearest unvisited
+ * candidate (ties by name) — the most-related-under-your-focus topic comes
+ * next. Without a lens it falls back to plain BFS ring order (name-sorted),
+ * unchanged from v1. Capped at `max`; missing/foreign `startId` falls back to
+ * the domain's first plateau by id; [] when everything in reach is mastered.
  */
 export function buildSuggestedRoute({
   plateaus = [],
@@ -63,6 +95,7 @@ export function buildSuggestedRoute({
   mastered = new Set(),
   startId = null,
   domainId = null,
+  lens = null,
   max = 7,
 } = {}) {
   const byId = new Map(plateaus.map((p) => [p.id, p]));
@@ -84,14 +117,14 @@ export function buildSuggestedRoute({
           .sort()[0];
   if (!start) return [];
 
-  const route = [];
-  const take = (id) => {
-    if (route.length < max && !mastered.has(id) && inDomain(id)) route.push(id);
-  };
+  // BFS discovery: everything bridge-reachable, in ring order. Candidates are
+  // the unmastered in-domain plateaus among them (generously over-collected so
+  // the lens has real choices to reorder).
   const seen = new Set([start]);
-  take(start);
+  const discovered = [start];
   let frontier = [start];
-  while (frontier.length && route.length < max) {
+  const budget = Math.max(max * 4, 24);
+  while (frontier.length && discovered.length < budget) {
     const next = [];
     for (const id of frontier) {
       const ns = (adj.get(id) ?? [])
@@ -100,10 +133,33 @@ export function buildSuggestedRoute({
       for (const n of ns) {
         seen.add(n);
         next.push(n);
-        take(n);
+        discovered.push(n);
       }
     }
     frontier = next;
+  }
+  const candidates = discovered.filter((id) => !mastered.has(id) && inDomain(id));
+  if (!lens) return candidates.slice(0, max); // v1 behaviour: BFS ring order
+
+  // Lens chain: hop to the lens-nearest remaining candidate each time.
+  const w = lensWeights(lens);
+  const route = [];
+  let cur = byId.get(start)?.position ?? { e1: 0, e2: 0, e3: 0 };
+  const pool = new Set(candidates);
+  while (route.length < max && pool.size) {
+    let best = null;
+    let bestKey = null;
+    for (const id of pool) {
+      const p = byId.get(id);
+      const key = [lensDistance(cur, p?.position ?? {}, w), String(p?.name ?? "")];
+      if (!bestKey || key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+        best = id;
+        bestKey = key;
+      }
+    }
+    pool.delete(best);
+    route.push(best);
+    cur = byId.get(best)?.position ?? cur;
   }
   return route;
 }
