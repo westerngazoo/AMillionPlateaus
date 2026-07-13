@@ -23,7 +23,7 @@ import init, {
 } from "../pkg/mp_wasm.js";
 import { canvasRenderer } from "./renderers/canvas.js";
 import { viewModel } from "./viewpipeline.js";
-import { spreadNodes as spreadLayout, forceLayout } from "./layout.js";
+import { spreadNodes as spreadLayout, forceLayout, adaptiveMinDist } from "./layout.js";
 import { project as place } from "./project.js";
 import { hitTest, hitMarkers } from "./hittest.js";
 import { createSync } from "./sync.js";
@@ -582,7 +582,10 @@ async function main() {
     // placement drives the draw AND hit-testing (stored in `points`).
     const raw = new Map();
     for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
-    points = forceLayout(raw, { bridges });
+    // Density-adaptive clearance (R-0055): a dense import gets proportionally more
+    // room so it stays readable; the ~50-node seed world is below the knee and so
+    // renders exactly as before.
+    points = forceLayout(raw, { bridges, minDist: adaptiveMinDist(raw.size) });
 
     const groundedPlateaus = computeGroundedPlateaus(graph, plateaus);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
