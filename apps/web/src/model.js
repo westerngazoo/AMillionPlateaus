@@ -8,8 +8,9 @@
 //
 // The app ships NO key. A hosted provider takes the visitor's own key; a local
 // provider (Ollama/LM Studio/llama.cpp) needs none. The key, when present, only
-// ever appears in the `authorization` header of the request this builds — it is
-// never logged and never leaves the tab (R-0007 AC5).
+// ever appears in the request's auth header (`authorization: Bearer …`, or
+// `x-goog-api-key` for the native Gemini adapter) — it is never logged and never
+// leaves the tab (R-0007 AC5).
 
 export const PROVIDERS = {
   // One OpenAI-compatible `/chat/completions` shape spans hosted OpenAI-style
