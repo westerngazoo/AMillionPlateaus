@@ -136,3 +136,21 @@ test("a dense cluster spreads more under adaptiveMinDist than the fixed default 
   assert.ok(dense > DEFAULT_MIN_DIST, "adaptive target exceeds the fixed default for 120 nodes");
   assert.ok(spread(dense) > spread(DEFAULT_MIN_DIST), "the crowd is pushed further apart");
 });
+
+test("the shipped seed world stays below the knee — spacing provably unchanged (R-0055)", async () => {
+  // Ties AC1's behaviour-preservation to the REAL seed count. If a future
+  // curriculum expansion pushes the default world past the 60-node knee,
+  // adaptiveMinDist stops returning the historical constant and the shipped map
+  // silently re-spaces. Pin it so that becomes a RED test — a deliberate choice
+  // (raise the knee, or accept the new spacing) instead of a quiet regression.
+  const { SEED_PLATEAUS } = await import("./seeds.js");
+  const { QC_PLATEAUS } = await import("./curriculum.js");
+  const { CS_PLATEAUS } = await import("./cs-curriculum.js");
+  const seedCount = SEED_PLATEAUS.length + QC_PLATEAUS.length + CS_PLATEAUS.length;
+  assert.equal(
+    adaptiveMinDist(seedCount),
+    DEFAULT_MIN_DIST,
+    `shipped seed world is ${seedCount} plateaus — that is past the density knee, so the ` +
+      `default map would re-space. Raise the knee in adaptiveMinDist deliberately, or accept it.`,
+  );
+});
