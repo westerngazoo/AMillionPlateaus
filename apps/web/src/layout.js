@@ -9,6 +9,29 @@
 export const DEFAULT_MIN_DIST = 56;
 
 /**
+ * Density-adaptive minimum distance (R-0055). A dense import — an Obsidian vault
+ * of 30–100 topics whose GA coords cluster tightly — collapses into an unreadable
+ * blob at the fixed `DEFAULT_MIN_DIST`, because the clearance the layout targets
+ * doesn't grow with the crowd. This scales the target with √nodeCount so a bigger
+ * graph is given proportionally more room.
+ *
+ * Behaviour-preserving by construction: below `knee` nodes it returns EXACTLY
+ * `DEFAULT_MIN_DIST`, so the shipped ~50-topic seed world is byte-identical — the
+ * spread only kicks in past the knee, where crowding is the actual problem. The
+ * result is clamped to `max` so a huge vault can't fling discs off-canvas
+ * (main's forceLayout is already hardened against explosion; this just bounds the
+ * target it's handed). Pure + deterministic.
+ */
+export function adaptiveMinDist(
+  nodeCount,
+  { min = DEFAULT_MIN_DIST, max = 120, knee = 60, gain = 14 } = {},
+) {
+  const n = Math.max(1, Math.floor(nodeCount) || 0);
+  const extra = Math.max(0, Math.sqrt(n) - Math.sqrt(knee)) * gain;
+  return Math.min(max, min + extra);
+}
+
+/**
  * Iteratively separate overlapping nodes. Returns a new Map<id, {x,y}>.
  * `points` is the raw projected positions; `minDist` is the clearance target.
  */

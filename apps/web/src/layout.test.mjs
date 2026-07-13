@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spreadNodes, forceLayout, DEFAULT_MIN_DIST } from "./layout.js";
+import { spreadNodes, forceLayout, adaptiveMinDist, DEFAULT_MIN_DIST } from "./layout.js";
 
 test("spreadNodes separates overlapping points", () => {
   const raw = new Map([
@@ -86,4 +86,53 @@ test("forceLayout: distant unbridged nodes are untouched; result is deterministi
   assert.deepEqual(out.get("b"), { x: 500, y: 500 });
   const raw2 = new Map([["a", { x: 100, y: 100 }], ["b", { x: 100, y: 100 }]]);
   assert.deepEqual(forceLayout(raw2, { bridges: [] }), forceLayout(raw2, { bridges: [] }));
+});
+
+// ── Density-adaptive clearance (R-0055) ─────────────────────────────────────
+
+test("adaptiveMinDist is behaviour-preserving below the knee (seed world unchanged)", () => {
+  // The shipped world is ~50 topics; anything at/under the 60-node knee must
+  // return EXACTLY the historical constant so today's map is byte-identical.
+  assert.equal(adaptiveMinDist(1), DEFAULT_MIN_DIST);
+  assert.equal(adaptiveMinDist(50), DEFAULT_MIN_DIST);
+  assert.equal(adaptiveMinDist(60), DEFAULT_MIN_DIST);
+  assert.equal(adaptiveMinDist(0), DEFAULT_MIN_DIST); // empty/degenerate → base
+});
+
+test("adaptiveMinDist grows past the knee, monotonically, and is clamped", () => {
+  const at = (n) => adaptiveMinDist(n);
+  assert.ok(at(100) > DEFAULT_MIN_DIST, "a 100-node vault gets more room");
+  assert.ok(at(100) < at(200), "more nodes → more clearance (monotonic)");
+  // never exceeds the cap, however huge the import
+  assert.ok(at(5000) <= 120, "clamped so discs can't fly off-canvas");
+  assert.equal(at(5000), 120);
+  // continuous at the knee — no visual jump when a single import crosses it
+  assert.ok(Math.abs(at(61) - DEFAULT_MIN_DIST) < 2, "no discontinuity at the knee");
+});
+
+test("adaptiveMinDist is deterministic and floors a fractional count", () => {
+  assert.equal(adaptiveMinDist(120), adaptiveMinDist(120));
+  assert.equal(adaptiveMinDist(120.9), adaptiveMinDist(120));
+});
+
+test("a dense cluster spreads more under adaptiveMinDist than the fixed default (R-0055)", () => {
+  // 40 topics stacked on the same GA coord — the pathological dense-import case.
+  const raw = new Map();
+  for (let i = 0; i < 40; i++) raw.set(`n${i}`, { x: 400 + (i % 7), y: 300 + (i % 5) });
+  const bridges = [];
+  const spread = (minDist) => {
+    const out = forceLayout(raw, { bridges, minDist });
+    const ids = [...out.keys()];
+    let min = Infinity;
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = out.get(ids[i]), b = out.get(ids[j]);
+        min = Math.min(min, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    return min;
+  };
+  // Simulate a big import: 40 seed + 80 imported = 120 nodes worth of clearance.
+  const dense = adaptiveMinDist(120);
+  assert.ok(dense > DEFAULT_MIN_DIST, "adaptive target exceeds the fixed default for 120 nodes");
+  assert.ok(spread(dense) > spread(DEFAULT_MIN_DIST), "the crowd is pushed further apart");
 });
