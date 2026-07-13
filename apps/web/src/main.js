@@ -916,6 +916,12 @@ async function main() {
   const modelIn = document.getElementById("setup-model");
   const keyIn = document.getElementById("setup-key");
 
+  // The provider adapter the save will use. Most presets are OpenAI-compatible,
+  // but the native-Gemini preset (R-0054) carries kind "gemini-native" — the save
+  // must preserve whichever preset (or loaded config) the fields came from, not
+  // assume one shape. Follows the last preset picked / config loaded.
+  let selectedKind = "openai-compatible";
+
   // Populate the preset dropdown once.
   for (const preset of PRESETS) {
     const opt = document.createElement("option");
@@ -928,6 +934,7 @@ async function main() {
     if (!preset) return;
     endpointIn.value = preset.endpoint;
     modelIn.value = preset.model;
+    selectedKind = preset.kind || "openai-compatible";
   });
 
   function openSetup() {
@@ -936,12 +943,14 @@ async function main() {
       endpointIn.value = modelConfig.endpoint || "";
       modelIn.value = modelConfig.model || "";
       keyIn.value = modelConfig.apiKey || "";
+      selectedKind = modelConfig.kind || "openai-compatible";
     } else {
       const p = PRESETS[0];
       presetSel.value = p.id;
       endpointIn.value = p.endpoint;
       modelIn.value = p.model;
       keyIn.value = "";
+      selectedKind = p.kind || "openai-compatible";
     }
     setup.hidden = false;
   }
@@ -980,7 +989,7 @@ async function main() {
   });
   document.getElementById("setup-save").addEventListener("click", () => {
     const candidate = {
-      kind: "openai-compatible",
+      kind: selectedKind, // carries the chosen preset's adapter (gemini-native, etc.), R-0054
       endpoint: endpointIn.value.trim(),
       model: modelIn.value.trim(),
       apiKey: keyIn.value.trim(),
