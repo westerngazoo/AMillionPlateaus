@@ -42,6 +42,44 @@ export const PROVIDERS = {
     },
   },
 
+  // Google Gemini's NATIVE endpoint (R-0054). Needed because Google's NEW
+  // "AQ."-prefixed API keys (the default AI Studio issues in 2026, replacing the
+  // legacy "AIza" keys) currently FAIL on the OpenAI-compatibility endpoint with
+  // "Invalid Auth key" / "Multiple authentication credentials received" — a
+  // Google-acknowledged rollout bug. They DO work on the native REST surface,
+  // which takes the key in an `x-goog-api-key` header (not Bearer) and speaks
+  // Gemini's own request/response shape. This adapter converts the app's
+  // OpenAI-style messages to `contents` + `systemInstruction` and back.
+  "gemini-native": {
+    label: "Google Gemini (native — for new AQ. keys)",
+    needsKey: true,
+    buildRequest(cfg, messages) {
+      const base = String(cfg.endpoint).replace(/\/$/, "");
+      const contents = [];
+      const systemParts = [];
+      for (const m of messages || []) {
+        const parts = geminiParts(m.content);
+        if (m.role === "system") {
+          systemParts.push(...parts);
+        } else {
+          // Gemini roles are "user" / "model" (not "assistant").
+          contents.push({ role: m.role === "assistant" ? "model" : "user", parts });
+        }
+      }
+      const body = { contents };
+      if (systemParts.length) body.systemInstruction = { parts: systemParts };
+      return {
+        url: `${base}/models/${cfg.model}:generateContent`,
+        headers: { "content-type": "application/json", "x-goog-api-key": cfg.apiKey },
+        body: JSON.stringify(body),
+      };
+    },
+    parseResponse(json) {
+      const parts = json?.candidates?.[0]?.content?.parts;
+      return Array.isArray(parts) ? parts.map((p) => p?.text ?? "").join("") : "";
+    },
+  },
+
   // Deterministic, no network — the always-available offline reply so the UI
   // works before a model is configured, and a swappability fixture for tests.
   fake: {
@@ -94,9 +132,22 @@ export const PRESETS = [
     // preset in Model setup and Save to overwrite it.
     id: "gemini-free",
     kind: "openai-compatible",
-    label: "Google Gemini Flash (free tier — paste a free key)",
+    label: "Google Gemini Flash (OLD AIza key — OpenAI-compat)",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
     model: "gemini-2.5-flash-lite",
+    needsKey: true,
+  },
+  {
+    // The NATIVE Gemini endpoint (R-0054) — use this when AI Studio gave you a
+    // NEW key that starts with "AQ." (Google's 2026 default). Those keys fail on
+    // the OpenAI-compat preset above (a Google rollout bug) but work here, where
+    // the key rides an `x-goog-api-key` header on the `:generateContent` REST
+    // surface. `gemini-flash-latest` always points at the current free Flash.
+    id: "gemini-native",
+    kind: "gemini-native",
+    label: "Google Gemini (NEW AQ. key — paste your key)",
+    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-flash-latest",
     needsKey: true,
   },
   {
@@ -134,6 +185,26 @@ export const PRESETS = [
     needsKey: true,
   },
 ];
+
+// Convert one OpenAI-style message `content` (a string, or a vision array of
+// {type:"text"|"image_url"} parts) into Gemini native `parts`. A base64 data
+// URI becomes an `inline_data` part (Gemini's vision shape); a non-data image
+// URL degrades to a text mention (the native endpoint can't fetch a remote URL
+// inline). Pure — used only by the gemini-native adapter.
+export function geminiParts(content) {
+  if (typeof content === "string") return [{ text: content }];
+  if (!Array.isArray(content)) return [{ text: String(content ?? "") }];
+  return content.map((part) => {
+    if (part?.type === "text") return { text: part.text ?? "" };
+    if (part?.type === "image_url") {
+      const url = part.image_url?.url ?? "";
+      const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+      if (m) return { inline_data: { mime_type: m[1], data: m[2] } };
+      return { text: `[image: ${url}]` };
+    }
+    return { text: "" };
+  });
+}
 
 export function buildRequest(cfg, messages) {
   const p = PROVIDERS[cfg.kind];

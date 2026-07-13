@@ -148,3 +148,86 @@ test("Groq ships as a key-bearing free-tier preset on the OpenAI-compatible adap
   assert.equal(req.headers.authorization, "Bearer k");
   assert.equal("anthropic-dangerous-direct-browser-access" in req.headers, false);
 });
+
+// ── Native Gemini adapter (R-0054) ──────────────────────────────────────────
+// New "AQ."-prefixed keys fail on Google's OpenAI-compat endpoint (a Google
+// rollout bug) but work on the native `:generateContent` surface. This adapter
+// is what makes those keys usable.
+
+test("gemini-native posts to :generateContent with the x-goog-api-key header (NOT Bearer)", () => {
+  const cfg = { kind: "gemini-native", endpoint: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-flash-latest", apiKey: "AQ.secret" };
+  const req = buildRequest(cfg, [{ role: "user", content: "hi" }]);
+  assert.equal(req.url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent");
+  assert.equal(req.headers["x-goog-api-key"], "AQ.secret");
+  // the native endpoint authenticates by header, never Authorization: Bearer
+  assert.equal("authorization" in req.headers, false);
+});
+
+test("gemini-native normalizes a trailing slash on the endpoint", () => {
+  const cfg = { kind: "gemini-native", endpoint: "https://generativelanguage.googleapis.com/v1beta/", model: "m", apiKey: "k" };
+  assert.equal(buildRequest(cfg, []).url, "https://generativelanguage.googleapis.com/v1beta/models/m:generateContent");
+});
+
+test("gemini-native maps roles to user/model and lifts system to systemInstruction", () => {
+  const cfg = { kind: "gemini-native", endpoint: "https://g/v1beta", model: "m", apiKey: "k" };
+  const req = buildRequest(cfg, [
+    { role: "system", content: "You are Ada." },
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "hello" },
+    { role: "user", content: "explain topos" },
+  ]);
+  const body = JSON.parse(req.body);
+  // system is NOT a content turn — it rides systemInstruction
+  assert.deepEqual(body.systemInstruction, { parts: [{ text: "You are Ada." }] });
+  assert.deepEqual(body.contents, [
+    { role: "user", parts: [{ text: "hi" }] },
+    { role: "model", parts: [{ text: "hello" }] }, // assistant → model
+    { role: "user", parts: [{ text: "explain topos" }] },
+  ]);
+});
+
+test("gemini-native omits systemInstruction when there is no system message", () => {
+  const cfg = { kind: "gemini-native", endpoint: "https://g/v1beta", model: "m", apiKey: "k" };
+  const body = JSON.parse(buildRequest(cfg, [{ role: "user", content: "hi" }]).body);
+  assert.equal("systemInstruction" in body, false);
+});
+
+test("gemini-native turns a base64 data-URI image into an inline_data part (vision)", () => {
+  const cfg = { kind: "gemini-native", endpoint: "https://g/v1beta", model: "m", apiKey: "k" };
+  const req = buildRequest(cfg, [
+    { role: "user", content: [
+      { type: "text", text: "read this" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAB" } },
+    ] },
+  ]);
+  const parts = JSON.parse(req.body).contents[0].parts;
+  assert.deepEqual(parts[0], { text: "read this" });
+  assert.deepEqual(parts[1], { inline_data: { mime_type: "image/png", data: "AAAB" } });
+});
+
+test("gemini-native parseResponse joins candidate parts; missing → empty string", () => {
+  const cfg = { kind: "gemini-native" };
+  assert.equal(parseResponse(cfg, { candidates: [{ content: { parts: [{ text: "ans" }, { text: "wer" }] } }] }), "answer");
+  assert.equal(parseResponse(cfg, {}), "");
+  assert.equal(parseResponse(cfg, { candidates: [] }), "");
+});
+
+test("geminiParts: string → one text part; non-data image URL degrades to text", async () => {
+  const { geminiParts } = await import("./model.js");
+  assert.deepEqual(geminiParts("hi"), [{ text: "hi" }]);
+  const parts = geminiParts([{ type: "image_url", image_url: { url: "https://x/y.png" } }]);
+  assert.deepEqual(parts, [{ text: "[image: https://x/y.png]" }]); // native endpoint can't fetch remote inline
+});
+
+test("the native-Gemini preset is the recommended home for new AQ. keys", () => {
+  const g = PRESETS.find((p) => p.id === "gemini-native");
+  assert.ok(g, "a native-Gemini preset exists");
+  assert.equal(g.kind, "gemini-native");
+  assert.equal(g.needsKey, true);
+  assert.equal(g.endpoint, "https://generativelanguage.googleapis.com/v1beta");
+  assert.match(g.model, /^gemini-/);
+  // flows through the native adapter end to end: header auth, native URL
+  const req = buildRequest({ kind: g.kind, endpoint: g.endpoint, model: g.model, apiKey: "AQ.k" }, [{ role: "user", content: "hi" }]);
+  assert.match(req.url, /:generateContent$/);
+  assert.equal(req.headers["x-goog-api-key"], "AQ.k");
+});

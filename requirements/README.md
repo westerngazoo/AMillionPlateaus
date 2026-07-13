@@ -83,3 +83,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0051](0051-personal-library.md) | Personal library: pin your own PDFs (device-local, browser viewer, $0) + Drive links readable in the split pane | POC — Knowledge content | Accepted |
 | [R-0052](0052-private-shelf.md) | Private shelf: per-plateau resources that never enter the CRDT — Boox notes + private book collection, publish-when-ready | POC — Knowledge content | Accepted |
 | [R-0053](0053-suggested-path.md) | Suggested path: the app proposes your next route — continue, best existing, or a bridge-BFS generated walk from where you stand | POC — Knowledge content | Accepted |
+| [R-0054](0054-gemini-native-adapter.md) | Native Gemini adapter: make Google's new `AQ.` keys work — `:generateContent` + `x-goog-api-key`, OpenAI↔Gemini translation incl. vision | POC — Reach | Accepted |
