@@ -38,6 +38,14 @@ test("every seed resource anchors to a seeded plateau and uses a known kind (R-0
   assert.ok(SEED_RESOURCES.some((r) => r.plateau === P.Harmony), "Harmony has a resource");
 });
 
+test("Motion (the Physicist lens's classical-mechanics trailhead) carries SICM", () => {
+  const sicm = SEED_RESOURCES.find(
+    (r) => r.plateau === P.Motion && /tgvaughan\.github\.io\/sicm/.test(r.uri),
+  );
+  assert.ok(sicm, "SICM is seeded on the Motion plateau");
+  assert.match(sicm.title, /Classical Mechanics/, "titled as the classical-mechanics text");
+});
+
 test("every seed bridge endpoint is a seeded plateau", () => {
   const plateauIds = new Set(SEED_PLATEAUS.map((p) => p.id));
   for (const b of SEED_BRIDGES) {

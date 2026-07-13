@@ -112,4 +112,15 @@ export const SEED_RESOURCES = [
     title: "The Feynman Lectures on Physics, Vol. I",
     uri: "https://www.feynmanlectures.caltech.edu/I_toc.html",
   },
+  // Motion is the Physicist lens's classical-mechanics trailhead — Sussman &
+  // Wisdom's SICM is the definitive classical-mechanics text (Lagrangian /
+  // Hamiltonian mechanics made computational). "Article" mirrors how the Feynman
+  // book above is classified (RESOURCE_KINDS has no "Book").
+  {
+    id: "00000000-0000-0000-0000-0000000000f8",
+    plateau: P.Motion,
+    kind: "Article",
+    title: "Sussman & Wisdom — Structure and Interpretation of Classical Mechanics",
+    uri: "https://tgvaughan.github.io/sicm/toc.html",
+  },
 ];
