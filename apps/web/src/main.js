@@ -1734,8 +1734,20 @@ async function main() {
   const notepadStatus = document.getElementById("notepad-status");
   const notepadPreviewBtn = document.getElementById("notepad-preview-btn");
   let notepadTimer = null;
+  let notepadDirty = null; // { id, val } captured at edit time, awaiting the debounce
+  // Persist any pending edit to ITS OWN topic (captured id+val — never the current
+  // textarea), then clear the timer. Called by the debounce AND before switching
+  // topics, so a trailing edit is neither lost nor written into the wrong note.
+  function flushNotepad() {
+    clearTimeout(notepadTimer);
+    if (notepadDirty) {
+      privateNotes = setNote(privateNotes, notepadDirty.id, notepadDirty.val);
+      saveNotes(localStorage, privateNotes);
+      notepadDirty = null;
+    }
+  }
   function renderNotepad(p) {
-    clearTimeout(notepadTimer); // don't let a pending save write into the next topic
+    flushNotepad(); // save the previous topic's pending edit before loading this one
     notepadInput.value = noteFor(privateNotes, p.id);
     notepadPreview.hidden = true;
     notepadPreview.replaceChildren();
@@ -1745,12 +1757,12 @@ async function main() {
   notepadInput.addEventListener("input", () => {
     if (!studyPlateau) return;
     notepadStatus.textContent = "saving…";
-    const id = studyPlateau.id; // capture: the active topic when this edit happened
+    notepadDirty = { id: studyPlateau.id, val: notepadInput.value }; // capture at edit time
     clearTimeout(notepadTimer);
     notepadTimer = setTimeout(() => {
-      privateNotes = setNote(privateNotes, id, notepadInput.value);
-      saveNotes(localStorage, privateNotes);
-      notepadStatus.textContent = "saved · this browser only";
+      const savedId = notepadDirty?.id;
+      flushNotepad();
+      if (studyPlateau && studyPlateau.id === savedId) notepadStatus.textContent = "saved · this browser only";
     }, 400);
   });
   notepadPreviewBtn.addEventListener("click", () => {
@@ -3467,7 +3479,10 @@ async function main() {
   // Best-effort flush on tab hide so an edit made inside the debounce window is
   // not lost on close (closes the AC2/AC3 loss window; bfcache-safe event).
   addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") snapshots.flush();
+    if (document.visibilityState === "hidden") {
+      flushNotepad(); // R-0056: persist a note edited in the last debounce window before hide/close
+      snapshots.flush();
+    }
   });
 
   // ── Learning paths (R-0039) ─────────────────────────────────────────────────
