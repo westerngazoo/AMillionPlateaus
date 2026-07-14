@@ -349,6 +349,15 @@
         border: 1px solid #2a3543; border-radius: 5px; text-decoration: none; white-space: nowrap;
       }
       .detail-search a:hover { background: #24384c; }
+      /* Private notepad (R-0056) */
+      .detail-notepad { display: flex; flex-direction: column; gap: 6px; }
+      #notepad-input {
+        width: 100%; box-sizing: border-box; min-height: 96px; resize: vertical;
+        background: #0f151d; color: #cdd9e6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 8px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .notepad-actions { display: flex; align-items: center; gap: 10px; }
+      .notepad-status { font-size: 12px; color: #6f8398; }
       .detail-study button {
         font-size: 12px; padding: 5px 10px; border-radius: 8px;
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
@@ -424,6 +433,9 @@
       #plateau-detail[data-mode="bridge"] #detail-deep-study, /* R-0048 row (gap: was left visible) */
       #plateau-detail[data-mode="bridge"] #detail-podcast, /* R-0050 player */
       #plateau-detail[data-mode="bridge"] #detail-private, /* R-0052 shelf */
+      #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
+      #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
+      #plateau-detail[data-mode="bridge"] #detail-handoff-note, /* R-0056 hand-off status line */
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -1134,6 +1146,26 @@
            collection live here; Publish promotes a row into the shared world. -->
       <h3 class="detail-res-title">Private shelf — this browser only</h3>
       <div id="detail-private" class="detail-resources detail-private"><!-- private rows, by main.js --></div>
+
+      <!-- Private notepad (R-0056): a Markdown scratch note for THIS topic, stored
+           in this browser only — never synced, never in the CRDT. Autosaves. -->
+      <h3 class="detail-res-title">Private notepad — this browser only</h3>
+      <div id="detail-notepad" class="detail-notepad">
+        <textarea id="notepad-input" placeholder="Your private notes on this topic — Markdown + $math$. Saved in this browser only."></textarea>
+        <div class="notepad-actions">
+          <button type="button" id="notepad-preview-btn">Preview</button>
+          <span id="notepad-status" class="notepad-status" aria-live="polite"></span>
+        </div>
+        <div id="notepad-preview" class="detail-body" hidden><!-- rendered, by main.js --></div>
+      </div>
+
+      <!-- Take it to a bigger model (R-0056): hand this topic off to an external
+           AI tool in a new tab. The app copies a graph-grounded prompt (NotebookLM
+           gets the owner's full study pack); the learner pastes it there. No API
+           key, no cost — sidesteps the bring-your-own model endpoint entirely. -->
+      <h3 class="detail-res-title">Take it to a bigger model ↗</h3>
+      <div id="detail-handoff" class="detail-search"><!-- buttons, by main.js --></div>
+      <p id="detail-handoff-note" class="detail-add-also" hidden></p>
 
       <!-- Look this topic up elsewhere (R-0044-adjacent): deep-links prefilled with
            the plateau name. Opens in a new tab — the learner chooses to click. -->
