@@ -85,3 +85,4 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0053](0053-suggested-path.md) | Suggested path: the app proposes your next route — continue, best existing, or a bridge-BFS generated walk from where you stand | POC — Knowledge content | Accepted |
 | [R-0054](0054-gemini-native-adapter.md) | Native Gemini adapter: make Google's new `AQ.` keys work — `:generateContent` + `x-goog-api-key`, OpenAI↔Gemini translation incl. vision | POC — Reach | Accepted |
 | [R-0055](0055-density-adaptive-layout.md) | Density-adaptive decluttering: clearance grows with graph size so dense imported vaults stay readable; seed world unchanged (salvaged from PR #41) | POC — Navigation | Accepted |
+| [R-0056](0056-study-handoff-notepad.md) | Study without the API: hand off a topic to NotebookLM (owner's full prompt pack) / Gemini / AI Studio in a new tab, + a private per-topic Markdown notepad (local, autosaved) | POC — Reach | Accepted |

@@ -70,6 +70,8 @@ import {
 import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
 import { pdfCheck, paneTarget } from "./library.js";
 import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
+import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
+import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -1636,6 +1638,8 @@ async function main() {
     renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
     renderSearchLinks(p); // deep-links to look this topic up elsewhere
+    renderHandoff(p); // R-0056 hand this topic to a bigger model in a new tab
+    renderNotepad(p); // R-0056 private Markdown notepad for this topic
     detail.hidden = false;
   }
 
@@ -1664,6 +1668,102 @@ async function main() {
       }),
     );
   }
+
+  // ── Take it to a bigger model (R-0056) ──────────────────────────────────────
+  // Copy a graph-grounded prompt and open the tool in a new tab — no API, no key,
+  // so a 404/503 from a hosted endpoint never blocks studying. NotebookLM gets the
+  // owner's full study PACK (it works on the sources you add there); Gemini / AI
+  // Studio get the single-topic prompt (a plain chat). The name/notes come from
+  // THIS plateau; nothing is sent automatically — the learner pastes it.
+  const detailHandoff = document.getElementById("detail-handoff");
+  const handoffNote = document.getElementById("detail-handoff-note");
+  function handoffContext(p) {
+    const g = doc.to_graph();
+    const neighbors = [];
+    for (const b of g.bridges()) {
+      const otherId = b.from === p.id ? b.to : b.to === p.id ? b.from : null;
+      if (!otherId) continue;
+      const other = g.plateaus().find((q) => q.id === otherId);
+      if (other) neighbors.push({ name: other.name, concept: b.concept });
+    }
+    return {
+      name: p.name,
+      domainLabel: domainLabelOf(p.domain_id) ?? "",
+      notes: stripChallenges(p.description || ""),
+      neighbors,
+    };
+  }
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false; // clipboard blocked (permission/insecure ctx) — caller degrades
+    }
+  }
+  function renderHandoff(p) {
+    handoffNote.hidden = true;
+    handoffNote.textContent = "";
+    detailHandoff.replaceChildren(
+      ...HANDOFF_TARGETS.map((t) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = `${t.label} ↗`;
+        btn.title = t.note;
+        btn.addEventListener("click", async () => {
+          const ctx = handoffContext(studyPlateau || p);
+          const prompt =
+            t.id === "notebooklm" ? notebookLmPack(ctx.name, ctx.domainLabel) : handoffPrompt(ctx);
+          const copied = await copyToClipboard(prompt);
+          window.open(t.url, "_blank", "noopener");
+          handoffNote.hidden = false;
+          handoffNote.textContent = copied
+            ? `Prompt copied — ${t.note}.`
+            : `Opened ${t.label}. Clipboard was blocked; retype your question there. (${t.note})`;
+        });
+        return btn;
+      }),
+    );
+  }
+
+  // ── Private notepad (R-0056): a per-topic Markdown scratch note, THIS browser
+  // only (never synced, never in the CRDT). Autosaves ~400 ms after you stop.
+  let privateNotes = loadNotes(localStorage);
+  const notepadInput = document.getElementById("notepad-input");
+  const notepadPreview = document.getElementById("notepad-preview");
+  const notepadStatus = document.getElementById("notepad-status");
+  const notepadPreviewBtn = document.getElementById("notepad-preview-btn");
+  let notepadTimer = null;
+  function renderNotepad(p) {
+    clearTimeout(notepadTimer); // don't let a pending save write into the next topic
+    notepadInput.value = noteFor(privateNotes, p.id);
+    notepadPreview.hidden = true;
+    notepadPreview.replaceChildren();
+    notepadPreviewBtn.textContent = "Preview";
+    notepadStatus.textContent = "";
+  }
+  notepadInput.addEventListener("input", () => {
+    if (!studyPlateau) return;
+    notepadStatus.textContent = "saving…";
+    const id = studyPlateau.id; // capture: the active topic when this edit happened
+    clearTimeout(notepadTimer);
+    notepadTimer = setTimeout(() => {
+      privateNotes = setNote(privateNotes, id, notepadInput.value);
+      saveNotes(localStorage, privateNotes);
+      notepadStatus.textContent = "saved · this browser only";
+    }, 400);
+  });
+  notepadPreviewBtn.addEventListener("click", () => {
+    if (notepadPreview.hidden) {
+      notepadPreview.innerHTML = renderMarkdown(notepadInput.value || "_Nothing yet._");
+      typesetMath(notepadPreview); // KaTeX, lazy + fire-and-forget
+      notepadPreview.hidden = false;
+      notepadPreviewBtn.textContent = "Hide preview";
+    } else {
+      notepadPreview.hidden = true;
+      notepadPreviewBtn.textContent = "Preview";
+    }
+  });
 
   // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
   // "Mark as mastered" which runs the Quiz me self-test and reveals a confirm
