@@ -108,17 +108,78 @@ export function feynmanPrompt({ topicName = "this topic" } = {}) {
   ].join("\n");
 }
 
+// ── The R-0050 study pack: NotebookLM's remaining output formats, adapted ────
+// Same design as the verbs above: plateau-scope verbs ride the standard
+// grounding (notes + pinned resources travel separately), domain-scope verbs
+// embed the domain's capped topic notes.
+
+/** Study guide (plateau): the topic condensed into a learnable outline. */
+export function studyGuidePrompt() {
+  return [
+    "Turn this topic's notes and pinned resources (in the grounding above) into a compact STUDY GUIDE:",
+    "1) the 5–8 key concepts, each stated in ONE sentence a learner could recite; 2) the terms and definitions worth memorizing, as a list; 3) the 2–3 most instructive examples or derivations from the notes, worked briefly; 4) a self-check list — 5 short questions I should be able to answer before calling this topic done (don't answer them).",
+    "Stay inside the notes and resources — where they are thin, say what's missing instead of inventing content.",
+  ].join("\n");
+}
+
+/** FAQ (plateau): the questions a newcomer actually asks, answered crisply. */
+export function faqPrompt() {
+  return [
+    "Write the FAQ for this topic: the 8 questions a smart newcomer ACTUALLY asks (not the questions a textbook wishes they'd ask), each with a crisp 2–4 sentence answer grounded in the notes and pinned resources above.",
+    "Include at least 2 misconception-correcting entries — questions whose honest answer starts with \"No —\" or \"Not quite —\".",
+    "Order them from most to least commonly asked.",
+  ].join("\n");
+}
+
+/** Flashcards (plateau): recall-or-reasoning fronts, tight backs. */
+export function flashcardsPrompt() {
+  return [
+    "Create 10 FLASHCARDS from this topic's notes and pinned resources (grounding above), numbered 1–10, each as:",
+    "Q: [a front that demands recall or a one-step reasoning move — never yes/no]",
+    "A: [a back of at most 2 sentences]",
+    "Cover the core definitions AND the connecting ideas (bridges) — not just vocabulary. Make the last 2 cards the hardest: situations where the obvious answer is wrong.",
+  ].join("\n");
+}
+
+/** Briefing doc (domain): the state of the field across the whole lens. */
+export function briefingPrompt({ domainLabel = "this domain", topics = [] } = {}) {
+  return [
+    `Write an executive BRIEFING DOC on "${domainLabel}" from ALL the topic notes below — for a sharp reader with 5 minutes.`,
+    "Structure: 1) What this field is about, in 3 sentences; 2) the 4–6 key themes that cut across the topics (cite which topics carry each); 3) what is settled vs. genuinely open; 4) the 3 things a newcomer should learn first, in order, and why.",
+    "",
+    topics.map(topicBlock).join("\n\n"),
+  ].join("\n\n");
+}
+
+/** Timeline (domain): how these ideas actually developed, tied to the map. */
+export function timelinePrompt({ domainLabel = "this domain", topics = [] } = {}) {
+  return [
+    `Build a chronological TIMELINE of how the ideas in "${domainLabel}" developed historically, using the topic notes below.`,
+    "For each entry: the (approximate) date, what happened, who, and — crucially — WHICH of the topics below that development underpins. Mark genuinely disputed or uncertain dating honestly rather than smoothing it over. End with one sentence on where the field appears to be heading.",
+    "",
+    topics.map(topicBlock).join("\n\n"),
+  ].join("\n\n");
+}
+
 // The one-click deep-study verbs, in drawer order. `scope` tells the UI glue
 // which context to gather: "plateau" rides the standard grounding as-is,
 // "neighbors" wants the bridged-neighbour list, "domain" the domain's topics,
 // "progress" the mastery/path snapshot, and "template" prefills the companion
 // input for the learner to complete (evaluate/feynman need THEIR words).
+// "podcast" (R-0050) is domain-scoped but handled by its own glue: the reply
+// is a two-host script for the audio player, not a chat answer.
 export const DEEP_STUDY_ACTIONS = [
   { key: "models", label: "Mental models", scope: "domain" },
   { key: "disagree", label: "Disagreements", scope: "plateau" },
   { key: "deepquiz", label: "Deep quiz", scope: "neighbors" },
   { key: "connections", label: "Hidden connections", scope: "neighbors" },
   { key: "gaps", label: "Gap map", scope: "progress" },
+  { key: "studyguide", label: "Study guide", scope: "plateau" },
+  { key: "faq", label: "FAQ", scope: "plateau" },
+  { key: "flashcards", label: "Flashcards", scope: "plateau" },
+  { key: "briefing", label: "Briefing doc", scope: "domain" },
+  { key: "timeline", label: "Timeline", scope: "domain" },
   { key: "feynman", label: "Feynman: I explain", scope: "template" },
   { key: "evaluate", label: "Grade my answer", scope: "template" },
+  { key: "podcast", label: "🎧 Audio overview", scope: "domain" },
 ];

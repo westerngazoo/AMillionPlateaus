@@ -79,3 +79,10 @@ the requirement(s) it satisfies. The mapping is maintained in
 | [R-0047](0047-installable-pwa.md) | Installable offline PWA: install to desktop/phone/Boox; the whole app works with no network after one load | POC — Reach | Accepted |
 | [R-0048](0048-deep-study-prompts.md) | Deep study: the NotebookLM prompt patterns (mental models, disagreements, deep quiz, hidden connections, gap map, Feynman), graph-grounded | POC — Knowledge content | Accepted |
 | [R-0049](0049-model-quick-switch.md) | Local ⇄ hosted model quick-switch: one click between the free local runtime and the pasted-key provider, no re-pasting | POC — Reach | Accepted |
+| [R-0050](0050-audio-overview.md) | Audio overview (🎧 model-written two-host episode + browser TTS, $0) + study pack: study guide, FAQ, flashcards, briefing, timeline | POC — Knowledge content | Accepted |
+| [R-0051](0051-personal-library.md) | Personal library: pin your own PDFs (device-local, browser viewer, $0) + Drive links readable in the split pane | POC — Knowledge content | Accepted |
+| [R-0052](0052-private-shelf.md) | Private shelf: per-plateau resources that never enter the CRDT — Boox notes + private book collection, publish-when-ready | POC — Knowledge content | Accepted |
+| [R-0053](0053-suggested-path.md) | Suggested path: the app proposes your next route — continue, best existing, or a bridge-BFS generated walk from where you stand | POC — Knowledge content | Accepted |
+| [R-0054](0054-gemini-native-adapter.md) | Native Gemini adapter: make Google's new `AQ.` keys work — `:generateContent` + `x-goog-api-key`, OpenAI↔Gemini translation incl. vision | POC — Reach | Accepted |
+| [R-0055](0055-density-adaptive-layout.md) | Density-adaptive decluttering: clearance grows with graph size so dense imported vaults stay readable; seed world unchanged (salvaged from PR #41) | POC — Navigation | Accepted |
+| [R-0056](0056-study-handoff-notepad.md) | Study without the API: hand off a topic to NotebookLM (owner's full prompt pack) / Gemini / AI Studio in a new tab, + a private per-topic Markdown notepad (local, autosaved) | POC — Reach | Accepted |

@@ -349,6 +349,15 @@
         border: 1px solid #2a3543; border-radius: 5px; text-decoration: none; white-space: nowrap;
       }
       .detail-search a:hover { background: #24384c; }
+      /* Private notepad (R-0056) */
+      .detail-notepad { display: flex; flex-direction: column; gap: 6px; }
+      #notepad-input {
+        width: 100%; box-sizing: border-box; min-height: 96px; resize: vertical;
+        background: #0f151d; color: #cdd9e6; border: 1px solid #2a3543;
+        border-radius: 6px; padding: 8px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .notepad-actions { display: flex; align-items: center; gap: 10px; }
+      .notepad-status { font-size: 12px; color: #6f8398; }
       .detail-study button {
         font-size: 12px; padding: 5px 10px; border-radius: 8px;
         background: #2c4a6e; color: #e6eef6; border: 1px solid #34495f; cursor: pointer;
@@ -359,6 +368,44 @@
         background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
       }
       .detail-reply[hidden] { display: none; }
+      /* Personal library rows (R-0051): a device-local PDF and its honest
+         other-device counterpart. */
+      .res-pdf-link { color: #9fd0ff; text-decoration: underline; }
+      .res-pdf-link:hover { color: #cfe8ff; }
+      .res-elsewhere { font-size: 12px; color: #8aa0b4; font-style: italic; }
+      /* Private shelf (R-0052): per-row Publish/✕ actions, the empty hint,
+         and the private checkbox on the pin form. */
+      .priv-actions { margin-left: 6px; display: inline-flex; gap: 4px; }
+      .priv-btn {
+        font-size: 11px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #2a3543; background: #1c2733; color: #cdd9e6;
+      }
+      .priv-btn:hover { background: #24384c; }
+      .priv-empty { font-size: 12px; color: #8aa0b4; font-style: italic; }
+      .detail-add-privacy {
+        font-size: 12px; color: #8aa0b4; display: flex; gap: 6px; align-items: center;
+      }
+      /* Audio overview player (R-0050): two-host script + browser TTS controls. */
+      .detail-podcast {
+        display: flex; flex-direction: column; gap: 8px;
+        background: #0f151d; border: 1px solid #2a3543; border-radius: 6px; padding: 10px 12px;
+      }
+      .detail-podcast[hidden] { display: none; }
+      .podcast-controls { display: flex; align-items: center; gap: 6px; }
+      .podcast-controls button {
+        background: #27415f; border: 1px solid #3c5a7d; color: #dbe7f3;
+        border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+      }
+      .podcast-controls button:hover { background: #345780; }
+      #podcast-status { font-size: 11px; color: #8aa0b4; }
+      .podcast-script {
+        max-height: 240px; overflow-y: auto; display: flex; flex-direction: column;
+        gap: 6px; font-size: 13px; line-height: 1.5;
+      }
+      .pod-line { padding: 4px 8px; border-radius: 6px; }
+      .pod-a { color: #ffd166; }
+      .pod-b { color: #9fd0ff; }
+      .pod-line.playing { background: #1c2836; }
       /* "Also covers" cross-links on a resource row (R-0028). */
       .res-also { font-size: 12px; color: #8aa0b4; margin-top: 3px; }
       .res-also-link {
@@ -383,6 +430,12 @@
       #plateau-detail[data-mode="bridge"] #detail-solve,
       #plateau-detail[data-mode="bridge"] #detail-proofs,
       #plateau-detail[data-mode="bridge"] #detail-search,
+      #plateau-detail[data-mode="bridge"] #detail-deep-study, /* R-0048 row (gap: was left visible) */
+      #plateau-detail[data-mode="bridge"] #detail-podcast, /* R-0050 player */
+      #plateau-detail[data-mode="bridge"] #detail-private, /* R-0052 shelf */
+      #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
+      #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
+      #plateau-detail[data-mode="bridge"] #detail-handoff-note, /* R-0056 hand-off status line */
       #plateau-detail[data-mode="bridge"] #detail-add-form { display: none; }
       /* Mastery (R-0030): "Mark as mastered" → self-test → confirm → ✓ Mastered. */
       .detail-mastery { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -471,6 +524,26 @@
       .path-steps-list { margin: 8px 0; padding-left: 20px; font-size: 13px; color: #cdd9e6; }
       .path-published { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #cdd9e6; }
       .path-published-item { padding: 6px 8px; background: #1b2330; border-radius: 6px; }
+      /* Suggested path card (R-0053). */
+      .path-suggested-card {
+        display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+        padding: 10px 12px; border: 1px solid #3c5a7d; border-radius: 8px;
+        background: #16222f; font-size: 13px;
+      }
+      .path-suggested-title { color: #ffd166; font-weight: 600; }
+      .path-suggested-meta { color: #9fb2c4; font-size: 12px; line-height: 1.45; }
+      .path-suggested-card button {
+        margin-top: 4px; font-size: 12px; padding: 4px 12px; border-radius: 6px;
+        cursor: pointer; border: 1px solid #3c5a7d; background: #27415f; color: #dbe7f3;
+      }
+      .path-suggested-card button:hover { background: #345780; }
+      /* Clickable route steps (R-0053 v2): tap → fly to the plateau. */
+      .path-step-chips { font-size: 12px; color: #8aa0b4; line-height: 2; }
+      .path-suggested-card .path-step-chip {
+        margin-top: 0; font-size: 12px; padding: 2px 8px; border-radius: 999px;
+        border: 1px solid #2a3543; background: #1c2733; color: #9fd0ff; cursor: pointer;
+      }
+      .path-suggested-card .path-step-chip:hover { background: #24384c; color: #cfe8ff; }
       .bridge-connects { font-size: 14px; color: #cdd9e6; }
       .bridge-topic {
         background: none; border: none; color: #9fd0ff; cursor: pointer;
@@ -517,29 +590,50 @@
       .dp-error { font-size: 12px; color: #ffb4a8; margin: 0; }
       .dp-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
 
-      /* Layout modes for Plateau Detail */
+      /* Layout modes for Plateau Detail. Panels are anchored by EDGES, never
+         sized in vw: 100vw includes the scrollbar, so a vw-sized fixed panel
+         overflows the visible viewport and clips its right edge. */
       body[data-layout="full"] #plateau-detail {
-        width: 100vw;
-        max-width: 100vw;
+        left: 0;
+        width: auto;
+        max-width: none;
+        border-left: none;
+        /* Reading mode: centre a ~900px column instead of edge-to-edge lines. */
+        padding-left: max(20px, calc((100% - 900px) / 2));
+        padding-right: max(20px, calc((100% - 900px) / 2));
       }
       body[data-layout="split"] #plateau-detail {
-        width: 50vw;
-        max-width: 50vw;
         left: 0;
-        right: auto;
+        right: 50%;
+        width: auto;
+        max-width: none;
         border-left: none;
         border-right: 1px solid #2a3543;
       }
       #split-iframe-container {
         position: fixed;
-        top: 0; right: 0; bottom: 0;
-        width: 50vw;
+        top: 0; right: 0; bottom: 0; left: 50%;
         z-index: 25;
         background: #0d1219;
         display: flex;
         flex-direction: column;
       }
       #split-iframe-container[hidden] { display: none; }
+      /* Portrait / narrow screens (the Boox held upright, phones): side-by-side
+         50/50 leaves two unusable slivers — STACK instead: topic on top,
+         reader pane below. */
+      @media (orientation: portrait), (max-width: 700px) {
+        body[data-layout="split"] #plateau-detail {
+          right: 0;
+          bottom: 50%;
+          border-right: none;
+          border-bottom: 1px solid #2a3543;
+        }
+        body[data-layout="split"] #split-iframe-container {
+          left: 0;
+          top: 50%;
+        }
+      }
       .iframe-head {
         display: flex; align-items: center; justify-content: space-between;
         padding: 10px 14px;
@@ -773,6 +867,10 @@
       <summary>Learning paths</summary>
       <div class="draft-plateau-body">
         <p class="author-hint">Author an ordered route, follow it on the map, or publish deliberately to the signed log.</p>
+        <!-- Suggested path (R-0053): the app's own proposal — continue what you
+             started, else the best existing path for your lens, else a route
+             generated from your position + mastery + the bridges. -->
+        <div id="path-suggested" class="path-suggested"><!-- card, by main.js --></div>
         <div class="dp-row">
           <label for="path-pick">Your paths</label>
           <select id="path-pick"><option value="">— new path —</option></select>
@@ -907,10 +1005,12 @@
           browser and is never synced. Leave it on <em>Offline</em> to explore without one.
         </p>
         <p class="setup-hint">
-          <strong>Free &amp; easy:</strong> pick <em>Google Gemini (free tier)</em>, then paste a
-          free key from Google AI Studio (<code>aistudio.google.com/apikey</code>). <strong>No cloud,
-          no key:</strong> run <em>Ollama</em> locally — nothing leaves your machine. Either way the
-          companion can then explain a plateau, quiz you, and judge your proofs live.
+          <strong>Free &amp; easy:</strong> get a free key from Google AI Studio
+          (<code>aistudio.google.com/apikey</code>) and pick the matching preset — <em>Google Gemini
+          (NEW AQ. key)</em> for today's keys (they start with <code>AQ.</code>), or the <em>OLD AIza
+          key</em> preset for a legacy <code>AIza…</code> key. <strong>No cloud, no key:</strong> run
+          <em>Ollama</em> locally — nothing leaves your machine. Either way the companion can then
+          explain a plateau, quiz you, and judge your proofs live.
         </p>
         <div class="field">
           <label for="setup-preset">Preset</label>
@@ -1027,8 +1127,45 @@
            empty (and hidden) until you've earned a proof/solution here. -->
       <div id="detail-proofs" class="detail-proofs"><!-- saved + published proofs, by main.js --></div>
 
+      <!-- Audio overview (R-0050): the model-written two-host episode, read by
+           the browser's speechSynthesis. Hidden until an episode is generated. -->
+      <div id="detail-podcast" class="detail-podcast" hidden>
+        <div class="podcast-controls">
+          <button id="podcast-play" type="button">▶ Play</button>
+          <button id="podcast-stop" type="button">■ Stop</button>
+          <span id="podcast-status"></span>
+        </div>
+        <div id="podcast-script" class="podcast-script"><!-- parsed lines, by main.js --></div>
+      </div>
+
       <h3 class="detail-res-title">Resources — ranked by stones</h3>
       <div id="detail-resources" class="detail-resources"><!-- ranked, by main.js --></div>
+
+      <!-- Private shelf (R-0052): YOUR rows on this topic — localStorage only,
+           never in the CRDT, never synced. Boox notes + the private book
+           collection live here; Publish promotes a row into the shared world. -->
+      <h3 class="detail-res-title">Private shelf — this browser only</h3>
+      <div id="detail-private" class="detail-resources detail-private"><!-- private rows, by main.js --></div>
+
+      <!-- Private notepad (R-0056): a Markdown scratch note for THIS topic, stored
+           in this browser only — never synced, never in the CRDT. Autosaves. -->
+      <h3 class="detail-res-title">Private notepad — this browser only</h3>
+      <div id="detail-notepad" class="detail-notepad">
+        <textarea id="notepad-input" placeholder="Your private notes on this topic — Markdown + $math$. Saved in this browser only."></textarea>
+        <div class="notepad-actions">
+          <button type="button" id="notepad-preview-btn">Preview</button>
+          <span id="notepad-status" class="notepad-status" aria-live="polite"></span>
+        </div>
+        <div id="notepad-preview" class="detail-body" hidden><!-- rendered, by main.js --></div>
+      </div>
+
+      <!-- Take it to a bigger model (R-0056): hand this topic off to an external
+           AI tool in a new tab. The app copies a graph-grounded prompt (NotebookLM
+           gets the owner's full study pack); the learner pastes it there. No API
+           key, no cost — sidesteps the bring-your-own model endpoint entirely. -->
+      <h3 class="detail-res-title">Take it to a bigger model ↗</h3>
+      <div id="detail-handoff" class="detail-search"><!-- buttons, by main.js --></div>
+      <p id="detail-handoff-note" class="detail-add-also" hidden></p>
 
       <!-- Look this topic up elsewhere (R-0044-adjacent): deep-links prefilled with
            the plateau name. Opens in a new tab — the learner chooses to click. -->
@@ -1045,8 +1182,18 @@
         </div>
         <div class="detail-add-qr">
           <button type="button" id="detail-add-qr-btn">Scan Note (QR)</button>
+          <!-- Personal library (R-0051): pin a PDF from THIS device. The bytes
+               stay in this browser's IndexedDB; only the row syncs. -->
+          <button type="button" id="detail-add-pdf-btn">📄 Add a PDF</button>
+          <input id="detail-add-pdf" type="file" accept="application/pdf,.pdf" hidden />
           <canvas id="detail-add-qr-canvas" width="210" height="210" hidden></canvas>
         </div>
+        <!-- Private shelf (R-0052): ticked → the pin (link OR PDF) stays in
+             this browser only. Default off = shared, as always. -->
+        <label class="detail-add-privacy">
+          <input type="checkbox" id="detail-add-private" />
+          Private — stays in this browser, never shared or synced
+        </label>
         <!-- Pin the same link to other topics too (R-0028): one book across many. -->
         <details class="detail-add-also">
           <summary>Also pin to other topics</summary>

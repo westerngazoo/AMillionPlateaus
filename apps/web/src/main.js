@@ -23,7 +23,7 @@ import init, {
 } from "../pkg/mp_wasm.js";
 import { canvasRenderer } from "./renderers/canvas.js";
 import { viewModel } from "./viewpipeline.js";
-import { spreadNodes as spreadLayout, forceLayout } from "./layout.js";
+import { spreadNodes as spreadLayout, forceLayout, adaptiveMinDist } from "./layout.js";
 import { project as place } from "./project.js";
 import { hitTest, hitMarkers } from "./hittest.js";
 import { createSync } from "./sync.js";
@@ -61,7 +61,17 @@ import {
   hiddenConnectionsPrompt,
   gapMapPrompt,
   feynmanPrompt,
+  studyGuidePrompt,
+  faqPrompt,
+  flashcardsPrompt,
+  briefingPrompt,
+  timelinePrompt,
 } from "./study-prompts.js";
+import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
+import { pdfCheck, paneTarget } from "./library.js";
+import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
+import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
+import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
 import {
   PRESETS,
   PROVIDERS,
@@ -107,6 +117,7 @@ import {
   publishedPaths,
   PATH_KIND,
 } from "./paths.js";
+import { pickSuggested, buildSuggestedRoute } from "./suggest-path.js";
 import { buildBridge } from "./bridge.js";
 import { buildResource, RESOURCE_KINDS } from "./resource.js";
 import { buildVote } from "./vote.js";
@@ -420,6 +431,9 @@ async function main() {
   // visitors who configured a model before the switch existed.
   let modelSlots = rememberSlot(loadSlots(), modelConfig);
   saveSlots(modelSlots);
+  // The private shelf (R-0052): per-plateau resources that NEVER enter the
+  // CRDT — another local lens, same trust boundary as the model config above.
+  let privateShelf = loadShelf(localStorage);
   let history = []; // in-memory chat turns; resets on reload (v1)
 
   const canvas = document.getElementById("world");
@@ -570,7 +584,10 @@ async function main() {
     // placement drives the draw AND hit-testing (stored in `points`).
     const raw = new Map();
     for (const p of plateaus) raw.set(p.id, place(p.position, VIEW));
-    points = forceLayout(raw, { bridges });
+    // Density-adaptive clearance (R-0055): a dense import gets proportionally more
+    // room so it stays readable; the ~50-node seed world is below the knee and so
+    // renders exactly as before.
+    points = forceLayout(raw, { bridges, minDist: adaptiveMinDist(raw.size) });
 
     const groundedPlateaus = computeGroundedPlateaus(graph, plateaus);
     // R-0033: the map colours by PROGRESS, not earned reach — the whole map is
@@ -904,6 +921,12 @@ async function main() {
   const modelIn = document.getElementById("setup-model");
   const keyIn = document.getElementById("setup-key");
 
+  // The provider adapter the save will use. Most presets are OpenAI-compatible,
+  // but the native-Gemini preset (R-0054) carries kind "gemini-native" — the save
+  // must preserve whichever preset (or loaded config) the fields came from, not
+  // assume one shape. Follows the last preset picked / config loaded.
+  let selectedKind = "openai-compatible";
+
   // Populate the preset dropdown once.
   for (const preset of PRESETS) {
     const opt = document.createElement("option");
@@ -916,6 +939,7 @@ async function main() {
     if (!preset) return;
     endpointIn.value = preset.endpoint;
     modelIn.value = preset.model;
+    selectedKind = preset.kind || "openai-compatible";
   });
 
   function openSetup() {
@@ -924,12 +948,14 @@ async function main() {
       endpointIn.value = modelConfig.endpoint || "";
       modelIn.value = modelConfig.model || "";
       keyIn.value = modelConfig.apiKey || "";
+      selectedKind = modelConfig.kind || "openai-compatible";
     } else {
       const p = PRESETS[0];
       presetSel.value = p.id;
       endpointIn.value = p.endpoint;
       modelIn.value = p.model;
       keyIn.value = "";
+      selectedKind = p.kind || "openai-compatible";
     }
     setup.hidden = false;
   }
@@ -968,7 +994,7 @@ async function main() {
   });
   document.getElementById("setup-save").addEventListener("click", () => {
     const candidate = {
-      kind: "openai-compatible",
+      kind: selectedKind, // carries the chosen preset's adapter (gemini-native, etc.), R-0054
       endpoint: endpointIn.value.trim(),
       model: modelIn.value.trim(),
       apiKey: keyIn.value.trim(),
@@ -1439,7 +1465,7 @@ async function main() {
       studyAction(STUDY_ACTIONS.find((a) => a.key === "quiz"));
     }),
     studyMenuBtn("🔎  Search the web", "", (h) =>
-      window.open(`https://www.perplexity.ai/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(h.name)}`, "_blank", "noopener"),
     ),
   );
   document.body.append(studyMenu);
@@ -1603,13 +1629,17 @@ async function main() {
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
+    hidePodcast(); // R-0050: a different topic — stop speech, clear the player
     hideProofBox(); // R-0032: a different topic — clear+hide any prior proof draft
     hideSolveBox(); // R-0034: same — clear+hide any prior solve problem
     renderStudyResources();
+    renderPrivateShelf(); // R-0052 your rows on this topic (this browser only)
     renderMastery(p); // R-0030 "Mark as mastered" / "✓ Mastered"
     renderProofs(p); // R-0036 your saved proof/solution + published ones
     renderAlsoPin(p.id); // R-0028 multi-pin checklist of OTHER topics
     renderSearchLinks(p); // deep-links to look this topic up elsewhere
+    renderHandoff(p); // R-0056 hand this topic to a bigger model in a new tab
+    renderNotepad(p); // R-0056 private Markdown notepad for this topic
     detail.hidden = false;
   }
 
@@ -1618,7 +1648,10 @@ async function main() {
   // name is URL-encoded and set via textContent — never interpolated as HTML.
   const detailSearch = document.getElementById("detail-search");
   const SEARCH_ENGINES = [
-    { label: "Perplexity", url: (q) => `https://www.perplexity.ai/search?q=${q}` },
+    // Perplexity dropped (it gates answers behind a paid tier). Google is free,
+    // and its AI Mode (udm=50) is the free AI-answer engine that replaces it.
+    { label: "Google", url: (q) => `https://www.google.com/search?q=${q}` },
+    { label: "Gemini", url: (q) => `https://www.google.com/search?q=${q}&udm=50` },
     { label: "Wikipedia", url: (q) => `https://en.wikipedia.org/w/index.php?search=${q}` },
     { label: "Scholar", url: (q) => `https://scholar.google.com/scholar?q=${q}` },
   ];
@@ -1635,6 +1668,114 @@ async function main() {
       }),
     );
   }
+
+  // ── Take it to a bigger model (R-0056) ──────────────────────────────────────
+  // Copy a graph-grounded prompt and open the tool in a new tab — no API, no key,
+  // so a 404/503 from a hosted endpoint never blocks studying. NotebookLM gets the
+  // owner's full study PACK (it works on the sources you add there); Gemini / AI
+  // Studio get the single-topic prompt (a plain chat). The name/notes come from
+  // THIS plateau; nothing is sent automatically — the learner pastes it.
+  const detailHandoff = document.getElementById("detail-handoff");
+  const handoffNote = document.getElementById("detail-handoff-note");
+  function handoffContext(p) {
+    const g = doc.to_graph();
+    const neighbors = [];
+    for (const b of g.bridges()) {
+      const otherId = b.from === p.id ? b.to : b.to === p.id ? b.from : null;
+      if (!otherId) continue;
+      const other = g.plateaus().find((q) => q.id === otherId);
+      if (other) neighbors.push({ name: other.name, concept: b.concept });
+    }
+    return {
+      name: p.name,
+      domainLabel: domainLabelOf(p.domain_id) ?? "",
+      notes: stripChallenges(p.description || ""),
+      neighbors,
+    };
+  }
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false; // clipboard blocked (permission/insecure ctx) — caller degrades
+    }
+  }
+  function renderHandoff(p) {
+    handoffNote.hidden = true;
+    handoffNote.textContent = "";
+    detailHandoff.replaceChildren(
+      ...HANDOFF_TARGETS.map((t) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = `${t.label} ↗`;
+        btn.title = t.note;
+        btn.addEventListener("click", async () => {
+          const ctx = handoffContext(studyPlateau || p);
+          const prompt =
+            t.id === "notebooklm" ? notebookLmPack(ctx.name, ctx.domainLabel) : handoffPrompt(ctx);
+          const copied = await copyToClipboard(prompt);
+          window.open(t.url, "_blank", "noopener");
+          handoffNote.hidden = false;
+          handoffNote.textContent = copied
+            ? `Prompt copied — ${t.note}.`
+            : `Opened ${t.label}. Clipboard was blocked; retype your question there. (${t.note})`;
+        });
+        return btn;
+      }),
+    );
+  }
+
+  // ── Private notepad (R-0056): a per-topic Markdown scratch note, THIS browser
+  // only (never synced, never in the CRDT). Autosaves ~400 ms after you stop.
+  let privateNotes = loadNotes(localStorage);
+  const notepadInput = document.getElementById("notepad-input");
+  const notepadPreview = document.getElementById("notepad-preview");
+  const notepadStatus = document.getElementById("notepad-status");
+  const notepadPreviewBtn = document.getElementById("notepad-preview-btn");
+  let notepadTimer = null;
+  let notepadDirty = null; // { id, val } captured at edit time, awaiting the debounce
+  // Persist any pending edit to ITS OWN topic (captured id+val — never the current
+  // textarea), then clear the timer. Called by the debounce AND before switching
+  // topics, so a trailing edit is neither lost nor written into the wrong note.
+  function flushNotepad() {
+    clearTimeout(notepadTimer);
+    if (notepadDirty) {
+      privateNotes = setNote(privateNotes, notepadDirty.id, notepadDirty.val);
+      saveNotes(localStorage, privateNotes);
+      notepadDirty = null;
+    }
+  }
+  function renderNotepad(p) {
+    flushNotepad(); // save the previous topic's pending edit before loading this one
+    notepadInput.value = noteFor(privateNotes, p.id);
+    notepadPreview.hidden = true;
+    notepadPreview.replaceChildren();
+    notepadPreviewBtn.textContent = "Preview";
+    notepadStatus.textContent = "";
+  }
+  notepadInput.addEventListener("input", () => {
+    if (!studyPlateau) return;
+    notepadStatus.textContent = "saving…";
+    notepadDirty = { id: studyPlateau.id, val: notepadInput.value }; // capture at edit time
+    clearTimeout(notepadTimer);
+    notepadTimer = setTimeout(() => {
+      const savedId = notepadDirty?.id;
+      flushNotepad();
+      if (studyPlateau && studyPlateau.id === savedId) notepadStatus.textContent = "saved · this browser only";
+    }, 400);
+  });
+  notepadPreviewBtn.addEventListener("click", () => {
+    if (notepadPreview.hidden) {
+      notepadPreview.innerHTML = renderMarkdown(notepadInput.value || "_Nothing yet._");
+      typesetMath(notepadPreview); // KaTeX, lazy + fire-and-forget
+      notepadPreview.hidden = false;
+      notepadPreviewBtn.textContent = "Hide preview";
+    } else {
+      notepadPreview.hidden = true;
+      notepadPreviewBtn.textContent = "Preview";
+    }
+  });
 
   // R-0030 — the mastery control: a "✓ Mastered" badge if already mastered, else
   // "Mark as mastered" which runs the Quiz me self-test and reveals a confirm
@@ -1814,29 +1955,53 @@ async function main() {
 
       const imgUri = safeImageSrc(r.uri);
       if (imgUri) {
-        const img = document.createElement("img");
-        img.className = "res-image";
-        img.alt = r.title;
+        // A local media blob: could be a QR note photo (image) or a pinned PDF
+        // (R-0051). Branch on the STORED blob's type — the URI can't tell.
         const localId = r.uri.replace("resource://local/", "");
+        const container = document.createElement("div");
+        container.className = "res-image-container";
+        li.append(container);
         mediaStore.get(localId).then((blob) => {
-          if (blob) img.src = URL.createObjectURL(blob);
-        });
+          if (!blob) {
+            // The row synced but the bytes live in another browser's store.
+            const note = document.createElement("span");
+            note.className = "res-elsewhere";
+            note.textContent = `${r.title} — stored on another device`;
+            container.append(note);
+            return;
+          }
+          if (blob.type === "application/pdf") {
+            // R-0051: open in the browser's own PDF viewer (object URL) —
+            // offline, no renderer dependency, Boox-native reading.
+            const a = document.createElement("a");
+            a.className = "res-pdf-link";
+            a.textContent = `📄 ${r.title} — open PDF`;
+            a.href = URL.createObjectURL(blob);
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            container.append(a);
+            return;
+          }
+          const img = document.createElement("img");
+          img.className = "res-image";
+          img.alt = r.title;
+          img.src = URL.createObjectURL(blob);
 
-        const readBtn = document.createElement("button");
-        readBtn.type = "button";
-        readBtn.className = "res-read-btn";
-        readBtn.textContent = "Read it";
-        readBtn.addEventListener("click", () => {
-          mediaStore.get(localId).then((blob) => {
-            if (!blob) return;
+          const readBtn = document.createElement("button");
+          readBtn.type = "button";
+          readBtn.className = "res-read-btn";
+          readBtn.textContent = "Read it";
+          readBtn.addEventListener("click", () => {
             const reader = new FileReader();
             reader.onload = async () => {
               detailReply.textContent = "Reading image...";
               detailReply.hidden = false;
               try {
                 const msgs = visionMessages(reader.result, "Extract and format the math or notes from this image as Markdown. Respond ONLY with the extracted text, no conversational filler.");
-                const conf = JSON.parse(localStorage.getItem("mp-model") || "{\"kind\":\"fake\"}");
-                const res = await sendVisionTurn(conf, msgs);
+                // The ACTIVE config (was: a stale read of the never-written
+                // "mp-model" localStorage key, so OCR silently ran offline
+                // even with a multimodal model connected).
+                const res = await sendVisionTurn(modelConfig, msgs);
                 detailReply.innerHTML = renderMarkdown(res);
                 typesetMath(detailReply);
               } catch (e) {
@@ -1845,12 +2010,8 @@ async function main() {
             };
             reader.readAsDataURL(blob);
           });
+          container.append(img, readBtn);
         });
-
-        const container = document.createElement("div");
-        container.className = "res-image-container";
-        container.append(img, readBtn);
-        li.append(container);
       } else {
         const href = safeHref(r.uri); // http(s)/mailto only — else plain, inert title
         if (href) {
@@ -2001,6 +2162,25 @@ async function main() {
       return;
     }
     addError.hidden = true;
+    // Private shelf (R-0052): ticked → the row stays in THIS browser only —
+    // never doc.add_resource, never synced, never visible to peers. Also-pins
+    // shelve privately too (one private row per checked topic).
+    if (document.getElementById("detail-add-private").checked) {
+      privateShelf = addToShelf(privateShelf, spec.plateau, {
+        id: crypto.randomUUID(), title: spec.title, kind: spec.kind, uri: spec.uri,
+      });
+      for (const cb of alsoPinList.querySelectorAll("input:checked")) {
+        privateShelf = addToShelf(privateShelf, cb.value, {
+          id: crypto.randomUUID(), title: spec.title, kind: spec.kind, uri: spec.uri,
+        });
+      }
+      saveShelf(localStorage, privateShelf); // local only — never on the wire
+      renderPrivateShelf();
+      renderAlsoPin(studyPlateau.id);
+      addTitle.value = "";
+      addUri.value = "";
+      return;
+    }
     doc.add_resource(spec.plateau, spec.title, spec.kind, spec.uri); // R-0014 binding
     // Also pin the same link to each checked topic (best-effort, per-id — a stale
     // id must not abort the rest or the pump/persist, parity with the stone path).
@@ -2021,6 +2201,140 @@ async function main() {
     addUri.value = "";
   });
 
+  // Pin a PDF from THIS device (R-0051): picked file → media-store blob →
+  // "Paper" resource at resource://local/<id>. The CRDT syncs only the row
+  // (title + local URI); the bytes stay in this browser's IndexedDB — other
+  // devices see the row honestly labelled as stored elsewhere. Works offline;
+  // on the Boox the PDFs already live on the device, so this IS the library.
+  const addPdfBtn = document.getElementById("detail-add-pdf-btn");
+  const addPdfInput = document.getElementById("detail-add-pdf");
+  addPdfBtn.addEventListener("click", () => addPdfInput.click());
+  addPdfInput.addEventListener("change", async () => {
+    const file = addPdfInput.files?.[0];
+    addPdfInput.value = ""; // so re-picking the same file re-fires `change`
+    if (!studyPlateau || !file) return;
+    const check = pdfCheck(file);
+    if (!check.ok) {
+      addError.textContent = check.error;
+      addError.hidden = false;
+      return;
+    }
+    addError.hidden = true;
+    const id = crypto.randomUUID();
+    await mediaStore.put(id, file); // a File IS a Blob; type survives for the viewer
+    const title = addTitle.value.trim() || check.title;
+    // Private shelf (R-0052): a ticked private box keeps even the ROW out of
+    // the shared world — the natural home for a personal book collection.
+    if (document.getElementById("detail-add-private").checked) {
+      privateShelf = addToShelf(privateShelf, studyPlateau.id, {
+        id: crypto.randomUUID(), title, kind: "Paper", uri: `resource://local/${id}`,
+      });
+      saveShelf(localStorage, privateShelf);
+      renderPrivateShelf();
+      addTitle.value = "";
+      return;
+    }
+    doc.add_resource(studyPlateau.id, title, "Paper", `resource://local/${id}`);
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    renderStudyResources();
+    addTitle.value = "";
+  });
+
+  // ── Private shelf (R-0052) ───────────────────────────────────────────────────
+  // Rows shelved on this plateau in THIS browser. Rendered like resources but
+  // with no stones/votes (there is no community in private), a ✕ (private CAN
+  // delete — grow-only guards the SHARED log, not your shelf), and a Publish
+  // that promotes the row into the shared graph (the R-0036 proof pattern).
+  const privateList = document.getElementById("detail-private");
+  function renderPrivateShelf() {
+    if (!studyPlateau) return;
+    privateList.replaceChildren();
+    const rows = shelfFor(privateShelf, studyPlateau.id);
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "priv-empty";
+      empty.textContent = "Nothing shelved yet — tick “Private” below when pinning.";
+      privateList.append(empty);
+      return;
+    }
+    const ul = document.createElement("ul");
+    for (const row of rows) {
+      const li = document.createElement("li");
+      const kind = document.createElement("span");
+      kind.className = "res-kind";
+      kind.textContent = row.kind; // textContent — shelf data stays inert
+      li.append(kind, document.createTextNode(" "));
+      const localId = row.uri?.startsWith("resource://local/")
+        ? row.uri.replace("resource://local/", "")
+        : null;
+      if (localId) {
+        const holder = document.createElement("span");
+        li.append(holder);
+        mediaStore.get(localId).then((blob) => {
+          if (!blob) {
+            holder.className = "res-elsewhere";
+            holder.textContent = `${row.title} — stored on another device`;
+            return;
+          }
+          const a = document.createElement("a");
+          a.className = "res-pdf-link";
+          a.textContent = blob.type === "application/pdf" ? `📄 ${row.title} — open PDF` : row.title;
+          a.href = URL.createObjectURL(blob);
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          holder.append(a);
+        });
+      } else {
+        const href = safeHref(row.uri); // http(s)/mailto only — else plain, inert title
+        if (href) {
+          const a = document.createElement("a");
+          a.href = href;
+          a.rel = "noopener noreferrer";
+          a.target = "_blank";
+          a.textContent = row.title;
+          li.append(a);
+        } else {
+          li.append(document.createTextNode(row.title));
+        }
+      }
+      const pub = document.createElement("button");
+      pub.type = "button";
+      pub.className = "priv-btn";
+      pub.textContent = "Publish";
+      pub.title = "Promote into the shared world — peers will see it; it can't be unshared";
+      pub.addEventListener("click", () => {
+        doc.add_resource(studyPlateau.id, row.title, row.kind, row.uri); // grow-only from here on
+        privateShelf = removeFromShelf(privateShelf, studyPlateau.id, row.id);
+        saveShelf(localStorage, privateShelf);
+        sync.pump();
+        pumpPeer();
+        persist();
+        draw();
+        renderStudyResources();
+        renderPrivateShelf();
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "priv-btn";
+      del.textContent = "✕";
+      del.title = "Remove from your shelf (this browser only)";
+      del.addEventListener("click", () => {
+        privateShelf = removeFromShelf(privateShelf, studyPlateau.id, row.id);
+        saveShelf(localStorage, privateShelf);
+        renderPrivateShelf();
+      });
+      const actions = document.createElement("span");
+      actions.className = "priv-actions";
+      actions.append(pub, del);
+      li.append(document.createTextNode(" "), actions);
+      ul.append(li);
+    }
+    privateList.append(ul);
+  }
+
   // Study with the companion (R-0023 AC4): each action sends a prompt grounded in
   // a PLATEAU-SCOPED context (this topic's body + its resources) through the same
   // bring-your-own model turn the global companion uses. The plateau body —
@@ -2028,10 +2342,15 @@ async function main() {
   // the SAME trust boundary as R-0007 (the visitor's own endpoint, key in-browser).
   function studyAction(action) {
     if (!studyPlateau || !activePersona) return;
-    const rs = doc
-      .to_graph()
-      .resources()
-      .filter((r) => r.plateau_id === studyPlateau.id);
+    const rs = [
+      ...doc
+        .to_graph()
+        .resources()
+        .filter((r) => r.plateau_id === studyPlateau.id),
+      // Private shelf rows ground YOUR companion too (R-0052): they ride only
+      // to the model YOU configured — never to peers, never into the CRDT.
+      ...shelfFor(privateShelf, studyPlateau.id),
+    ];
     companion.hidden = false;
     appendMessage("user", action.prompt);
     // OFFLINE (no model): a real, local extractive digest of THIS plateau's notes
@@ -2123,6 +2442,7 @@ async function main() {
   }
   function deepStudy(action) {
     if (!studyPlateau || !activePersona) return;
+    if (action.key === "podcast") return runPodcast(); // R-0050 — script → player, not chat
     if (action.scope === "template") {
       // The learner's words are the payload: prefill the companion input with
       // the template (placeholder included), open it, and let THEM send.
@@ -2138,21 +2458,28 @@ async function main() {
     }
     try {
       const ctx = deepStudyContext(action.scope);
-      const prompt =
-        action.key === "models"
-          ? mentalModelsPrompt(ctx)
-          : action.key === "disagree"
-            ? disagreementsPrompt()
-            : action.key === "deepquiz"
-              ? deepQuizPrompt(ctx)
-              : action.key === "connections"
-                ? hiddenConnectionsPrompt(ctx)
-                : gapMapPrompt(ctx);
-      studyAction({ key: action.key, label: action.label, prompt });
+      const build = DEEP_PROMPTS[action.key];
+      if (!build) return; // unknown key — nothing sensible to send
+      studyAction({ key: action.key, label: action.label, prompt: build(ctx) });
     } catch (err) {
       showStudyReply(`⚠ ${err.message}`); // context building must never die silently
     }
   }
+  // key → prompt builder, ctx per the action's scope. The podcast verb is NOT
+  // here — its reply is a script for the audio player, not a chat answer
+  // (deepStudy branches to runPodcast before reaching this map).
+  const DEEP_PROMPTS = {
+    models: (ctx) => mentalModelsPrompt(ctx),
+    disagree: () => disagreementsPrompt(),
+    deepquiz: (ctx) => deepQuizPrompt(ctx),
+    connections: (ctx) => hiddenConnectionsPrompt(ctx),
+    gaps: (ctx) => gapMapPrompt(ctx),
+    studyguide: () => studyGuidePrompt(),
+    faq: () => faqPrompt(),
+    flashcards: () => flashcardsPrompt(),
+    briefing: (ctx) => briefingPrompt(ctx),
+    timeline: (ctx) => timelinePrompt(ctx),
+  };
   const deepRow = document.getElementById("detail-deep-study");
   for (const a of DEEP_STUDY_ACTIONS) {
     const btn = document.createElement("button");
@@ -2160,6 +2487,144 @@ async function main() {
     btn.textContent = a.label;
     btn.addEventListener("click", () => deepStudy(a));
     deepRow.append(btn);
+  }
+
+  // ── Audio overview (R-0050): the podcast player ──────────────────────────────
+  // The model writes the episode (podcast.js builds the prompt and parses the
+  // script — pure); THIS block is the one impure edge: speechSynthesis. Two
+  // hosts get two voices (or one voice pitched apart when only one exists).
+  // Free, keyless, and — once the script is on screen — fully offline.
+  const podcastBox = document.getElementById("detail-podcast");
+  const podcastScriptEl = document.getElementById("podcast-script");
+  const podcastStatus = document.getElementById("podcast-status");
+  const podcastPlayBtn = document.getElementById("podcast-play");
+  const podcastStopBtn = document.getElementById("podcast-stop");
+  let podcastLines = []; // the parsed episode currently loaded in the player
+
+  function stopPodcast() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    podcastPlayBtn.textContent = "▶ Play";
+    for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+  }
+  function hidePodcast() {
+    stopPodcast();
+    podcastBox.hidden = true;
+    podcastScriptEl.replaceChildren();
+    podcastLines = [];
+    podcastStatus.textContent = "";
+  }
+  function renderPodcast(lines) {
+    podcastLines = lines;
+    podcastScriptEl.replaceChildren(
+      ...lines.map((l, i) => {
+        const div = document.createElement("div");
+        div.className = `pod-line pod-${l.host.toLowerCase()}`;
+        div.dataset.line = String(i);
+        div.textContent = `${l.host === "A" ? "🎙 A" : "🎙 B"} — ${l.text}`; // textContent: model text stays inert
+        return div;
+      }),
+    );
+    const canSpeak = "speechSynthesis" in window;
+    podcastPlayBtn.hidden = !canSpeak;
+    podcastStopBtn.hidden = !canSpeak;
+    podcastStatus.textContent = canSpeak
+      ? `${lines.length} exchanges — press Play`
+      : `${lines.length} exchanges (this browser has no speech synthesis — read along instead)`;
+    podcastBox.hidden = false;
+  }
+  function playPodcast() {
+    if (!podcastLines.length || !("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    if (synth.speaking && !synth.paused) {
+      synth.pause();
+      podcastPlayBtn.textContent = "▶ Resume";
+      return;
+    }
+    if (synth.paused) {
+      synth.resume();
+      podcastPlayBtn.textContent = "⏸ Pause";
+      return;
+    }
+    const { a, b } = pickVoices(synth.getVoices());
+    podcastLines.forEach((line, i) => {
+      const u = new SpeechSynthesisUtterance(line.text);
+      const voice = line.host === "A" ? a : b;
+      if (voice) u.voice = voice;
+      // Keep the hosts tellable-apart even when one voice serves both.
+      u.pitch = line.host === "A" ? 1.06 : 0.88;
+      u.rate = 1.0;
+      u.onstart = () => {
+        for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+        const el = podcastScriptEl.querySelector(`[data-line="${i}"]`);
+        if (el) {
+          el.classList.add("playing");
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        podcastStatus.textContent = `playing ${i + 1}/${podcastLines.length}`;
+      };
+      if (i === podcastLines.length - 1) {
+        u.onend = () => {
+          podcastPlayBtn.textContent = "▶ Play";
+          podcastStatus.textContent = "episode finished";
+          for (const el of podcastScriptEl.querySelectorAll(".playing")) el.classList.remove("playing");
+        };
+      }
+      synth.speak(u); // speechSynthesis queues natively — one utterance per turn
+    });
+    podcastPlayBtn.textContent = "⏸ Pause";
+  }
+  podcastPlayBtn.addEventListener("click", playPodcast);
+  podcastStopBtn.addEventListener("click", () => {
+    stopPodcast();
+    podcastStatus.textContent = `${podcastLines.length} exchanges — press Play`;
+  });
+
+  function runPodcast() {
+    hidePodcast(); // a fresh episode replaces any prior one (and stops speech)
+    // Offline (no model): honest — a dialogue can't be extracted from notes.
+    if (modelConfig.kind === "fake") {
+      showStudyReply(
+        "The audio overview needs a connected model to write the episode — connect one in Model setup (or flip with ⇄). The other study verbs still work offline.",
+      );
+      return;
+    }
+    let prompt;
+    try {
+      const ctx = deepStudyContext("domain");
+      prompt = podcastPrompt({
+        domainLabel: ctx.domainLabel,
+        focusName: studyPlateau.name,
+        topics: ctx.topics,
+      });
+    } catch (err) {
+      showStudyReply(`⚠ ${err.message}`);
+      return;
+    }
+    showStudyReply("🎧 Writing the episode…");
+    // Same grounded send as studyAction, but the reply feeds the PLAYER — the
+    // full script is deliberately kept out of the chat log/history (it would
+    // dominate the companion's context for every later turn).
+    const rs = [
+      ...doc.to_graph().resources().filter((r) => r.plateau_id === studyPlateau.id),
+      ...shelfFor(privateShelf, studyPlateau.id), // R-0052: your model, your rows
+    ];
+    const groundPlateau = {
+      name: studyPlateau.name,
+      description: stripChallenges(studyPlateau.description || ""),
+    };
+    const grounding = buildPlateauStudyContext({ plateau: groundPlateau, resources: rs });
+    const messages = assembleMessages(voiceFor(activePersona), grounding, history, prompt);
+    sendTurn(modelConfig, messages)
+      .then((reply) => {
+        const lines = parseScript(reply);
+        if (!lines.length) {
+          showStudyReply("⚠ the model returned no readable script — try once more");
+          return;
+        }
+        detailReply.hidden = true; // the player takes over from the "writing…" note
+        renderPodcast(lines);
+      })
+      .catch((err) => showStudyReply(`⚠ ${err.message}`));
   }
 
   // ── Rhizome drill-down (R-0044) ──────────────────────────────────────────────
@@ -2587,29 +3052,42 @@ async function main() {
     splitIframe.src = "";
   });
 
-  // Intercept links inside the plateau detail to open in iframe if in split mode
+  // Split mode: links inside the plateau detail load into the reader pane.
+  // paneTarget (pure, R-0051) decides what qualifies and how: http(s) links
+  // load embeddable (Drive → /preview) and SANDBOXED; a device-local PDF
+  // (blob:) loads UNsandboxed — Chromium's PDF viewer refuses to render in a
+  // sandboxed iframe, and the blob is the learner's own file. Every other
+  // layout leaves clicks to the browser.
   detail.addEventListener("click", (e) => {
     const link = e.target.closest("a");
     if (!link) return;
-    
     const href = link.getAttribute("href");
-    if (href && href.startsWith("http")) {
-      if (document.body.dataset.layout === "split") {
-        e.preventDefault();
-        iframeContainer.hidden = false;
-        try {
-          iframeTitle.textContent = new URL(href).hostname;
-        } catch (_) {
-          iframeTitle.textContent = "Browser";
-        }
-        splitIframe.src = href;
+    const target = paneTarget(href, document.body.dataset.layout);
+    if (!target) return;
+    e.preventDefault();
+    iframeContainer.hidden = false;
+    if (href.startsWith("blob:")) {
+      iframeTitle.textContent = link.textContent || "PDF";
+    } else {
+      try {
+        iframeTitle.textContent = new URL(href).hostname;
+      } catch (_) {
+        iframeTitle.textContent = "Reader";
       }
     }
+    // Toggling sandbox only applies on the NEXT load — set it before src.
+    if (target.sandboxed) {
+      splitIframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups");
+    } else {
+      splitIframe.removeAttribute("sandbox");
+    }
+    splitIframe.src = target.src;
   });
 
   document.getElementById("detail-close").addEventListener("click", () => {
     detail.hidden = true;
     setLayout("default");
+    stopPodcast(); // R-0050: never keep talking behind a closed drawer
   });
 
   // ── Draft Plateau form (SPEC-0011 / R-0011) ─────────────────────────────────
@@ -3001,7 +3479,10 @@ async function main() {
   // Best-effort flush on tab hide so an edit made inside the debounce window is
   // not lost on close (closes the AC2/AC3 loss window; bfcache-safe event).
   addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") snapshots.flush();
+    if (document.visibilityState === "hidden") {
+      flushNotepad(); // R-0056: persist a note edited in the last debounce window before hide/close
+      snapshots.flush();
+    }
   });
 
   // ── Learning paths (R-0039) ─────────────────────────────────────────────────
@@ -3112,6 +3593,178 @@ async function main() {
     }
   }
 
+  // Fly the camera to a plateau (R-0053 v2): a short eased pan instead of a
+  // teleport — clicking a suggestion should FLY you to the island. A newer
+  // flight supersedes any in-progress one. If requestAnimationFrame never
+  // fires (hidden tab, some reduced-motion setups), a watchdog snaps straight
+  // to the target so the click's INTENT (arrive + continue) always completes.
+  let flightSeq = 0;
+  function flyTo(position, done) {
+    const target = centerOn(position, { width: canvas.width, height: canvas.height }, VIEW.scale);
+    const from = { cx: VIEW.cx, cy: VIEW.cy };
+    const id = ++flightSeq;
+    const t0 = performance.now();
+    const MS = 650;
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2); // cubic in-out
+    let animating = false;
+    const arrive = () => {
+      VIEW.cx = target.cx;
+      VIEW.cy = target.cy;
+      draw();
+      if (done) done();
+    };
+    const watchdog = setTimeout(() => {
+      if (id === flightSeq && !animating) arrive(); // rAF suspended — snap
+    }, 250);
+    const step = (now) => {
+      if (id !== flightSeq) return; // superseded
+      animating = true;
+      clearTimeout(watchdog);
+      const t = Math.min(1, (now - t0) / MS);
+      const k = ease(t);
+      VIEW.cx = from.cx + (target.cx - from.cx) * k;
+      VIEW.cy = from.cy + (target.cy - from.cy) * k;
+      draw();
+      if (t < 1) requestAnimationFrame(step);
+      else if (done) done();
+    };
+    requestAnimationFrame(step);
+  }
+
+  // ── Suggested path (R-0053): the app proposes your next route ───────────────
+  // Grounded, deterministic, $0 — real mastery + real bridges + where you
+  // stand (suggest-path.js is pure; this glue gathers state, renders a card).
+  // v2: proximity is LENS-WEIGHTED — the axes your lens emphasises decide what
+  // counts as "related" — and every step is clickable: it flies you there.
+  const pathSuggestedEl = document.getElementById("path-suggested");
+  function renderSuggestedPath() {
+    pathSuggestedEl.replaceChildren();
+    const g = doc.to_graph();
+    const plateaus = g.plateaus();
+    const domainId =
+      plateaus.find((p) => p.id === myPlateau)?.domain_id ??
+      activePersona?.orient?.[0]?.domain ??
+      null;
+    // The lens: the persona's orientation for THIS domain (fallback: their
+    // first faced axis). This is "el enfoque" — it re-weights proximity.
+    const lens =
+      activePersona?.orient?.find((o) => o.domain === domainId)?.dir ??
+      activePersona?.orient?.[0]?.dir ??
+      null;
+    const flyOpen = (id) => {
+      const p = plateauById(id);
+      if (p) flyTo(p.position, () => openPlateau(p));
+    };
+    const card = (label, meta, btnText, onClick, chips = []) => {
+      const box = document.createElement("div");
+      box.className = "path-suggested-card";
+      const head = document.createElement("div");
+      head.className = "path-suggested-title";
+      head.textContent = label; // graph/user data — textContent keeps it inert
+      const sub = document.createElement("div");
+      sub.className = "path-suggested-meta";
+      sub.textContent = meta;
+      box.append(head, sub);
+      if (chips.length) {
+        const row = document.createElement("div");
+        row.className = "path-step-chips";
+        chips.forEach((c, i) => {
+          if (i > 0) row.append(document.createTextNode(" → "));
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "path-step-chip";
+          chip.textContent = c.label;
+          chip.title = "Fly to this topic";
+          chip.addEventListener("click", c.onClick);
+          row.append(chip);
+        });
+        box.append(row);
+      }
+      if (btnText) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = btnText;
+        btn.addEventListener("click", onClick);
+        box.append(btn);
+      }
+      pathSuggestedEl.append(box);
+    };
+    const all = loadPaths();
+    // Already walking one? The best suggestion is: keep going.
+    if (followPathId && all[followPathId]) {
+      const cur = all[followPathId];
+      const next = followNext();
+      if (next) {
+        const prog = pathProgress(cur.steps, mastered);
+        card(
+          `Continue “${cur.title}”`,
+          `${prog.done}/${prog.total} mastered — next: ${plateauById(next)?.name ?? "?"}`,
+          "Go to next step",
+          () => flyOpen(next),
+        );
+        return;
+      }
+    }
+    // Best existing path (momentum → your domain → closest to done).
+    const pick = pickSuggested({ paths: Object.values(all), plateaus, mastered, domainId });
+    if (pick) {
+      const prog = pathProgress(pick.steps, mastered);
+      const firstId = nextPathStep(pick.steps, mastered);
+      card(
+        `Suggested for you: “${pick.title}”`,
+        `${prog.done}/${prog.total} mastered — starts at ${plateauById(firstId)?.name ?? "?"}`,
+        "Follow",
+        () => {
+          pathPick.value = pick.id;
+          document.getElementById("path-follow").click(); // the ONE follow path
+          loadDraftFromPick();
+          renderSuggestedPath();
+        },
+      );
+      return;
+    }
+    // Nothing authored fits — generate a walk from where you stand: bridges
+    // decide what's REACHABLE, your lens orders it by what's RELATED to you.
+    const route = buildSuggestedRoute({
+      plateaus,
+      bridges: g.bridges(),
+      mastered,
+      startId: myPlateau,
+      domainId,
+      lens,
+    });
+    if (!route.length) {
+      card(
+        "Nothing left to suggest here",
+        "Everything in reach of this lens is mastered — draft a new path, or change lens.",
+        null,
+        null,
+      );
+      return;
+    }
+    card(
+      `Suggested route through ${domainLabelOf(domainId) ?? "your domain"}`,
+      "Ordered by YOUR lens — tap a step to fly there:",
+      "Save & follow",
+      () => {
+        const path = buildPath({
+          title: `Suggested: ${domainLabelOf(domainId) ?? "your next steps"}`,
+          goal: "Auto-suggested from where you stand — unmastered topics, lens-nearest first.",
+          steps: route,
+        });
+        const allNow = loadPaths();
+        allNow[path.id] = path;
+        savePaths(allNow); // local only — publish stays an explicit separate act
+        refreshPathPick();
+        pathPick.value = path.id;
+        document.getElementById("path-follow").click();
+        loadDraftFromPick();
+        renderSuggestedPath();
+      },
+      route.map((id) => ({ label: plateauById(id)?.name ?? "?", onClick: () => flyOpen(id) })),
+    );
+  }
+
   document.getElementById("paths-toggle").addEventListener("click", () => {
     pathsPanel.hidden = !pathsPanel.hidden;
     if (!pathsPanel.hidden) {
@@ -3123,6 +3776,7 @@ async function main() {
       if (!pathPick.value && FLAGSHIP_PATH_ID && loadPaths()[FLAGSHIP_PATH_ID]) {
         pathPick.value = FLAGSHIP_PATH_ID;
       }
+      renderSuggestedPath(); // R-0053 — the app's proposal, above the picker
       renderPublishedPaths();
       loadDraftFromPick();
     }
@@ -3161,25 +3815,18 @@ async function main() {
     const id = pathPick.value;
     if (!id || !loadPaths()[id]) return;
     followPathId = id;
+    draw(); // highlight the followed path immediately…
     const next = followNext();
     if (next) {
       const p = plateauById(next);
-      if (p) {
-        const { cx, cy } = centerOn(
-          p.position,
-          { width: canvas.width, height: canvas.height },
-          VIEW.scale,
-        );
-        VIEW.cx = cx;
-        VIEW.cy = cy;
-      }
+      if (p) flyTo(p.position); // …then FLY to the next step (R-0053 v2)
     }
-    draw();
   });
 
   document.getElementById("path-unfollow").addEventListener("click", () => {
     followPathId = null;
     draw();
+    renderSuggestedPath(); // the card flips from "continue" back to a proposal
   });
 
   document.getElementById("path-publish").addEventListener("click", () => {

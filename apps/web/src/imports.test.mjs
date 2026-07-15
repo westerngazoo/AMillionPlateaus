@@ -17,11 +17,10 @@ import { fileURLToPath } from "node:url";
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url)); // apps/web/
 const SRC = join(WEB_ROOT, "src");
 
-// The known, tracked exception: the QR vendor module the dev team has yet to
-// commit (issue #73). main.js imports qr.js LAZILY + fail-soft, so this cannot
-// kill boot — but any OTHER dangling import is a hard failure. Remove the entry
-// when #73 lands.
-const KNOWN_MISSING = [{ file: "src/qr.js", spec: "./vendor/qr/index.js" }];
+// No known exceptions. Issue #73 is fixed: `./vendor/qr/index.js` is a real,
+// committed QR encoder, so `qr.js`'s import resolves. Any dangling import is now
+// a hard failure (a missing file kills the whole module graph → boot hangs).
+const KNOWN_MISSING = [];
 
 // Static `import x from "spec"`, re-export `export ... from "spec"`, and
 // dynamic `import("spec")` — literal specifiers only, which is all the app uses.

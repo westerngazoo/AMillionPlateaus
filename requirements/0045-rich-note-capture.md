@@ -13,8 +13,8 @@
 ## 1. Statement
 
 Make adding knowledge to a plateau **richer and more physical than typing a URL**: (a) look a
-topic up in one tap via **external search deep-links** (Perplexity / Wikipedia / Scholar,
-prefilled with the plateau name); (b) **capture a handwritten note with your phone** and attach it
+topic up in one tap via **external search deep-links** (Google / Gemini AI Mode / Wikipedia /
+Scholar, prefilled with the plateau name); (b) **capture a handwritten note with your phone** and attach it
 to the plateau you're studying — the desktop shows a **QR code**, the phone scans it to open a
 lightweight capture page, takes a photo, and the image travels to the desktop; (c) optionally
 **digitalize** the photo into text/Markdown via the already-connected **multimodal companion**
@@ -28,12 +28,13 @@ absorb that, not force it into a text box. A QR hand-off turns the phone (alread
 scanner the desktop lacks, and the multimodal model we just wired up (R-0007 + the Gemini/Claude
 presets) can transcribe the image for free — no `tesseract.js`, no new runtime dep, honoring the
 "vendored / zero-npm" constraint. And when a learner just wants a fast external lookup, a prefilled
-Perplexity/Wikipedia/Scholar link beats retyping the topic into another tab.
+Google/Gemini/Wikipedia/Scholar link beats retyping the topic into another tab. (Perplexity was
+dropped for gating its answers behind a paid tier; Google's free AI Mode replaces the AI-answer role.)
 
 ## 3. Acceptance criteria
 
 - **AC0 — External search (DONE).** A plateau's study view offers **"Look it up"** deep-links
-  (Perplexity, Wikipedia, Scholar) prefilled with the URL-encoded plateau name, opening in a new
+  (Google, Gemini AI Mode, Wikipedia, Scholar) prefilled with the URL-encoded plateau name, opening in a new
   tab (`rel="noopener"`). The learner chooses to click — nothing is sent automatically.
 
 - **AC1 — QR pairing.** The desktop can display a **QR code** that a phone scans to open a minimal

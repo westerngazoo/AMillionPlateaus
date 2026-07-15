@@ -8,8 +8,9 @@
 //
 // The app ships NO key. A hosted provider takes the visitor's own key; a local
 // provider (Ollama/LM Studio/llama.cpp) needs none. The key, when present, only
-// ever appears in the `authorization` header of the request this builds — it is
-// never logged and never leaves the tab (R-0007 AC5).
+// ever appears in the request's auth header (`authorization: Bearer …`, or
+// `x-goog-api-key` for the native Gemini adapter) — it is never logged and never
+// leaves the tab (R-0007 AC5).
 
 export const PROVIDERS = {
   // One OpenAI-compatible `/chat/completions` shape spans hosted OpenAI-style
@@ -39,6 +40,44 @@ export const PROVIDERS = {
     },
     parseResponse(json) {
       return json?.choices?.[0]?.message?.content ?? "";
+    },
+  },
+
+  // Google Gemini's NATIVE endpoint (R-0054). Needed because Google's NEW
+  // "AQ."-prefixed API keys (the default AI Studio issues in 2026, replacing the
+  // legacy "AIza" keys) currently FAIL on the OpenAI-compatibility endpoint with
+  // "Invalid Auth key" / "Multiple authentication credentials received" — a
+  // Google-acknowledged rollout bug. They DO work on the native REST surface,
+  // which takes the key in an `x-goog-api-key` header (not Bearer) and speaks
+  // Gemini's own request/response shape. This adapter converts the app's
+  // OpenAI-style messages to `contents` + `systemInstruction` and back.
+  "gemini-native": {
+    label: "Google Gemini (native — for new AQ. keys)",
+    needsKey: true,
+    buildRequest(cfg, messages) {
+      const base = String(cfg.endpoint).replace(/\/$/, "");
+      const contents = [];
+      const systemParts = [];
+      for (const m of messages || []) {
+        const parts = geminiParts(m.content);
+        if (m.role === "system") {
+          systemParts.push(...parts);
+        } else {
+          // Gemini roles are "user" / "model" (not "assistant").
+          contents.push({ role: m.role === "assistant" ? "model" : "user", parts });
+        }
+      }
+      const body = { contents };
+      if (systemParts.length) body.systemInstruction = { parts: systemParts };
+      return {
+        url: `${base}/models/${cfg.model}:generateContent`,
+        headers: { "content-type": "application/json", "x-goog-api-key": cfg.apiKey },
+        body: JSON.stringify(body),
+      };
+    },
+    parseResponse(json) {
+      const parts = json?.candidates?.[0]?.content?.parts;
+      return Array.isArray(parts) ? parts.map((p) => p?.text ?? "").join("") : "";
     },
   },
 
@@ -82,19 +121,34 @@ export const PRESETS = [
   },
   {
     // Google exposes an OpenAI-compatible surface for Gemini, so the same
-    // adapter reaches it with only a different base URL + key. The free AI
-    // Studio tier (aistudio.google.com/apikey) is generous enough for study
-    // (2.5-flash: 10 req/min, 250/day), and its endpoint returns permissive
-    // CORS headers, so the browser can call it directly — no proxy. Swap
-    // `model` for any Gemini you can access — `gemini-2.5-flash-lite` has the
-    // biggest free quota (15/min, 1000/day). NOTE: a RETIRED model id answers
-    // 429 for every request (gemini-2.0-flash died 2026-03-03 and shipped here
-    // as the default — every Gemini connect looked "rate limited").
+    // adapter reaches it with only a different base URL + key (free key at
+    // aistudio.google.com/apikey), and its endpoint returns permissive CORS so
+    // the browser calls it directly — no proxy. DEFAULT is `gemini-2.5-flash-lite`:
+    // the flash variant with the BIGGEST free quota (~15 req/min, 1,000/day) —
+    // 4× the daily headroom of plain 2.5-flash (~10/min, 250/day), so it is the
+    // most 429-resistant free choice. Swap `model` to `gemini-2.5-flash` for
+    // stronger answers if you don't hit the limit. NOTE: a RETIRED model id
+    // answers 429 to EVERY request (gemini-2.0-flash died 2026-03-03) — a single
+    // query 429ing usually means a stale saved id, not real quota; re-pick this
+    // preset in Model setup and Save to overwrite it.
     id: "gemini-free",
     kind: "openai-compatible",
-    label: "Google Gemini (free tier — paste a free key)",
+    label: "Google Gemini Flash (OLD AIza key — OpenAI-compat)",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
+    needsKey: true,
+  },
+  {
+    // The NATIVE Gemini endpoint (R-0054) — use this when AI Studio gave you a
+    // NEW key that starts with "AQ." (Google's 2026 default). Those keys fail on
+    // the OpenAI-compat preset above (a Google rollout bug) but work here, where
+    // the key rides an `x-goog-api-key` header on the `:generateContent` REST
+    // surface. `gemini-flash-latest` always points at the current free Flash.
+    id: "gemini-native",
+    kind: "gemini-native",
+    label: "Google Gemini (NEW AQ. key — paste your key)",
+    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-flash-latest",
     needsKey: true,
   },
   {
@@ -132,6 +186,26 @@ export const PRESETS = [
     needsKey: true,
   },
 ];
+
+// Convert one OpenAI-style message `content` (a string, or a vision array of
+// {type:"text"|"image_url"} parts) into Gemini native `parts`. A base64 data
+// URI becomes an `inline_data` part (Gemini's vision shape); a non-data image
+// URL degrades to a text mention (the native endpoint can't fetch a remote URL
+// inline). Pure — used only by the gemini-native adapter.
+export function geminiParts(content) {
+  if (typeof content === "string") return [{ text: content }];
+  if (!Array.isArray(content)) return [{ text: String(content ?? "") }];
+  return content.map((part) => {
+    if (part?.type === "text") return { text: part.text ?? "" };
+    if (part?.type === "image_url") {
+      const url = part.image_url?.url ?? "";
+      const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+      if (m) return { inline_data: { mime_type: m[1], data: m[2] } };
+      return { text: `[image: ${url}]` };
+    }
+    return { text: "" };
+  });
+}
 
 export function buildRequest(cfg, messages) {
   const p = PROVIDERS[cfg.kind];
