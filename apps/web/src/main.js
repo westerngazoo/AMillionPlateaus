@@ -1911,10 +1911,14 @@ async function main() {
 
   // The study answer shown INSIDE the detail drawer, where the buttons are: the
   // global companion panel (still the transcript of record) sits behind this
-  // fixed drawer, so a study reply must surface here to be seen. textContent
-  // only — never innerHTML (no injection).
+  // fixed drawer, so a study reply must surface here to be seen. Rendered as
+  // Markdown + KaTeX — the deep-study answers (R-0048) are full of **emphasis**,
+  // lists, and math like $\nabla f = \nabla\cdot f + \nabla\wedge f$, and showing
+  // the raw source defeats the point. `renderMarkdown` is the SAME injection-safe
+  // sanitiser the study body and the OCR reply use — model text stays inert.
   function showStudyReply(text) {
-    detailReply.textContent = text;
+    detailReply.innerHTML = renderMarkdown(String(text ?? ""));
+    typesetMath(detailReply); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = false;
   }
 
