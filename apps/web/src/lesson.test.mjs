@@ -26,12 +26,15 @@ test("analogy + example prompts ground in the topic, notes, and name their limit
   assert.match(e, /insight/i);
 });
 
-test("lessonStepPrompt routes each generated step to a real, non-empty prompt", () => {
-  const ctx = { name: "Spin", domainLabel: "Physics", notes: "Pauli matrices.", neighbors: [{ name: "QM" }] };
+test("EVERY generated step is self-contained: names the topic + carries its notes", () => {
+  const ctx = { name: "Spin", domainLabel: "Physics", notes: "Pauli matrices, spin-½.", neighbors: [{ name: "QM" }] };
   for (const key of ["analogy", "example", "check", "teach", "recall"]) {
     const p = lessonStepPrompt(key, ctx);
     assert.equal(typeof p, "string");
     assert.ok(p.length > 20, `${key} builds a prompt`);
+    // works pasted into a BLANK chat tab — the topic + notes travel with it
+    assert.match(p, /Spin/, `${key} names the topic`);
+    assert.match(p, /Pauli matrices/, `${key} carries the notes`);
   }
   // read/ground steps have no generated prompt
   assert.equal(lessonStepPrompt("summary", ctx), "");

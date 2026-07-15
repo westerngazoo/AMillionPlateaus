@@ -61,9 +61,26 @@ export const LESSON_STEPS = [
 ];
 
 /**
+ * A self-contained grounding header. The reused R-0048 prompts (deep quiz,
+ * flashcards) were written to ride the IN-APP companion, whose system prompt
+ * already carries the topic's notes — pasted into a BLANK Gemini/AI Studio tab
+ * their "this topic" / "grounding above" refer to nothing. Prepending this makes
+ * every hand-off prompt stand on its own. Pure.
+ */
+export function groundHeader({ name = "this topic", domainLabel = "", notes = "" } = {}) {
+  const where = domainLabel ? ` (${domainLabel})` : "";
+  const body = groundNotes(notes);
+  return body
+    ? `Topic: "${name}"${where}\n\nMy notes on it (ground your answer in these; where they're thin, say what's missing rather than inventing):\n${body}\n\n`
+    : `Topic: "${name}"${where}\n\n`;
+}
+
+/**
  * The hand-off prompt for a step, built from the topic's graph context.
  * `ctx` = { name, domainLabel, notes, neighbors }. Returns "" for steps with no
- * generated prompt (summary / ground). Pure + deterministic.
+ * generated prompt (summary / ground). Every generated prompt is self-contained —
+ * it names the topic and carries its notes — so it works in a blank chat tab, not
+ * only inside the app's companion. Pure + deterministic.
  */
 export function lessonStepPrompt(stepKey, ctx = {}) {
   switch (stepKey) {
@@ -72,11 +89,11 @@ export function lessonStepPrompt(stepKey, ctx = {}) {
     case "example":
       return examplePrompt(ctx);
     case "check":
-      return deepQuizPrompt({ neighbors: ctx.neighbors || [] });
+      return groundHeader(ctx) + deepQuizPrompt({ neighbors: ctx.neighbors || [] });
     case "teach":
-      return feynmanPrompt({ topicName: ctx.name || "this topic" });
+      return groundHeader(ctx) + feynmanPrompt({ topicName: ctx.name || "this topic" });
     case "recall":
-      return flashcardsPrompt();
+      return groundHeader(ctx) + flashcardsPrompt();
     default:
       return "";
   }

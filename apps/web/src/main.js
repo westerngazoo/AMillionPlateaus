@@ -1627,6 +1627,13 @@ async function main() {
 
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
+  // Guided-lesson state (R-0060) — declared HERE, above openPlateau, because
+  // openPlateau calls resetLesson() and resetLesson touches these. (The rest of
+  // the lesson consts/logic live below, used only at click time.) Keeping the two
+  // that resetLesson needs up here means a future top-level `await` inserted
+  // before the lesson block can never turn the reset into a TDZ ReferenceError.
+  const lessonPanel = document.getElementById("lesson-panel");
+  let lessonStep = 0;
 
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
@@ -1743,7 +1750,8 @@ async function main() {
   // the NotebookLM/Gemini hand-off R-0056, the notepad, the mastery gate R-0030)
   // into one ordered lesson. Each step reuses handoffContext + copyToClipboard;
   // the heavy generation rides the hand-off, so a flaky model never blocks it.
-  const lessonPanel = document.getElementById("lesson-panel");
+  // (`lessonPanel` + `lessonStep` are declared up by `studyPlateau` — resetLesson
+  // needs them before openPlateau runs.)
   const lessonProgress = document.getElementById("lesson-progress");
   const lessonTitle = document.getElementById("lesson-title");
   const lessonCoach = document.getElementById("lesson-coach");
@@ -1751,7 +1759,6 @@ async function main() {
   const lessonActions = document.getElementById("lesson-actions");
   const lessonBack = document.getElementById("lesson-back");
   const lessonNext = document.getElementById("lesson-next");
-  let lessonStep = 0;
 
   function resetLesson() {
     lessonStep = 0;
