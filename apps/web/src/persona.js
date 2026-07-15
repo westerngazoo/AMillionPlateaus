@@ -41,6 +41,19 @@ export const INTUITIONISTIC_DOMAIN = "55555555-5555-5555-5555-555555555555";
 // the other's trailhead.
 export const COMPUTATION_DOMAIN = "66666666-6666-6666-6666-666666666666";
 
+// The two alternate physics lenses (physics-lens-curriculum.js, R-0057). Both
+// re-face the SAME physics-degree core, through a different formalism:
+//  • Geometric Algebra — the math of space itself; leans Formal×Empirical
+//    (0.71, 0.71, 0), the 45° meet of Mathematics(e1) and Physics(e2), because GA
+//    IS the algebra physics is written in. Trailhead "The Geometric Product" sits
+//    on this unit direction so SEED=0.16 clears the 0.15 fog on step one.
+//  • Synthetic Infinitesimal Analysis — calculus by nilsquare infinitesimals in
+//    an intuitionistic world; leans Formal×Creative (0.9, 0, 0.44), NEAR the
+//    Intuitionistic Foundations lens (they meet — SIA is intuitionistic analysis)
+//    yet distinct enough that neither lights the other's trailhead.
+export const GA_DOMAIN = "77777777-7777-7777-7777-777777777777";
+export const SIA_DOMAIN = "88888888-8888-8888-8888-888888888888";
+
 // grade-1 blade indices in [1, e1, e2, e12, e3, e13, e23, e123]
 const E1 = 1;
 const E2 = 2;
@@ -116,6 +129,23 @@ export const ARCHETYPES = [
     blurb: "Wakes facing Computation — begins at The REPL & S-expressions.",
     orient: [{ domain: COMPUTATION_DOMAIN, dir: { e1: 0.8, e2: 0, e3: 0.6 } }],
   },
+  // The two alternate physics lenses (physics-lens-curriculum.js, R-0057): the
+  // SAME degree core, re-seen through the algebra of space (GA) or the calculus of
+  // the infinitesimal (SIA).
+  {
+    id: "geometric-algebraist",
+    name: "The Geometric Algebraist",
+    domainLabel: "Geometric Algebra",
+    blurb: "Re-sees physics in the algebra of space — begins at The Geometric Product.",
+    orient: [{ domain: GA_DOMAIN, dir: { e1: 0.71, e2: 0.71, e3: 0 } }],
+  },
+  {
+    id: "synthetic-analyst",
+    name: "The Synthetic Analyst",
+    domainLabel: "Synthetic Infinitesimal Analysis",
+    blurb: "Re-sees physics via nilsquare infinitesimals — begins at ε² = 0.",
+    orient: [{ domain: SIA_DOMAIN, dir: { e1: 0.9, e2: 0, e3: 0.44 } }],
+  },
 ];
 
 // ── Visitor-authored personas (SPEC-0009 / R-0009) ─────────────────────────
@@ -138,6 +168,9 @@ export const DOMAINS = [
   { id: INTUITIONISTIC_DOMAIN, label: "Intuitionistic Foundations", canonical: { e1: 0.95, e2: 0, e3: 0.3 } },
   // The CS curriculum's lens (cs-curriculum.js): Formal×Creative, unit-length.
   { id: COMPUTATION_DOMAIN, label: "Computation", canonical: { e1: 0.8, e2: 0, e3: 0.6 } },
+  // The two alternate physics lenses (physics-lens-curriculum.js, R-0057).
+  { id: GA_DOMAIN, label: "Geometric Algebra", canonical: { e1: 0.71, e2: 0.71, e3: 0 } },
+  { id: SIA_DOMAIN, label: "Synthetic Infinitesimal Analysis", canonical: { e1: 0.9, e2: 0, e3: 0.44 } },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
