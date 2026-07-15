@@ -80,6 +80,7 @@ import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./p
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
+import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import {
   PRESETS,
   PROVIDERS,
@@ -3269,6 +3270,124 @@ async function main() {
   }
 
   // Toggle button shows/hides the collapsible panel.
+  // ── Build a course from a reference (R-0061) ─────────────────────────────────
+  // Name a subject + optional reference → copy a parseable-syllabus prompt and
+  // open NotebookLM/Gemini (the hand-off, R-0056) → paste the result → author the
+  // whole course: a plateau per topic (in the active lens' domain, stepped along
+  // its axis), a prerequisite bridge per dependency, and a followable path. Each
+  // topic then has the R-0060 "Teach me" lesson. Model-free — generation is the
+  // hand-off; parsing + authoring are local.
+  const coursePanel = document.getElementById("course-builder");
+  const courseTitleIn = document.getElementById("course-title-in");
+  const courseRefIn = document.getElementById("course-ref-in");
+  const coursePaste = document.getElementById("course-paste");
+  const courseStatus = document.getElementById("course-status");
+  function courseSay(text, isErr) {
+    courseStatus.hidden = false;
+    courseStatus.textContent = text;
+    courseStatus.classList.toggle("err", !!isErr);
+  }
+  function renderCourseHandoff() {
+    const title = courseTitleIn.value.trim() || "this subject";
+    const reference = courseRefIn.value.trim();
+    document.getElementById("course-outline-targets").replaceChildren(
+      ...HANDOFF_TARGETS.map((t) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = `${t.label} ↗`;
+        b.title = t.note;
+        b.addEventListener("click", async () => {
+          const copied = await copyToClipboard(courseOutlinePrompt({ title, reference }));
+          window.open(t.url, "_blank", "noopener");
+          courseSay(
+            copied
+              ? `Prompt copied — paste it in ${t.label}, then bring the syllabus back to box 2.`
+              : `Opened ${t.label}; clipboard blocked — ask it for the syllabus yourself.`,
+          );
+        });
+        return b;
+      }),
+    );
+    const q = encodeURIComponent(title.slice(0, 200));
+    document.getElementById("course-search").replaceChildren(
+      ...SEARCH_ENGINES.map((e) => {
+        const a = document.createElement("a");
+        a.href = e.url(q);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = `find a reference · ${e.label} ↗`;
+        return a;
+      }),
+    );
+  }
+  document.getElementById("course-toggle").addEventListener("click", () => {
+    coursePanel.hidden = !coursePanel.hidden;
+    if (!coursePanel.hidden) {
+      renderCourseHandoff();
+      courseStatus.hidden = true;
+      courseTitleIn.focus();
+    }
+  });
+  document.getElementById("course-close").addEventListener("click", () => (coursePanel.hidden = true));
+  courseTitleIn.addEventListener("input", renderCourseHandoff);
+  courseRefIn.addEventListener("input", renderCourseHandoff);
+  document.getElementById("course-build").addEventListener("click", () => {
+    const title = courseTitleIn.value.trim();
+    if (!title) return courseSay("Name what you want to learn first.", true);
+    const steps = linkPrereqs(parseCourseOutline(coursePaste.value));
+    if (steps.length < 2) {
+      return courseSay("Paste a syllabus with at least 2 topics (one per line) into box 2.", true);
+    }
+    const reference = courseRefIn.value.trim();
+    // Place the course in the active lens' domain, stepped along its canonical axis.
+    const domain = activePersona?.orient?.[0]?.domain || allDomains()[0].id;
+    const canon = allDomains().find((d) => d.id === domain)?.canonical || { e1: 0.7, e2: 0.3, e3: 0.3 };
+    const ids = [];
+    steps.forEach((s, i) => {
+      const t = 0.9 - (i / Math.max(1, steps.length - 1)) * 0.45; // 0.9 → 0.45 down the axis
+      const jit = (k) => (((i * 37 + k * 13) % 7) - 3) * 0.012; // deterministic small spread
+      const body =
+        `# ${s.name}\n\n${s.description || ""}\n\n_Step ${i + 1}/${steps.length} of the “${title}” course` +
+        `${reference ? ` (based on ${reference})` : ""}. Open ▶ Teach me this topic to study it._`;
+      const id = doc.add_plateau(
+        s.name,
+        domain,
+        Math.max(0, canon.e1 * t + jit(1)),
+        Math.max(0, canon.e2 * t + jit(2)),
+        Math.max(0, canon.e3 * t + jit(3)),
+        body,
+      );
+      DOMAIN_OF.set(id, domain);
+      ids.push(id);
+    });
+    steps.forEach((s, i) => {
+      if (s.prereqIndex >= 0) doc.add_bridge(ids[s.prereqIndex], ids[i], `next in ${title}`);
+    });
+    try {
+      const path = buildPath({
+        id: crypto.randomUUID(),
+        title: `Course: ${title}`,
+        goal: reference ? `${title} — from ${reference}` : `Learn ${title} step by step`,
+        steps: ids,
+      });
+      const all = loadPaths();
+      all[path.id] = path;
+      savePaths(all);
+    } catch {
+      /* the path is a nicety; the plateaus + bridges ARE the course */
+    }
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    const first = doc.to_graph().plateaus().find((p) => p.id === ids[0]);
+    courseSay(`Built “${title}” — ${ids.length} topics + a path. Opening the first…`);
+    if (first) {
+      coursePanel.hidden = true;
+      openPlateau(first);
+    }
+  });
+
   const draftPanel = document.getElementById("draft-plateau");
   document.getElementById("draft-plateau-toggle").addEventListener("click", () => {
     draftPanel.hidden = !draftPanel.hidden;
