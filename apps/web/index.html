@@ -56,12 +56,35 @@
         border: 1px solid #34495f; border-radius: 6px;
       }
       #zoom-controls button:hover { background: rgba(34, 51, 70, 0.95); }
-      .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: relative; }
       button {
         background: #2a3a4c; color: #e6eef6; border: 1px solid #3a4d62;
         border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
       }
       button:hover { background: #34495f; }
+
+      /* Top-bar menu (R-0059): a hamburger opens a grouped dropdown so the old
+         15-button row collapses to one compact line. The panel floats over the
+         canvas (position:absolute) so it never reflows the map. */
+      .bar-spacer { flex: 1 1 auto; }
+      .menu-toggle { font-weight: 600; }
+      .menu-toggle[aria-expanded="true"] { background: #34495f; border-color: #5a7a95; }
+      .main-menu[hidden] { display: none; }
+      .main-menu {
+        position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 6px 18px; max-width: min(760px, calc(100vw - 24px));
+        background: #14202b; border: 1px solid #2a3543; border-radius: 10px;
+        padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+      }
+      .menu-group { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+      .menu-group-label {
+        margin: 2px 0 3px; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+        color: #7f97ac;
+      }
+      .menu-group button { width: 100%; text-align: left; }
+      .menu-relay { display: flex; gap: 6px; width: 100%; }
+      .menu-relay #relay-url { flex: 1 1 auto; min-width: 0; }
       .note { font-size: 12px; color: #8aa0b4; max-width: 760px; text-align: center; }
       #hud { font-size: 12px; color: #b7c6d6; font-variant-numeric: tabular-nums; }
 
@@ -684,39 +707,66 @@
   </head>
   <body>
     <h1>A Million Plateaus — fog world</h1>
+    <!-- Top bar (R-0059): one compact row — a hamburger that opens the grouped
+         action menu, the world HUD, and the identity/relay status. Every action
+         button keeps its id, so main.js wiring is unchanged; the buttons just live
+         inside #main-menu now. -->
     <div class="bar">
-      <button id="change-persona">Change lens</button>
-      <button id="travel-toggle">Travel</button>
-      <button id="paths-toggle">Paths</button>
-      <button id="model-setup">Model setup</button>
-      <!-- Local ⇄ hosted quick-switch (R-0049): flips between the last saved
-           local runtime (free) and the last saved hosted key — no re-pasting.
-           Hidden until a config exists on the other side. -->
-      <button id="model-flip" hidden>⇄ Local model</button>
-      <button id="draft-plateau-toggle">Draft a plateau</button>
-      <button id="draft-bridge-toggle">Draft a bridge</button>
-      <button id="drop-marker-toggle">Drop a marker</button>
-      <button id="place-stone-toggle">Place a stone</button>
-      <button id="connect-peer-toggle">Connect a peer (P2P)</button>
-      <button id="import-world">Import a world</button>
-      <button id="discover">Discover wizards</button>
-      <button id="reset-fog">Reset my history</button>
-      <button id="tour">Tour</button>
-      <button id="legend-toggle">Legend</button>
+      <button id="menu-toggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false"
+              aria-controls="main-menu" title="Menu">☰ Menu</button>
       <span id="hud">loading…</span>
       <span id="import-status" class="idhud" hidden></span>
+      <span class="bar-spacer"></span>
+      <span id="identity-hud" class="idhud" title="your public wizard id">🔑 …</span>
+      <span id="relay-hud" class="idhud">relay ○ offline</span>
+
+      <nav id="main-menu" class="main-menu" hidden aria-label="Main menu">
+        <div class="menu-group">
+          <p class="menu-group-label">Navigate</p>
+          <button id="change-persona">Change lens</button>
+          <button id="travel-toggle">Travel</button>
+          <button id="paths-toggle">Paths</button>
+          <button id="legend-toggle">Legend</button>
+        </div>
+        <div class="menu-group">
+          <p class="menu-group-label">Create</p>
+          <button id="draft-plateau-toggle">Draft a plateau</button>
+          <button id="draft-bridge-toggle">Draft a bridge</button>
+          <button id="drop-marker-toggle">Drop a marker</button>
+          <button id="place-stone-toggle">Place a stone</button>
+        </div>
+        <div class="menu-group">
+          <p class="menu-group-label">Companion</p>
+          <button id="model-setup">Model setup</button>
+          <!-- Local ⇄ hosted quick-switch (R-0049); hidden until a config exists
+               on the other side (main.js toggles this same id). -->
+          <button id="model-flip" hidden>⇄ Local model</button>
+        </div>
+        <div class="menu-group">
+          <p class="menu-group-label">World &amp; peers</p>
+          <button id="import-world">Import a world</button>
+          <button id="connect-peer-toggle">Connect a peer (P2P)</button>
+          <button id="discover">Discover wizards</button>
+        </div>
+        <!-- Wizard identity + optional relay (SPEC-0010 / R-0010): the relay URL is
+             a local-only setting; empty ⇒ offline. Typing here does NOT close the
+             menu (only button clicks do). -->
+        <div class="menu-group">
+          <p class="menu-group-label">Relay — optional sync</p>
+          <div class="menu-relay">
+            <input id="relay-url" type="text" placeholder="wss://relay… (optional)" autocomplete="off" />
+            <button id="relay-connect">Connect relay</button>
+          </div>
+        </div>
+        <div class="menu-group">
+          <p class="menu-group-label">Help &amp; reset</p>
+          <button id="tour">Tour</button>
+          <button id="reset-fog">Reset my history</button>
+        </div>
+      </nav>
       <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
            (or any WasmCrdtDoc.save() blob) and MERGE it into the current world. -->
       <input id="import-file" type="file" accept=".bin,application/octet-stream" hidden />
-    </div>
-    <!-- Wizard identity + optional relay (SPEC-0010 / R-0010). The key's PUBLIC
-         half is shown; the secret stays in localStorage and is never displayed,
-         synced or logged. The relay URL is a local-only setting; empty ⇒ offline. -->
-    <div class="bar bar-id">
-      <span id="identity-hud" class="idhud" title="your public wizard id">🔑 …</span>
-      <input id="relay-url" type="text" placeholder="wss://relay… (optional)" autocomplete="off" />
-      <button id="relay-connect">Connect relay</button>
-      <span id="relay-hud" class="idhud">relay ○ offline</span>
     </div>
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
          domain select is populated from DOMAINS at init. Position sliders use

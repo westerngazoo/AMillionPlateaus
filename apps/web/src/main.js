@@ -3976,6 +3976,33 @@ async function main() {
   document.getElementById("tutorial-gotit").addEventListener("click", dismissTutorial);
   document.getElementById("tour").addEventListener("click", () => showTutorial(0)); // replay (AC4)
 
+  // ── Top-bar hamburger menu (R-0059) ─────────────────────────────────────────
+  // The old 15-button toolbar now lives inside #main-menu; this just opens/closes
+  // it. Every action button keeps its own listener (registered elsewhere), so a
+  // click both fires the action AND — because it's a <button> inside the menu —
+  // closes the menu. Typing in the relay input does NOT close it (not a button).
+  const menuToggle = document.getElementById("menu-toggle");
+  const mainMenu = document.getElementById("main-menu");
+  const setMenu = (open) => {
+    mainMenu.hidden = !open;
+    menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  menuToggle.addEventListener("click", (e) => {
+    e.stopPropagation(); // don't let the document handler immediately re-close it
+    setMenu(mainMenu.hidden);
+  });
+  // Close after any action button inside the menu is chosen.
+  mainMenu.addEventListener("click", (e) => {
+    if (e.target.closest("button")) setMenu(false);
+  });
+  // Close on an outside click or Escape.
+  document.addEventListener("click", (e) => {
+    if (!mainMenu.hidden && !mainMenu.contains(e.target) && e.target !== menuToggle) setMenu(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !mainMenu.hidden) setMenu(false);
+  });
+
   // Map legend: a static key of what each line/dot means. Pure toggle, no state.
   const legendPanel = document.getElementById("legend");
   document.getElementById("legend-toggle").addEventListener("click", () => {
