@@ -241,7 +241,7 @@ Synthetic Infinitesimal Analysis takes infinitesimals as *real elements of the n
 
 The price is intuitionistic logic: you must drop the law of excluded middle (you cannot assume $\\varepsilon=0$ or $\\varepsilon\\ne0$). The reward is that calculus becomes *algebra* — no epsilons, no limits, derivatives by cancellation.
 
-**Deliverable:** explain why $\\varepsilon^2=0$ with $\\varepsilon\\ne 0$ forces you to abandon the law of excluded middle.`,
+**Deliverable:** explain why a NON-TRIVIAL $D$ (the nilsquares are not all zero, yet none is provably $\\ne 0$) is incompatible with the law of excluded middle.`,
   },
   {
     id: "a0000000-0000-0000-0000-000000000002",

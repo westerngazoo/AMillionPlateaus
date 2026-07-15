@@ -32,10 +32,10 @@ test("every id is a valid uuid and globally unique (incl. vs seeds/curriculum/cs
     ...PHYS_LENS_PATHS.map((p) => p.id),
   ];
   for (const id of localIds) assert.match(id, UUID);
-  assert.equal(new Set(localIds).size, localIds.length, "no dup within the module");
-  // no plateau-id collision with the other seeded worlds
+  assert.equal(new Set(localIds).size, localIds.length, "no dup within the module (all id kinds)");
+  // no id collision (plateaus AND bridges/resources/paths) with the other seeded worlds
   const others = new Set([...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS].map((p) => p.id));
-  for (const p of PHYS_LENS_PLATEAUS) assert.equal(others.has(p.id), false, `${p.id} collides`);
+  for (const id of localIds) assert.equal(others.has(id), false, `${id} collides with a seeded id`);
 });
 
 test("fixed-id namespaces: physics 8…, GA 9…, SIA a…, bridges b…, resources c…, path d…", () => {
