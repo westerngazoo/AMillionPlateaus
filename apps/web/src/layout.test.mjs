@@ -137,20 +137,22 @@ test("a dense cluster spreads more under adaptiveMinDist than the fixed default 
   assert.ok(spread(dense) > spread(DEFAULT_MIN_DIST), "the crowd is pushed further apart");
 });
 
-test("the shipped seed world stays below the knee — spacing provably unchanged (R-0055)", async () => {
-  // Ties AC1's behaviour-preservation to the REAL seed count. If a future
-  // curriculum expansion pushes the default world past the 60-node knee,
-  // adaptiveMinDist stops returning the historical constant and the shipped map
-  // silently re-spaces. Pin it so that becomes a RED test — a deliberate choice
-  // (raise the knee, or accept the new spacing) instead of a quiet regression.
+test("the shipped seed world's density is handled sanely by adaptiveMinDist (R-0055/R-0057)", async () => {
+  // The R-0055 guard originally pinned the seed world BELOW the 60-node knee
+  // (byte-identical spacing). R-0057 deliberately grew the world past it — GA +
+  // SIA lenses over the physics core — which is exactly what adaptiveMinDist is
+  // for (more topics ⇒ proportionally more room). The guard now ties to the FULL
+  // real seed count (all four seeded modules) and protects the two invariants
+  // that still matter: the spread never runs away past the clamp, and — a
+  // regression tripwire — the count doesn't silently collapse back below the knee.
   const { SEED_PLATEAUS } = await import("./seeds.js");
   const { QC_PLATEAUS } = await import("./curriculum.js");
   const { CS_PLATEAUS } = await import("./cs-curriculum.js");
-  const seedCount = SEED_PLATEAUS.length + QC_PLATEAUS.length + CS_PLATEAUS.length;
-  assert.equal(
-    adaptiveMinDist(seedCount),
-    DEFAULT_MIN_DIST,
-    `shipped seed world is ${seedCount} plateaus — that is past the density knee, so the ` +
-      `default map would re-space. Raise the knee in adaptiveMinDist deliberately, or accept it.`,
-  );
+  const { PHYS_LENS_PLATEAUS } = await import("./physics-lens-curriculum.js");
+  const seedCount =
+    SEED_PLATEAUS.length + QC_PLATEAUS.length + CS_PLATEAUS.length + PHYS_LENS_PLATEAUS.length;
+  const md = adaptiveMinDist(seedCount);
+  assert.ok(seedCount > 60, `world is ${seedCount} plateaus — past the knee by design (R-0057)`);
+  assert.ok(md > DEFAULT_MIN_DIST, "adaptive spread has engaged for the denser world");
+  assert.ok(md <= 120, `spread stays within the clamp (got ${md})`);
 });
