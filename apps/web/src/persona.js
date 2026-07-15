@@ -48,9 +48,14 @@ export const COMPUTATION_DOMAIN = "66666666-6666-6666-6666-666666666666";
 //    IS the algebra physics is written in. Trailhead "The Geometric Product" sits
 //    on this unit direction so SEED=0.16 clears the 0.15 fog on step one.
 //  • Synthetic Infinitesimal Analysis — calculus by nilsquare infinitesimals in
-//    an intuitionistic world; leans Formal×Creative (0.9, 0, 0.44), NEAR the
-//    Intuitionistic Foundations lens (they meet — SIA is intuitionistic analysis)
-//    yet distinct enough that neither lights the other's trailhead.
+//    an intuitionistic world; leans Formal×Creative (0.9, 0, 0.44). It sits in the
+//    same formal/constructive corner as the Intuitionistic Foundations and
+//    Computation lenses and, at SEED=0.16, co-lights their trailheads (proj ≈ 0.157
+//    > the 0.15 threshold). That is a genuine MEET, not a bug: SIA *is*
+//    intuitionistic analysis, and constructive maths ↔ computation is Curry–Howard.
+//    It's harmless in the live app (seed cross-lighting is not on the fog path —
+//    live reputation starts empty and the map is fully browsable, R-0033); the
+//    overlap only ever means the SIA companion counts those neighbours as in-reach.
 export const GA_DOMAIN = "77777777-7777-7777-7777-777777777777";
 export const SIA_DOMAIN = "88888888-8888-8888-8888-888888888888";
 
