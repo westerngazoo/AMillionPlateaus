@@ -79,6 +79,7 @@ import { pdfCheck, paneTarget } from "./library.js";
 import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
+import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
 import {
   PRESETS,
   PROVIDERS,
@@ -1626,6 +1627,13 @@ async function main() {
 
   const STONE_WEIGHT = 10; // the existing place-stone default (R-0015); grow-only
   let studyPlateau = null; // the plateau currently open in the Study view
+  // Guided-lesson state (R-0060) — declared HERE, above openPlateau, because
+  // openPlateau calls resetLesson() and resetLesson touches these. (The rest of
+  // the lesson consts/logic live below, used only at click time.) Keeping the two
+  // that resetLesson needs up here means a future top-level `await` inserted
+  // before the lesson block can never turn the reset into a TDZ ReferenceError.
+  const lessonPanel = document.getElementById("lesson-panel");
+  let lessonStep = 0;
 
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
@@ -1650,6 +1658,7 @@ async function main() {
     renderSearchLinks(p); // deep-links to look this topic up elsewhere
     renderHandoff(p); // R-0056 hand this topic to a bigger model in a new tab
     renderNotepad(p); // R-0056 private Markdown notepad for this topic
+    resetLesson(); // R-0060 collapse any open lesson when switching topics
     detail.hidden = false;
   }
 
@@ -1735,6 +1744,116 @@ async function main() {
       }),
     );
   }
+
+  // ── Guided lesson (R-0060): "Teach me this topic" — a stepped Feynman course ──
+  // Sequences what's already here (the notes, the audio R-0050, the search links,
+  // the NotebookLM/Gemini hand-off R-0056, the notepad, the mastery gate R-0030)
+  // into one ordered lesson. Each step reuses handoffContext + copyToClipboard;
+  // the heavy generation rides the hand-off, so a flaky model never blocks it.
+  // (`lessonPanel` + `lessonStep` are declared up by `studyPlateau` — resetLesson
+  // needs them before openPlateau runs.)
+  const lessonProgress = document.getElementById("lesson-progress");
+  const lessonTitle = document.getElementById("lesson-title");
+  const lessonCoach = document.getElementById("lesson-coach");
+  const lessonBody = document.getElementById("lesson-body");
+  const lessonActions = document.getElementById("lesson-actions");
+  const lessonBack = document.getElementById("lesson-back");
+  const lessonNext = document.getElementById("lesson-next");
+
+  function resetLesson() {
+    lessonStep = 0;
+    lessonPanel.hidden = true;
+  }
+  function lessonHint(text) {
+    const p = document.createElement("p");
+    p.className = "lesson-hint";
+    p.textContent = text;
+    lessonActions.append(p);
+  }
+  // One hand-off action: copy this step's prompt, open the tool in a new tab.
+  function lessonHandoffButton(target, prompt) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = `${target.label} ↗`;
+    b.title = target.note;
+    b.addEventListener("click", async () => {
+      const copied = await copyToClipboard(prompt);
+      window.open(target.url, "_blank", "noopener");
+      lessonActions.querySelector(".lesson-hint")?.remove();
+      lessonHint(
+        copied
+          ? `Prompt copied — paste it in ${target.label}, then keep the best answer in your notepad below.`
+          : `Opened ${target.label}; clipboard was blocked — retype your question there.`,
+      );
+    });
+    return b;
+  }
+  function renderLesson() {
+    if (!studyPlateau) return;
+    const step = LESSON_STEPS[lessonStep];
+    const ctx = handoffContext(studyPlateau);
+    lessonProgress.textContent = `Step ${lessonStep + 1} of ${LESSON_STEPS.length}`;
+    lessonTitle.textContent = step.title;
+    lessonCoach.textContent = step.coach;
+    lessonBody.replaceChildren();
+    lessonActions.replaceChildren();
+
+    if (step.kind === "read") {
+      lessonBody.innerHTML = renderMarkdown(
+        ctx.notes || "_This topic has no notes yet — jump to an analogy or example below to build them._",
+      );
+      typesetMath(lessonBody); // lazy, fire-and-forget
+      const listen = document.createElement("button");
+      listen.type = "button";
+      listen.textContent = "🎧 Listen (audio overview)";
+      listen.addEventListener("click", () => runPodcast());
+      lessonActions.append(listen);
+    } else if (step.kind === "ground") {
+      const q = encodeURIComponent(String(ctx.name ?? "").slice(0, 200));
+      for (const e of SEARCH_ENGINES) {
+        const a = document.createElement("a");
+        a.href = e.url(q);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = `${e.label} ↗`;
+        lessonActions.append(a);
+      }
+      lessonHint("Open a source you trust, then pin it under “Look it up” or add it as a resource below.");
+    } else {
+      // handoff + master steps: copy this step's prompt to each tool.
+      const prompt = lessonStepPrompt(step.key, ctx);
+      for (const t of HANDOFF_TARGETS) lessonActions.append(lessonHandoffButton(t, prompt));
+      lessonHint(
+        step.kind === "master"
+          ? "Make the cards, then when you can answer them cold use “Mark as mastered” below."
+          : "Keep the best answer in your private notepad below.",
+      );
+    }
+
+    lessonBack.disabled = lessonStep === 0;
+    lessonNext.textContent = lessonStep === LESSON_STEPS.length - 1 ? "Finish ✓" : "Next →";
+  }
+  document.getElementById("lesson-start").addEventListener("click", () => {
+    lessonStep = 0;
+    lessonPanel.hidden = false;
+    renderLesson();
+    lessonPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+  document.getElementById("lesson-close").addEventListener("click", () => {
+    lessonPanel.hidden = true;
+  });
+  lessonBack.addEventListener("click", () => {
+    lessonStep = clampStep(lessonStep - 1);
+    renderLesson();
+  });
+  lessonNext.addEventListener("click", () => {
+    if (lessonStep === LESSON_STEPS.length - 1) {
+      lessonPanel.hidden = true; // finished
+      return;
+    }
+    lessonStep = clampStep(lessonStep + 1);
+    renderLesson();
+  });
 
   // ── Private notepad (R-0056): a per-topic Markdown scratch note, THIS browser
   // only (never synced, never in the CRDT). Autosaves ~400 ms after you stop.
