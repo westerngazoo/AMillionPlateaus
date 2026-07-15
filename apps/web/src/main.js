@@ -57,6 +57,7 @@ import {
   PHYS_LENS_RESOURCES,
   PHYS_LENS_PATHS,
 } from "./physics-lens-curriculum.js"; // R-0057: GA + SIA lenses over the physics core
+import { loadPairRelay, pairRoomUrl, createPairChannel } from "./pair-relay.js"; // R-0058: cross-device Scan Note
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import {
   DEEP_STUDY_ACTIONS,
@@ -671,24 +672,27 @@ async function main() {
         draw();
         persist(); // durable (R-0012); the doc carries plateaus/bridges/markers/votes
       },
-      onMediaMessage: async (bytes) => {
-        if (!qrPlateauId) return;
-        const id = crypto.randomUUID();
-        await mediaStore.put(id, new Blob([bytes], { type: "image/jpeg" }));
-        doc.add_resource(qrPlateauId, "Scanned Note", "Note", `resource://local/${id}`);
-        sync.pump();
-        pumpPeer();
-        persist();
-        draw();
-        if (studyPlateau && studyPlateau.id === qrPlateauId) {
-          // If the detail view is still open on that plateau, refresh resources
-          try {
-            renderStudyResources();
-          } catch {}
-        }
-      }
+      onMediaMessage: (bytes) => receiveScannedNote(bytes), // R-0058: shared with the pair-relay
     });
     return peer;
+  }
+
+  // Store an inbound scanned-note image (from WebRTC same-browser OR the R-0058
+  // cross-device relay) against the plateau the QR was opened on. The blob stays
+  // in this browser's IndexedDB (R-0012); only a `resource://local/<id>` reference
+  // enters the graph — the relay/peer never sees graph state.
+  async function receiveScannedNote(bytes) {
+    if (!qrPlateauId || !bytes || !bytes.length) return;
+    const id = crypto.randomUUID();
+    await mediaStore.put(id, new Blob([bytes], { type: "image/jpeg" }));
+    doc.add_resource(qrPlateauId, "Scanned Note", "Note", `resource://local/${id}`);
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    if (studyPlateau && studyPlateau.id === qrPlateauId) {
+      try { renderStudyResources(); } catch {}
+    }
   }
 
   // ── Signed-event transport (SPEC-0010 §2.3, R-0010 AC2/AC4/AC7) ─────────
@@ -2122,11 +2126,24 @@ async function main() {
     }
   }
 
+  let qrPairChannel = null; // R-0058: the desktop side of the cross-device relay
   document.getElementById("detail-add-qr-btn").addEventListener("click", async () => {
     if (!studyPlateau) return;
     qrPlateauId = studyPlateau.id;
     const roomId = crypto.randomUUID().slice(0, 8);
-    const url = new URL(`capture.html#${roomId}`, location.href).href;
+    // Cross-device (R-0058): if a relay is configured, encode it into the QR after
+    // the room id (capture.html reads it), and open the desktop end of the room so
+    // the phone's photo arrives even on another network. No relay ⇒ same-browser
+    // BroadcastChannel path below still works, and the QR carries just the room id.
+    const relayBase = loadPairRelay(localStorage);
+    const hash = relayBase ? `${roomId}|${encodeURIComponent(relayBase)}` : roomId;
+    const url = new URL(`capture.html#${hash}`, location.href).href;
+    qrPairChannel?.close();
+    qrPairChannel = createPairChannel({
+      url: pairRoomUrl(relayBase, roomId),
+      onImage: (bytes) => receiveScannedNote(bytes),
+    });
+
     const canvas = document.getElementById("detail-add-qr-canvas");
     canvas.hidden = false;
     try {
@@ -2139,8 +2156,9 @@ async function main() {
       detailReply.hidden = false;
       detailReply.textContent = `QR renderer unavailable — open this on your phone instead: ${url}`;
     }
-    
-    // Set up the shim for this specific pairing
+
+    // Same-browser fallback (two tabs on one machine): the WebRTC handshake over a
+    // BroadcastChannel. Harmless alongside the relay — whichever delivers first wins.
     const sig = new BroadcastChannel(`qr-pairing-${roomId}`);
     sig.onmessage = async (e) => {
       if (e.data.type === "ready") {

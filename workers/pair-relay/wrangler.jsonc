@@ -1,0 +1,14 @@
+{
+  // pair-relay — the "Scan Note" phone↔desktop WebSocket relay (R-0058).
+  // Deploy with: cd workers/pair-relay && npx wrangler deploy
+  "name": "mp-pair-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-01",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+  },
+  // SQLite-backed DO class — the only backend on the Workers FREE plan (this DO
+  // stores nothing; SQLite is required only for free-tier eligibility).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+}
