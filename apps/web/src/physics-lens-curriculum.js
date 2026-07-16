@@ -351,29 +351,8 @@ export const PHYS_LENS_RESOURCES = [
   { id: "c0000000-0000-0000-0000-000000000004", plateau: "90000000-0000-0000-0000-000000000005", title: "Hestenes — Oersted Medal Lecture: Reforming the Mathematical Language of Physics", kind: "Article", uri: "https://davidhestenes.net/geocalc/pdf/OerstedMedalLecture.pdf" },
 ];
 
-// The physics-degree CORE as a followable numbered path (R-0065): the standard
-// sequence a Physicist lens walks — start at Motion, end at spin. Reuses the
-// existing PHYS_PLATEAUS ids (so the GA/SIA cross-lens bridges stay intact); this
-// is just their canonical reading order surfaced as a path. `domains:[PHYSICS]` so
-// the lens→path lookup and pathDomains resolve it to the Physicist.
-export const PHYS_CORE_PATH = {
-  id: "d0000000-0000-0000-0000-000000000002",
-  title: "The Physics Core",
-  goal: "The standard physics-degree sequence — mechanics → fields → relativity → quanta.",
-  steps: [
-    MOTION, // Motion (the seed trailhead)
-    "80000000-0000-0000-0000-000000000001", // Mathematical Methods
-    "80000000-0000-0000-0000-000000000002", // Classical Mechanics
-    "80000000-0000-0000-0000-000000000003", // Rotational Mechanics & Rigid Bodies
-    "80000000-0000-0000-0000-000000000007", // Thermodynamics & Statistical Mechanics
-    "80000000-0000-0000-0000-000000000006", // Waves & Optics
-    "80000000-0000-0000-0000-000000000004", // Electromagnetism & Maxwell
-    "80000000-0000-0000-0000-000000000005", // Special Relativity
-    "80000000-0000-0000-0000-000000000008", // Quantum Mechanics
-    "80000000-0000-0000-0000-000000000009", // Spin & Angular Momentum
-  ],
-  domains: [PHYSICS_DOMAIN],
-};
+// (The physics-degree CORE numbered path moved to physics-core-curriculum.js in
+// R-0066, where it's rebuilt over the granular intro→advanced sequence.)
 
 // A followable route: enter through GA, re-derive the physics, end at the summit
 // where the GA and SIA lenses meet on differential geometry (R-0039 shape).
