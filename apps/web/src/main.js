@@ -1885,15 +1885,21 @@ async function main() {
     }
     const { done, total, nextIndex } = courseSummary(lessonProgMap, course.steps);
     const here = course.steps.indexOf(p.id);
+    // AC4 copy: always "Course: <name> · …". R-0061 course titles already carry a
+    // "Course: " prefix; strip it first so a built course doesn't double it, and a
+    // seeded curriculum path (no prefix) still gets the label.
+    const name = String(course.title || "").replace(/^course:\s*/i, "");
     line.hidden = false;
     line.textContent =
-      `${course.title} · ${done}/${total} studied · you're on topic ${here + 1}` +
+      `Course: ${name} · ${done}/${total} studied · you're on topic ${here + 1}` +
       (nextIndex === -1 ? " · course complete ✓" : "");
   }
   document.getElementById("lesson-start").addEventListener("click", () => {
     if (!studyPlateau) return;
     const entry = lessonEntryOf(lessonProgMap, studyPlateau.id);
-    lessonStep = entry.done ? 0 : entry.step; // resume mid-arc; a reviewed topic teaches again from the top
+    // resume mid-arc; a reviewed topic teaches again from the top. clampStep guards
+    // a corrupt localStorage value / a changed LESSON_STEPS.length from indexing OOB.
+    lessonStep = entry.done ? 0 : clampStep(entry.step);
     lessonPanel.hidden = false;
     renderLesson();
     lessonPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
