@@ -80,6 +80,13 @@ import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./p
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
+import {
+  entryOf as lessonEntryOf,
+  withStep as lessonWithStep,
+  withDone as lessonWithDone,
+  lessonButtonLabel,
+  courseSummary,
+} from "./lesson-progress.js"; // R-0063 remember your place in the lesson
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import {
   PRESETS,
@@ -1635,6 +1642,26 @@ async function main() {
   // before the lesson block can never turn the reset into a TDZ ReferenceError.
   const lessonPanel = document.getElementById("lesson-panel");
   let lessonStep = 0;
+  // R-0063: your place in each topic's lesson, THIS browser only (never synced,
+  // never in the CRDT — same as the notepad/private shelf). Pure ops in
+  // lesson-progress.js; this is just the localStorage read/write edge.
+  const LESSON_PROGRESS_KEY = "mp.lessonProgress";
+  function loadLessonProgress() {
+    try {
+      const m = JSON.parse(localStorage.getItem(LESSON_PROGRESS_KEY));
+      return m && typeof m === "object" ? m : {};
+    } catch {
+      return {};
+    }
+  }
+  function saveLessonProgress() {
+    try {
+      localStorage.setItem(LESSON_PROGRESS_KEY, JSON.stringify(lessonProgMap));
+    } catch {
+      /* private mode / quota — the lesson still works, it just won't resume */
+    }
+  }
+  let lessonProgMap = loadLessonProgress();
 
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
@@ -1660,6 +1687,7 @@ async function main() {
     renderHandoff(p); // R-0056 hand this topic to a bigger model in a new tab
     renderNotepad(p); // R-0056 private Markdown notepad for this topic
     resetLesson(); // R-0060 collapse any open lesson when switching topics
+    renderLessonEntry(p); // R-0063 reflect saved progress on the Teach-me button + course line
     detail.hidden = false;
   }
 
@@ -1834,8 +1862,44 @@ async function main() {
     lessonBack.disabled = lessonStep === 0;
     lessonNext.textContent = lessonStep === LESSON_STEPS.length - 1 ? "Finish ✓" : "Next →";
   }
+  // R-0063: save the current step for this topic (resume point).
+  function persistLessonStep() {
+    if (!studyPlateau) return;
+    lessonProgMap = lessonWithStep(lessonProgMap, studyPlateau.id, lessonStep, LESSON_STEPS.length);
+    saveLessonProgress();
+  }
+  // R-0063: reflect saved progress on the Teach-me button, and — when this topic
+  // is a step in a saved course (R-0061) — show how far through that course you
+  // are. Hoisted; openPlateau calls it on every topic open.
+  function renderLessonEntry(p) {
+    const btn = document.getElementById("lesson-start");
+    btn.textContent = lessonButtonLabel(lessonEntryOf(lessonProgMap, p.id), LESSON_STEPS.length);
+    const line = document.getElementById("lesson-course");
+    const course = Object.values(loadPaths()).find(
+      (pt) => Array.isArray(pt.steps) && pt.steps.includes(p.id),
+    );
+    if (!course) {
+      line.hidden = true;
+      line.textContent = "";
+      return;
+    }
+    const { done, total, nextIndex } = courseSummary(lessonProgMap, course.steps);
+    const here = course.steps.indexOf(p.id);
+    // AC4 copy: always "Course: <name> · …". R-0061 course titles already carry a
+    // "Course: " prefix; strip it first so a built course doesn't double it, and a
+    // seeded curriculum path (no prefix) still gets the label.
+    const name = String(course.title || "").replace(/^course:\s*/i, "");
+    line.hidden = false;
+    line.textContent =
+      `Course: ${name} · ${done}/${total} studied · you're on topic ${here + 1}` +
+      (nextIndex === -1 ? " · course complete ✓" : "");
+  }
   document.getElementById("lesson-start").addEventListener("click", () => {
-    lessonStep = 0;
+    if (!studyPlateau) return;
+    const entry = lessonEntryOf(lessonProgMap, studyPlateau.id);
+    // resume mid-arc; a reviewed topic teaches again from the top. clampStep guards
+    // a corrupt localStorage value / a changed LESSON_STEPS.length from indexing OOB.
+    lessonStep = entry.done ? 0 : clampStep(entry.step);
     lessonPanel.hidden = false;
     renderLesson();
     lessonPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1845,14 +1909,21 @@ async function main() {
   });
   lessonBack.addEventListener("click", () => {
     lessonStep = clampStep(lessonStep - 1);
+    persistLessonStep();
     renderLesson();
   });
   lessonNext.addEventListener("click", () => {
     if (lessonStep === LESSON_STEPS.length - 1) {
+      if (studyPlateau) {
+        lessonProgMap = lessonWithDone(lessonProgMap, studyPlateau.id, LESSON_STEPS.length);
+        saveLessonProgress();
+        renderLessonEntry(studyPlateau); // "✓ Reviewed" + bump the course count
+      }
       lessonPanel.hidden = true; // finished
       return;
     }
     lessonStep = clampStep(lessonStep + 1);
+    persistLessonStep();
     renderLesson();
   });
 
