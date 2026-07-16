@@ -1885,6 +1885,7 @@ async function main() {
       line.textContent = "";
       cont.hidden = true;
       cont.textContent = "";
+      cont.onclick = null; // symmetry with the else-branch; no stale closure on a re-shown button
       return;
     }
     const { done, total, nextIndex } = courseSummary(lessonProgMap, course.steps);
