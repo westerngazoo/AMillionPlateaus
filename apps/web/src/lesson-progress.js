@@ -74,3 +74,14 @@ export function courseSummary(progress, ids) {
   });
   return { done, total: list.length, nextIndex };
 }
+
+/**
+ * Which topic a "Continue →" from `hereIndex` should open (R-0064): the course's
+ * first unfinished topic — standard resume semantics. Returns -1 (no button) when
+ * the course is complete OR you are already ON that first-unfinished topic (just
+ * study it). Pure; wraps `courseSummary`.
+ */
+export function continueIndex(progress, ids, hereIndex) {
+  const { nextIndex } = courseSummary(progress, ids);
+  return nextIndex === -1 || nextIndex === hereIndex ? -1 : nextIndex;
+}
