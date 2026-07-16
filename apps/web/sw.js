@@ -25,7 +25,7 @@
 // registration, because those requests happened BEFORE this worker existed.
 // One online load then yields a complete offline cache (R-0047 AC2).
 
-import { CACHE_NAME, SHELL, PRECACHE, NAV_TIMEOUT_MS, classify, cacheable } from "./src/pwa.js";
+import { CACHE_NAME, SHELL, PRECACHE, NAV_TIMEOUT_MS, classify, cacheable, isCode } from "./src/pwa.js";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -81,6 +81,24 @@ async function navigate(request) {
   }
 }
 
+// Network-first for app CODE (JS/wasm), R-0062: online always yields the CURRENT
+// deploy's module — never one skewed against a fresher shell (which fails the ES
+// import graph and blacks out the app) — and the fetched copy refreshes the cache
+// for offline. Offline falls back to the cache (the last consistent set); a miss
+// propagates honestly, exactly like a stale-while-revalidate miss.
+async function codeFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const fresh = await fetch(request);
+    if (cacheable(fresh)) await cache.put(request, fresh.clone());
+    return fresh;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw new Error("offline and never cached");
+  }
+}
+
 // Stale-while-revalidate; a cache miss falls through to the network (which
 // populates the cache), and a network failure on a miss propagates honestly.
 async function asset(event, request) {
@@ -104,5 +122,8 @@ async function asset(event, request) {
 self.addEventListener("fetch", (event) => {
   const kind = classify(event.request, self.location.origin);
   if (kind === "bypass") return;
-  event.respondWith(kind === "navigate" ? navigate(event.request) : asset(event, event.request));
+  if (kind === "navigate") return event.respondWith(navigate(event.request));
+  // asset: code (JS/wasm) network-first so a fresh shell never pairs with a stale
+  // module (R-0062); other assets (fonts/css/images) stay stale-while-revalidate.
+  event.respondWith(isCode(event.request.url) ? codeFirst(event.request) : asset(event, event.request));
 });

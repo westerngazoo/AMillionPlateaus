@@ -6,9 +6,12 @@
 // the thin impure shell; main.js holds the one registration line.
 
 // Bumped only when the CACHING STRATEGY changes (activate deletes older caches).
-// Never bumped for app-content updates: stale-while-revalidate + the navigate
-// shell refresh keep content fresh without version bookkeeping (R-0047 AC3).
-export const CACHE_NAME = "mp-shell-v1";
+// Never bumped for app-content updates: network-first code + SWR assets + the
+// navigate shell refresh keep content fresh without version bookkeeping.
+// v2 (R-0062): code (JS/wasm) went network-first, so any v1 cache — which may
+// hold a version-SKEWED module set — is purged on activate. This is the strategy
+// change the bump-discipline exists for.
+export const CACHE_NAME = "mp-shell-v2";
 
 // ONE canonical shell key (architect NIT-7): both "./" and "./index.html"
 // navigations fall back to — and refresh — this single entry, so the offline
@@ -85,6 +88,26 @@ export function classify(req, origin) {
 // partial entries poisoning offline behaviour (R-0047 AC5).
 export function cacheable(res) {
   return !!res && res.ok === true && res.type === "basic";
+}
+
+/**
+ * Is this URL app CODE (an ES module or the wasm binary)? Code is served
+ * NETWORK-FIRST by sw.js (R-0062) so a freshly-served HTML shell can never pair
+ * with a STALE cached module: with stale-while-revalidate the cache could hold a
+ * mix of old + new modules after a deploy, and a new `main.js` importing an
+ * export the old cached module lacks fails the whole ES-module graph ("does not
+ * provide an export named …") — main.js never runs and the app blacks out. Fonts,
+ * CSS and images carry no cross-file export contract, so they stay
+ * stale-while-revalidate (offline-snappy). Pure; unit-tested in pwa.test.mjs.
+ */
+export function isCode(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  return /\.(?:m?js|wasm)$/i.test(u.pathname);
 }
 
 /**

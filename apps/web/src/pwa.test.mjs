@@ -18,6 +18,7 @@ import {
   VENDOR_WARM,
   classify,
   cacheable,
+  isCode,
   warmList,
   shouldRegister,
 } from "./pwa.js";
@@ -52,6 +53,22 @@ test("same-origin navigations route network-first; subresources route SWR", () =
   assert.equal(classify(app("/AMillionPlateaus/vendor/katex/katex.min.css"), ORIGIN), "asset");
 });
 
+test("isCode flags JS/wasm (network-first) and nothing else (R-0062)", () => {
+  // code → network-first, so a fresh shell never pairs with a stale module
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/main.js"), true);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/course-builder.mjs"), true);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/pkg/mp_wasm_bg.wasm"), true);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/pkg/mp_wasm.js"), true);
+  // non-code → stays stale-while-revalidate (no cross-file export contract)
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/index.html"), false);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/vendor/katex/katex.min.css"), false);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/vendor/katex/fonts/KaTeX_Main-Regular.woff2"), false);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/icons/icon-192.png"), false);
+  // query strings / hashes don't fool the pathname test; garbage is never code
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/main.js?v=2"), true);
+  assert.equal(isCode("not a url"), false);
+});
+
 test("cacheable() admits only healthy same-origin responses", () => {
   assert.equal(cacheable({ ok: true, type: "basic" }), true);
   assert.equal(cacheable({ ok: false, type: "basic" }), false); // 4xx/5xx
@@ -64,7 +81,7 @@ test("one canonical shell key; the precache is drift-proof; the knobs are pinned
   assert.deepEqual(PRECACHE, [SHELL, "./manifest.webmanifest"]);
   assert.ok(!PRECACHE.includes("./"), "no duplicate root entry beside the canonical shell");
   assert.ok(PRECACHE.every((p) => !/src\/|pkg\/|vendor\//.test(p)));
-  assert.equal(CACHE_NAME, "mp-shell-v1");
+  assert.equal(CACHE_NAME, "mp-shell-v2"); // v2: code went network-first (R-0062) → activate purges skewed v1
   assert.equal(NAV_TIMEOUT_MS, 4000);
 });
 
