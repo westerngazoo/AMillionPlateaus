@@ -47,6 +47,11 @@ import {
   MATH_DOMAIN,
   MUSIC_DOMAIN,
   PHYSICS_DOMAIN,
+  CLASSICAL_DOMAIN,
+  INTUITIONISTIC_DOMAIN,
+  COMPUTATION_DOMAIN,
+  GA_DOMAIN,
+  SIA_DOMAIN,
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
@@ -56,7 +61,8 @@ import {
   PHYS_LENS_BRIDGES,
   PHYS_LENS_RESOURCES,
   PHYS_LENS_PATHS,
-} from "./physics-lens-curriculum.js"; // R-0057: GA + SIA lenses over the physics core
+  PHYS_CORE_PATH,
+} from "./physics-lens-curriculum.js"; // R-0057: GA + SIA lenses over the physics core; R-0065: core path
 import { loadPairRelay, pairRoomUrl, createPairChannel } from "./pair-relay.js"; // R-0058: cross-device Scan Note
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import {
@@ -129,6 +135,7 @@ import { publishedProofs, PROOF_KIND } from "./proofs.js";
 import {
   buildPath,
   pathDomains,
+  pathRows,
   nextPathStep,
   pathProgress,
   publishedPaths,
@@ -289,6 +296,19 @@ const TRAILHEAD_OF = {
   [MATH_DOMAIN]: P.Arithmetic,
   [MUSIC_DOMAIN]: P.Rhythm,
   [PHYSICS_DOMAIN]: P.Motion, // R-0022: the Physicist's first step
+};
+
+// R-0065: each faceable domain → its seeded curriculum path id, so picking a lens
+// can surface a NUMBERED "Your path". Reuses the already-seeded paths (flagship,
+// CS, physics-lens) + the new physics-core path; Math/Music have no curriculum
+// path yet (a later slice). Undefined for a domain = no path panel for that lens.
+const DOMAIN_PATH_OF = {
+  [PHYSICS_DOMAIN]: PHYS_CORE_PATH.id,
+  [CLASSICAL_DOMAIN]: SEED_PATHS[0]?.id,
+  [INTUITIONISTIC_DOMAIN]: SEED_PATHS[0]?.id,
+  [COMPUTATION_DOMAIN]: CS_PATHS[0]?.id,
+  [GA_DOMAIN]: PHYS_LENS_PATHS[0]?.id,
+  [SIA_DOMAIN]: PHYS_LENS_PATHS[0]?.id,
 };
 
 // Math on the upper-right (high e1), Music on the lower-left (high e3).
@@ -495,7 +515,7 @@ async function main() {
   // to follow the moment the world loads.
   (function seedPaths() {
     const all = loadPaths();
-    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS]) all[p.id] = { ...p };
+    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS, PHYS_CORE_PATH]) all[p.id] = { ...p };
     savePaths(all);
   })();
   const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;
@@ -861,7 +881,90 @@ async function main() {
     announcePresence();
     renderDiscovery();
     draw();
+    renderLensPath({ showIfEmpty: false }); // R-0065: surface the lens' numbered curriculum path
   }
+
+  // ── R-0065: "Your path" — pick a lens → a NUMBERED curriculum with a start step.
+  // Resolves the active lens' faced domain → its seeded path (DOMAIN_PATH_OF),
+  // numbers the steps (pathRows), marks each done (mastered OR the R-0063 lesson
+  // finished), and offers a one-tap Start/Continue. Every topic is a real plateau,
+  // so opening one plugs straight into Teach-me / Resume / Continue.
+  function lensPathForActive() {
+    const domain = activePersona?.orient?.[0]?.domain;
+    const id = domain ? DOMAIN_PATH_OF[domain] : null;
+    const path = id ? loadPaths()[id] : null;
+    return path && Array.isArray(path.steps) && path.steps.length ? path : null;
+  }
+  function openFromPath(id) {
+    const p = plateauById(id);
+    if (!p) return;
+    document.getElementById("lens-path").hidden = true;
+    flyTo(p.position, () => openPlateau(p)); // pan across the map, then open
+  }
+  function renderLensPath({ showIfEmpty = true } = {}) {
+    const panel = document.getElementById("lens-path");
+    const list = document.getElementById("lens-path-list");
+    const startBtn = document.getElementById("lens-path-start");
+    const path = lensPathForActive();
+    if (!path) {
+      if (!showIfEmpty) {
+        panel.hidden = true;
+        return false;
+      }
+      document.getElementById("lens-path-title").textContent = "Your path";
+      document.getElementById("lens-path-goal").textContent =
+        "No curriculum path for this lens yet. Try the Physicist, Logician, Constructivist, Programmer, Geometric Algebraist or Synthetic Analyst lens — or Build a course.";
+      document.getElementById("lens-path-progress").textContent = "";
+      list.replaceChildren();
+      startBtn.hidden = true;
+      panel.hidden = false;
+      return false;
+    }
+    const done = new Set(
+      path.steps.filter((id) => mastered.has(id) || lessonEntryOf(lessonProgMap, id).done),
+    );
+    const rows = pathRows(path.steps, done);
+    document.getElementById("lens-path-title").textContent = String(path.title || "Your path").replace(
+      /^course:\s*/i,
+      "",
+    );
+    document.getElementById("lens-path-goal").textContent = path.goal || "";
+    document.getElementById("lens-path-progress").textContent = `${done.size} of ${rows.length} studied`;
+    list.replaceChildren(
+      ...rows.map((r) => {
+        const li = document.createElement("li");
+        li.className = "lens-path-row" + (r.done ? " is-done" : "");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = (r.done ? "✓ " : "") + (plateauById(r.id)?.name ?? "…"); // number from the <ol>
+        b.addEventListener("click", () => openFromPath(r.id));
+        li.append(b);
+        return li;
+      }),
+    );
+    const allDone = done.size >= rows.length;
+    const nextId = nextPathStep(path.steps, done) ?? path.steps[0];
+    startBtn.hidden = false;
+    startBtn.textContent = allDone
+      ? "✓ Course complete — revisit ↺"
+      : done.size
+        ? `▶ Continue — ${plateauById(nextId)?.name ?? "next"}`
+        : "▶ Start here";
+    startBtn.onclick = () => openFromPath(nextId);
+    panel.hidden = false;
+    return true;
+  }
+  document.getElementById("lens-path-close").addEventListener("click", () => {
+    document.getElementById("lens-path").hidden = true;
+  });
+  document.getElementById("lens-path-toggle").addEventListener("click", () => {
+    const panel = document.getElementById("lens-path");
+    if (!panel.hidden) {
+      panel.hidden = true; // toggle off
+      return;
+    }
+    renderLensPath({ showIfEmpty: true }); // re-open (with a note if this lens has no path yet)
+  });
 
   // ── Companion (R-0007) ──────────────────────────────────────────────────
   // The companion embodies the active persona and is grounded in the GA graph.
