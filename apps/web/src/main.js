@@ -61,8 +61,13 @@ import {
   PHYS_LENS_BRIDGES,
   PHYS_LENS_RESOURCES,
   PHYS_LENS_PATHS,
+} from "./physics-lens-curriculum.js"; // R-0057: GA + SIA lenses over the physics core
+import {
+  PHYS_CORE_PLATEAUS,
+  PHYS_CORE_BRIDGES,
+  PHYS_CORE_RESOURCES,
   PHYS_CORE_PATH,
-} from "./physics-lens-curriculum.js"; // R-0057: GA + SIA lenses over the physics core; R-0065: core path
+} from "./physics-core-curriculum.js"; // R-0066: the detailed intro→advanced physics-degree core
 import { loadPairRelay, pairRoomUrl, createPairChannel } from "./pair-relay.js"; // R-0058: cross-device Scan Note
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import {
@@ -340,13 +345,13 @@ async function main() {
   // touched (AC4).
   // (`description` rides the same upsert since the QC curriculum — seeds.js rows
   // have none, curriculum.js rows ship their Markdown body.)
-  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS])
+  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS, ...PHYS_CORE_PLATEAUS])
     doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3, p.description ?? "");
-  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES])
+  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES, ...PHYS_CORE_BRIDGES])
     doc.seed_bridge(b.id, b.from, b.to, b.concept);
   // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
   // fresh world has something to read; re-seeding never resets earned stones.
-  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES, ...CS_RESOURCES, ...PHYS_LENS_RESOURCES])
+  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES, ...CS_RESOURCES, ...PHYS_LENS_RESOURCES, ...PHYS_CORE_RESOURCES])
     doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
 
   // Rebuild id→domain from the (possibly restored) doc so a restored authored
