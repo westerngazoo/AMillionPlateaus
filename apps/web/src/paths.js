@@ -50,6 +50,16 @@ export function pathProgress(stepIds, mastered = new Set()) {
 }
 
 /**
+ * Number a path's steps with their done-state for the "Your path" panel (R-0065).
+ * `doneSet` is any Set of step ids counted as complete (mastered ∪ lesson-finished).
+ * Returns `[{ id, n, done }]` with n 1-based, order preserved. Pure.
+ */
+export function pathRows(stepIds, doneSet = new Set()) {
+  const list = Array.isArray(stepIds) ? stepIds : [];
+  return list.map((id, i) => ({ id, n: i + 1, done: doneSet.has(id) }));
+}
+
+/**
  * Published paths from the verified event log. Latest per signer wins;
  * malformed events skipped; sorted by pubkey for determinism.
  */

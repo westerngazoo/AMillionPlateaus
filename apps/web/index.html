@@ -635,6 +635,28 @@
         background: #141c26; border: 1px solid #2a3543; border-radius: 8px;
         padding: 0; font-size: 13px; max-width: 760px; width: 100%;
       }
+      /* Your path — the lens' numbered curriculum (R-0065) */
+      .lens-path { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+      .lens-path[hidden] { display: none; } /* class display:flex must not defeat [hidden] */
+      .lens-path-head { display: flex; align-items: center; justify-content: space-between; }
+      .lens-path-title { margin: 0; font-size: 15px; color: #cfe6ff; }
+      .lens-path-goal { margin: 0; font-size: 12px; color: #8aa0b4; line-height: 1.5; }
+      .lens-path-progress { margin: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #7fb0d8; }
+      .lens-path-start {
+        width: 100%; margin: 2px 0 4px; padding: 10px; font-size: 14px; font-weight: 600;
+        background: #1c3a52; border-color: #2f5f83; color: #cfe6ff;
+      }
+      .lens-path-start:hover { background: #244a68; }
+      .lens-path-start[hidden] { display: none; }
+      .lens-path-list { margin: 0; padding: 0 0 0 26px; display: flex; flex-direction: column; gap: 3px; max-height: 46vh; overflow-y: auto; }
+      .lens-path-row { color: #9fb8cc; }
+      .lens-path-row.is-done { color: #7fcf9f; }
+      .lens-path-row button {
+        background: none; border: none; color: inherit; text-align: left; width: 100%;
+        padding: 3px 4px; font-size: 13px; cursor: pointer; border-radius: 4px;
+      }
+      .lens-path-row button:hover { background: #1a2734; color: #cfe6ff; }
+
       /* Build a course (R-0061) */
       .course-builder { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
       .course-builder[hidden] { display: none; } /* class display: flex must not defeat [hidden] */
@@ -786,6 +808,7 @@
         <div class="menu-group">
           <p class="menu-group-label">Navigate</p>
           <button id="change-persona">Change lens</button>
+          <button id="lens-path-toggle">🧭 Your path</button>
           <button id="travel-toggle">Travel</button>
           <button id="paths-toggle">Paths</button>
           <button id="legend-toggle">Legend</button>
@@ -830,6 +853,19 @@
       <!-- Import a world (SPEC-0021 / R-0021): load an mp-host `import` save-blob
            (or any WasmCrdtDoc.save() blob) and MERGE it into the current world. -->
       <input id="import-file" type="file" accept=".bin,application/octet-stream" hidden />
+    </div>
+    <!-- Your path (R-0065): picking a lens opens its NUMBERED curriculum — a
+         followable, ordered list of topics with a Start step and progress. Each
+         topic is a real plateau (Teach me / Resume / Continue all apply). -->
+    <div id="lens-path" class="draft-plateau lens-path" hidden>
+      <div class="lens-path-head">
+        <h3 id="lens-path-title" class="lens-path-title">Your path</h3>
+        <button id="lens-path-close" class="lesson-close" type="button" title="Close">✕</button>
+      </div>
+      <p id="lens-path-goal" class="lens-path-goal"></p>
+      <p id="lens-path-progress" class="lens-path-progress"></p>
+      <button id="lens-path-start" class="lens-path-start" type="button"></button>
+      <ol id="lens-path-list" class="lens-path-list"></ol>
     </div>
     <!-- Build a course (R-0061): name a subject + optional reference → get a
          parseable syllabus prompt for NotebookLM/Gemini → paste it back → the app

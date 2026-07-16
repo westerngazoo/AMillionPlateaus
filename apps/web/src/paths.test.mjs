@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildPath,
   pathDomains,
+  pathRows,
   nextPathStep,
   pathProgress,
   publishedPaths,
@@ -63,4 +64,18 @@ test("publishedPaths keeps latest per signer and sorts", () => {
   assert.equal(out[0].pubkey, "aa".repeat(32));
   assert.equal(out[1].title, "New");
   assert.deepEqual(out[1].steps, ["a", "b"]);
+});
+
+test("pathRows numbers steps 1-based and marks done from the set (R-0065)", () => {
+  const rows = pathRows(["a", "b", "c"], new Set(["a", "c"]));
+  assert.deepEqual(rows, [
+    { id: "a", n: 1, done: true },
+    { id: "b", n: 2, done: false },
+    { id: "c", n: 3, done: true },
+  ]);
+  // empty / junk → []
+  assert.deepEqual(pathRows([], new Set()), []);
+  assert.deepEqual(pathRows(null), []);
+  // default doneSet → nothing done
+  assert.deepEqual(pathRows(["x"]).map((r) => r.done), [false]);
 });
