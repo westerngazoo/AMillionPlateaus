@@ -1368,6 +1368,154 @@
       votes) crosses the graph-sync channel, while signed events ride a separate
       channel + the relay.
     </p>
+    <!-- Boot guard (R-0062): a CLASSIC script (not a module), so it runs even when
+         the ES-module graph below fails to load. After a deploy a service worker
+         can serve a version-SKEWED mix of cached modules; the resulting "does not
+         provide an export named …" fails the whole graph, main.js never runs, and
+         the page would otherwise stay silently black — unrecoverable in an installed
+         PWA where you can't hard-refresh. This watches for a boot that never
+         completes and self-heals ONCE (clear caches + unregister the worker +
+         reload); a second failure shows a manual recovery panel. User data
+         (localStorage / IndexedDB) is never touched. -->
+    <script>
+      (function () {
+        "use strict";
+        var HEAL_KEY = "mp.bootHeal";
+        var BOOT_BUDGET_MS = 15000; // generous: a cold wasm load + graph seed on a slow device is still a real boot
+        // ONLY unambiguous ES-module load failures — the exact symptom of a
+        // version-skewed cache. Deliberately NARROW: a boot that merely fails a
+        // background fetch (relay/model offline → "Failed to fetch") must NOT match,
+        // or we'd nuke a perfectly healthy app. Anything not matched here still gets
+        // caught by the boot-budget timeout if it truly never boots.
+        // Anchor "unexpected end of" to input|script so it matches a truncated
+        // module ("Unexpected end of input/script") but NOT the benign
+        // "Unexpected end of JSON input" — a background JSON parse must not heal.
+        var MODULE_ERR = /does not provide an export named|error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unexpected end of (?:input|script)|failed to load module script/i;
+        var recovering = false;
+
+        function booted() {
+          return window.__mpBooted === true;
+        }
+        function healCount() {
+          try {
+            return parseInt(sessionStorage.getItem(HEAL_KEY), 10) || 0;
+          } catch (e) {
+            // Storage blocked (private mode / disabled): we can't cap reloads
+            // across a reload, so treat as already-healed → go straight to the
+            // manual panel rather than risk an unbounded auto-reload loop.
+            return 1;
+          }
+        }
+        function setHeal(n) {
+          try {
+            sessionStorage.setItem(HEAL_KEY, String(n));
+          } catch (e) {}
+        }
+
+        // Clears the SW caches + unregisters the worker. Leaves localStorage and
+        // IndexedDB (the world, personas, mastery, notes) untouched.
+        function purge() {
+          var jobs = [];
+          try {
+            if (window.caches) {
+              jobs.push(
+                caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                }),
+              );
+            }
+          } catch (e) {}
+          try {
+            if (navigator.serviceWorker) {
+              jobs.push(
+                navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                }),
+              );
+            }
+          } catch (e) {}
+          return Promise.all(jobs).catch(function () {});
+        }
+
+        function recover() {
+          if (recovering || booted()) return;
+          recovering = true;
+          if (healCount() >= 1) {
+            showPanel(); // already self-healed once this session and still black → stop looping
+            return;
+          }
+          setHeal(1);
+          purge().then(function () {
+            location.reload();
+          });
+        }
+
+        function showPanel() {
+          if (document.getElementById("mp-recover")) return;
+          var d = document.createElement("div");
+          d.id = "mp-recover";
+          d.style.cssText =
+            "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;" +
+            "justify-content:center;background:#0d1117;color:#e6eef6;" +
+            "font:15px/1.5 system-ui,-apple-system,sans-serif;padding:24px;text-align:center";
+          d.innerHTML =
+            '<div style="max-width:420px">' +
+            '<div style="font-size:34px;margin-bottom:10px">🗺️</div>' +
+            '<h2 style="margin:0 0 8px;font-size:19px">Couldn’t load the world</h2>' +
+            '<p style="color:#9fb0c0;font-size:14px;margin:0 0 18px">An out-of-date cached file got in the way. ' +
+            "Reloading fixes it — your notes and progress are safe.</p>" +
+            '<button id="mp-recover-reload" style="background:#1c3a52;border:1px solid #2f5f83;color:#cfe6ff;' +
+            'font-weight:600;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer">Reload</button>' +
+            '<div style="margin-top:14px">' +
+            '<button id="mp-recover-hard" style="background:none;border:none;color:#9fd0ff;text-decoration:underline;' +
+            'cursor:pointer;font-size:12px">Reset cached app</button> ' +
+            '<span style="color:#63788c;font-size:12px">(keeps your data)</span></div></div>';
+          (document.body || document.documentElement).appendChild(d);
+          document.getElementById("mp-recover-reload").onclick = function () {
+            setHeal(0);
+            location.reload();
+          };
+          document.getElementById("mp-recover-hard").onclick = function () {
+            purge().then(function () {
+              setHeal(0);
+              location.reload();
+            });
+          };
+        }
+
+        // A clean boot clears the counter so a LATER genuine failure gets a fresh retry.
+        window.addEventListener("mp:booted", function () {
+          window.__mpBooted = true;
+          setHeal(0);
+        });
+        // A module parse/link failure surfaces as a window error before main.js
+        // runs. Match ONLY the precise module-failure phrasings — never a generic
+        // resource error (a missing icon/font must not trigger a heal) — and only
+        // the MAIN entry script's own load failure by src, which is unambiguous.
+        window.addEventListener(
+          "error",
+          function (e) {
+            if (booted()) return;
+            var t = e && e.target;
+            var mainScriptFailed = t && t.tagName === "SCRIPT" && /\/src\/main\.js/.test(t.src || "");
+            if (mainScriptFailed || (e && MODULE_ERR.test(e.message || ""))) {
+              recover();
+            }
+          },
+          true,
+        );
+        // A failed dynamic import rejects; catch module-shaped reasons pre-boot.
+        window.addEventListener("unhandledrejection", function (e) {
+          if (booted()) return;
+          var r = e && e.reason;
+          if (MODULE_ERR.test((r && (r.message || r)) + "")) recover();
+        });
+        // Catch-all: nothing signalled boot within the budget → self-heal.
+        setTimeout(function () {
+          if (!booted()) recover();
+        }, BOOT_BUDGET_MS);
+      })();
+    </script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

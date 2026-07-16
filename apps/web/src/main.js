@@ -4261,11 +4261,20 @@ async function main() {
   if (shouldShowTutorial(localStorage)) showTutorial(0);
 }
 
-main().catch((err) => {
-  console.error("[mp] fatal:", err);
-  const hud = document.getElementById("hud");
-  if (hud) hud.textContent = `error: ${err}`;
-});
+main()
+  .then(() => {
+    // Tell the boot guard (index.html, R-0062) the module graph loaded and the
+    // app reached a usable state — this cancels the self-heal watchdog. Without
+    // it, a version-skewed SW cache that fails the import graph would leave the
+    // page silently black with no recovery (unrecoverable in an installed PWA).
+    window.__mpBooted = true;
+    window.dispatchEvent(new Event("mp:booted"));
+  })
+  .catch((err) => {
+    console.error("[mp] fatal:", err);
+    const hud = document.getElementById("hud");
+    if (hud) hud.textContent = `error: ${err}`;
+  });
 
 // Installable offline PWA (SPEC-0047 / R-0047): register the module service
 // worker AFTER boot kicked off — never blocking, silent where unsupported
