@@ -377,6 +377,13 @@
          a step in a saved course). */
       .lesson-course { margin: 0 0 4px; font-size: 11.5px; color: #8fb3cf; }
       .lesson-course[hidden] { display: none; }
+      /* R-0064: one-tap jump to the course's next unfinished topic. */
+      .lesson-continue {
+        width: 100%; margin: 0 0 6px; padding: 7px 10px; font-size: 12.5px; text-align: left;
+        background: #14202c; border: 1px solid #2a3f52; color: #a9cdea; border-radius: 7px;
+      }
+      .lesson-continue:hover { background: #1a2a38; border-color: #3a5670; }
+      .lesson-continue[hidden] { display: none; }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
         margin: 8px 0; padding: 12px 14px; border: 1px solid #2f5f83; border-radius: 10px;
@@ -491,6 +498,7 @@
       #plateau-detail[data-mode="bridge"] #detail-private, /* R-0052 shelf */
       #plateau-detail[data-mode="bridge"] #lesson-start, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #lesson-course, /* R-0063 course line */
+      #plateau-detail[data-mode="bridge"] #lesson-continue, /* R-0064 continue button */
       #plateau-detail[data-mode="bridge"] #lesson-panel, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
       #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
@@ -1206,6 +1214,7 @@
            and the mastery gate; main.js drives the steps. -->
       <button id="lesson-start" class="lesson-start" type="button">▶ Teach me this topic</button>
       <p id="lesson-course" class="lesson-course" hidden></p>
+      <button id="lesson-continue" class="lesson-continue" type="button" hidden></button>
       <section id="lesson-panel" class="lesson-panel" hidden aria-label="Guided lesson">
         <div class="lesson-head">
           <span id="lesson-progress" class="lesson-progress"></span>

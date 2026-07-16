@@ -86,7 +86,8 @@ import {
   withDone as lessonWithDone,
   lessonButtonLabel,
   courseSummary,
-} from "./lesson-progress.js"; // R-0063 remember your place in the lesson
+  continueIndex,
+} from "./lesson-progress.js"; // R-0063 remember your place in the lesson · R-0064 continue
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import {
   PRESETS,
@@ -1875,12 +1876,15 @@ async function main() {
     const btn = document.getElementById("lesson-start");
     btn.textContent = lessonButtonLabel(lessonEntryOf(lessonProgMap, p.id), LESSON_STEPS.length);
     const line = document.getElementById("lesson-course");
+    const cont = document.getElementById("lesson-continue");
     const course = Object.values(loadPaths()).find(
       (pt) => Array.isArray(pt.steps) && pt.steps.includes(p.id),
     );
     if (!course) {
       line.hidden = true;
       line.textContent = "";
+      cont.hidden = true;
+      cont.textContent = "";
       return;
     }
     const { done, total, nextIndex } = courseSummary(lessonProgMap, course.steps);
@@ -1893,6 +1897,19 @@ async function main() {
     line.textContent =
       `Course: ${name} · ${done}/${total} studied · you're on topic ${here + 1}` +
       (nextIndex === -1 ? " · course complete ✓" : "");
+    // R-0064: one-tap jump to the course's next unfinished topic (hidden when you're
+    // on it or the course is done). Fly across the map, then open it.
+    const ci = continueIndex(lessonProgMap, course.steps, here);
+    const target = ci === -1 ? null : doc.to_graph().plateaus().find((q) => q.id === course.steps[ci]);
+    if (target) {
+      cont.hidden = false;
+      cont.textContent = `Continue → ${target.name}`;
+      cont.onclick = () => flyTo(target.position, () => openPlateau(target));
+    } else {
+      cont.hidden = true;
+      cont.textContent = "";
+      cont.onclick = null;
+    }
   }
   document.getElementById("lesson-start").addEventListener("click", () => {
     if (!studyPlateau) return;

@@ -1,7 +1,7 @@
 // lesson-progress.test.mjs — node --test, pure (R-0063).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { entryOf, withStep, withDone, lessonButtonLabel, courseSummary } from "./lesson-progress.js";
+import { entryOf, withStep, withDone, lessonButtonLabel, courseSummary, continueIndex } from "./lesson-progress.js";
 
 const TOTAL = 7; // LESSON_STEPS.length
 
@@ -43,6 +43,22 @@ test("lessonButtonLabel reflects the three states", () => {
   assert.equal(lessonButtonLabel({ step: 3, done: false }, TOTAL), "▶ Resume — step 4/7");
   assert.equal(lessonButtonLabel({ step: 6, done: true }, TOTAL), "✓ Reviewed — teach again");
   assert.equal(lessonButtonLabel(undefined, TOTAL), "▶ Teach me this topic"); // defensive
+});
+
+test("continueIndex points at the first unfinished topic, or -1 when done / already there", () => {
+  const ids = ["a", "b", "c", "d"];
+  let m = withDone({}, "a", TOTAL); // a done; b,c,d not
+  // from a (index 0, just finished) → continue to b (first unfinished)
+  assert.equal(continueIndex(m, ids, 0), 1);
+  // from b (index 1) — b IS the first unfinished → -1 (you're already on it, just study)
+  assert.equal(continueIndex(m, ids, 1), -1);
+  // from c (index 2) with an earlier gap at b → still the first unfinished (b)
+  assert.equal(continueIndex(m, ids, 2), 1);
+  // whole course done → -1
+  const all = ids.reduce((acc, id) => withDone(acc, id, TOTAL), {});
+  assert.equal(continueIndex(all, ids, 0), -1);
+  // empty / junk
+  assert.equal(continueIndex({}, [], 0), -1);
 });
 
 test("courseSummary counts finished topics and finds the next unfinished one", () => {
