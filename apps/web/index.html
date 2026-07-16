@@ -1387,7 +1387,10 @@
         // background fetch (relay/model offline → "Failed to fetch") must NOT match,
         // or we'd nuke a perfectly healthy app. Anything not matched here still gets
         // caught by the boot-budget timeout if it truly never boots.
-        var MODULE_ERR = /does not provide an export named|error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unexpected end of|failed to load module script/i;
+        // Anchor "unexpected end of" to input|script so it matches a truncated
+        // module ("Unexpected end of input/script") but NOT the benign
+        // "Unexpected end of JSON input" — a background JSON parse must not heal.
+        var MODULE_ERR = /does not provide an export named|error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unexpected end of (?:input|script)|failed to load module script/i;
         var recovering = false;
 
         function booted() {
@@ -1397,7 +1400,10 @@
           try {
             return parseInt(sessionStorage.getItem(HEAL_KEY), 10) || 0;
           } catch (e) {
-            return 0;
+            // Storage blocked (private mode / disabled): we can't cap reloads
+            // across a reload, so treat as already-healed → go straight to the
+            // manual panel rather than risk an unbounded auto-reload loop.
+            return 1;
           }
         }
         function setHeal(n) {

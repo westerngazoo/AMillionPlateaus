@@ -56,7 +56,8 @@ test("same-origin navigations route network-first; subresources route SWR", () =
 test("isCode flags JS/wasm (network-first) and nothing else (R-0062)", () => {
   // code → network-first, so a fresh shell never pairs with a stale module
   assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/main.js"), true);
-  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/course-builder.mjs"), true);
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/src/course-builder.js"), true); // real module
+  assert.equal(isCode(ORIGIN + "/AMillionPlateaus/mod.mjs"), true); // .mjs is code too
   assert.equal(isCode(ORIGIN + "/AMillionPlateaus/pkg/mp_wasm_bg.wasm"), true);
   assert.equal(isCode(ORIGIN + "/AMillionPlateaus/pkg/mp_wasm.js"), true);
   // non-code → stays stale-while-revalidate (no cross-file export contract)

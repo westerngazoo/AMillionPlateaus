@@ -86,13 +86,24 @@ async function navigate(request) {
 // import graph and blacks out the app) — and the fetched copy refreshes the cache
 // for offline. Offline falls back to the cache (the last consistent set); a miss
 // propagates honestly, exactly like a stale-while-revalidate miss.
+//
+// BOUNDED like navigate() (NAV_TIMEOUT_MS): a stalled-but-alive network (captive
+// portal, weak wifi, e-ink over flaky cellular) must not block boot long enough
+// to trip the boot-guard into purging a still-good cache. On timeout/failure we
+// serve the cached copy — the accepted offline set — so a slow link stays snappy
+// (as under R-0047's SWR), while the fresh-match guarantee still holds whenever
+// the network answers within the budget.
 async function codeFirst(request) {
   const cache = await caches.open(CACHE_NAME);
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), NAV_TIMEOUT_MS);
   try {
-    const fresh = await fetch(request);
+    const fresh = await fetch(request, { signal: ctl.signal });
+    clearTimeout(timer);
     if (cacheable(fresh)) await cache.put(request, fresh.clone());
     return fresh;
   } catch {
+    clearTimeout(timer);
     const cached = await cache.match(request);
     if (cached) return cached;
     throw new Error("offline and never cached");
