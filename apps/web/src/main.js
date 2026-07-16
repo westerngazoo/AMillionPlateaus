@@ -913,7 +913,7 @@ async function main() {
       }
       document.getElementById("lens-path-title").textContent = "Your path";
       document.getElementById("lens-path-goal").textContent =
-        "No curriculum path for this lens yet. Try the Physicist, Logician, Programmer, Geometric Algebraist or Synthetic Analyst lens — or Build a course.";
+        "No curriculum path for this lens yet. Try the Physicist, Logician, Constructivist, Programmer, Geometric Algebraist or Synthetic Analyst lens — or Build a course.";
       document.getElementById("lens-path-progress").textContent = "";
       list.replaceChildren();
       startBtn.hidden = true;
