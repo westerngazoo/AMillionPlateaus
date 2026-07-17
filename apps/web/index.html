@@ -662,11 +662,17 @@
       .course-builder[hidden] { display: none; } /* class display: flex must not defeat [hidden] */
       .course-builder .course-title { margin: 0; font-size: 15px; color: #cfe6ff; }
       .course-help { margin: 0; font-size: 12px; color: #8aa0b4; line-height: 1.5; }
-      .course-builder input, .course-builder textarea {
+      .course-builder input, .course-builder textarea, .course-builder select {
         background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px;
         padding: 8px 10px; font-size: 13px; width: 100%; box-sizing: border-box;
       }
       .course-builder textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+      /* Where does this fit? (R-0069): matched-topic checklist + pin */
+      .wf-results { display: flex; flex-direction: column; gap: 2px; }
+      .wf-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cfe0ef; padding: 2px 0; cursor: pointer; }
+      .wf-row input { width: auto; }
+      .wf-unmatched { margin: 4px 0 0; font-size: 11.5px; color: #d59; }
+      #wf-pin { background: #1c3a52; border-color: #2f5f83; color: #cfe6ff; font-weight: 600; }
       .course-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
       .course-label { font-size: 12px; color: #7f97ac; }
       .course-targets { display: inline-flex; flex-wrap: wrap; gap: 6px; }
@@ -816,6 +822,7 @@
         <div class="menu-group">
           <p class="menu-group-label">Create</p>
           <button id="course-toggle">🎓 Build a course</button>
+          <button id="wherefits-toggle">📌 Where does this fit?</button>
           <button id="draft-plateau-toggle">Draft a plateau</button>
           <button id="draft-bridge-toggle">Draft a bridge</button>
           <button id="drop-marker-toggle">Drop a marker</button>
@@ -887,6 +894,32 @@
         <button id="course-close" type="button">Close</button>
       </div>
       <p id="course-status" class="course-status" hidden></p>
+    </div>
+
+    <!-- Where does this fit? (R-0069): paste a resource → hand it to your model
+         with the topic list → paste back which topics it hits → pin it there.
+         Reuses .course-builder styling (draft panel layout + inputs + buttons). -->
+    <div id="wherefits" class="draft-plateau course-builder wherefits" hidden>
+      <h3 class="course-title">📌 Where does this fit?</h3>
+      <p class="course-help">Studying from your own video or link? Hand it to NotebookLM/Gemini with your full topic list, paste back which topics it covers, and pin it there — a single video can land on several topics at once.</p>
+      <input id="wf-url" type="text" placeholder="Resource URL — a YouTube video, an article…" autocomplete="off" />
+      <input id="wf-title" type="text" placeholder="Title (optional)" autocomplete="off" />
+      <select id="wf-kind" aria-label="Resource kind"><!-- kinds, by main.js --></select>
+      <div class="course-actions">
+        <span class="course-label">1 · Ask which topics →</span>
+        <span id="wf-targets" class="course-targets"><!-- hand-off buttons, by main.js --></span>
+      </div>
+      <label class="course-label" for="wf-paste">2 · Paste the topic names it gave back</label>
+      <textarea id="wf-paste" rows="5" placeholder="Rotors: Rotation without Matrices&#10;Pauli Algebra &amp; Spinors&#10;…"></textarea>
+      <div class="course-actions">
+        <button id="wf-match" type="button">3 · Find those topics</button>
+      </div>
+      <div id="wf-results" class="wf-results"><!-- matched-topic checklist, by main.js --></div>
+      <div class="course-actions">
+        <button id="wf-pin" type="button" hidden>4 · Pin to selected</button>
+        <button id="wf-close" type="button">Close</button>
+      </div>
+      <p id="wf-status" class="course-status" hidden></p>
     </div>
 
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
