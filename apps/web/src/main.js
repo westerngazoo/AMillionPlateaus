@@ -112,6 +112,7 @@ import {
   continueIndex,
 } from "./lesson-progress.js"; // R-0063 remember your place in the lesson · R-0064 continue
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
+import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
 import {
   PRESETS,
   PROVIDERS,
@@ -3598,6 +3599,126 @@ async function main() {
       coursePanel.hidden = true;
       openPlateau(first);
     }
+  });
+
+  // ── Where does this fit? (R-0069) ────────────────────────────────────────────
+  // Paste a resource you're studying (a YouTube video, a link) → hand it to
+  // NotebookLM/Gemini WITH your full topic list (R-0056 hand-off) → paste back the
+  // topic names it lists → pin the resource to the matched topics (doc.add_resource,
+  // R-0023). Model work rides the hand-off; the app builds the prompt + resolves
+  // names→ids (where-fits.js). A single video can land on several topics at once.
+  const wfPanel = document.getElementById("wherefits");
+  const wfUrl = document.getElementById("wf-url");
+  const wfTitle = document.getElementById("wf-title");
+  const wfKind = document.getElementById("wf-kind");
+  const wfPaste = document.getElementById("wf-paste");
+  const wfResults = document.getElementById("wf-results");
+  const wfPin = document.getElementById("wf-pin");
+  const wfStatus = document.getElementById("wf-status");
+  wfKind.replaceChildren(
+    ...RESOURCE_KINDS.map((k) => {
+      const o = document.createElement("option");
+      o.value = o.textContent = k;
+      return o;
+    }),
+  );
+  wfKind.value = RESOURCE_KINDS.includes("Video") ? "Video" : RESOURCE_KINDS[0];
+  function wfSay(text, isErr) {
+    wfStatus.hidden = false;
+    wfStatus.textContent = text;
+    wfStatus.classList.toggle("err", !!isErr);
+  }
+  // The topic universe, each with a lens label — for the prompt and for name→id.
+  function wfTopics() {
+    return doc
+      .to_graph()
+      .plateaus()
+      .map((p) => ({ id: p.id, name: p.name, lens: domainLabelOf(p.domain_id) || "Other" }));
+  }
+  function renderWfHandoff() {
+    const title = wfTitle.value.trim();
+    const url = wfUrl.value.trim();
+    const kind = wfKind.value;
+    document.getElementById("wf-targets").replaceChildren(
+      ...HANDOFF_TARGETS.map((t) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = `${t.label} ↗`;
+        b.title = t.note;
+        b.addEventListener("click", async () => {
+          const copied = await copyToClipboard(whereFitsPrompt({ title, url, kind, topics: wfTopics() }));
+          window.open(t.url, "_blank", "noopener");
+          wfSay(
+            copied
+              ? `Prompt copied — add the ${kind.toLowerCase()} as a source in ${t.label}, then paste the topic names it lists into box 2.`
+              : `Opened ${t.label}; clipboard blocked — ask it which topics the ${kind.toLowerCase()} covers.`,
+          );
+        });
+        return b;
+      }),
+    );
+  }
+  function renderWfResults() {
+    const { matched, unmatched } = matchTopics(wfPaste.value, wfTopics());
+    wfResults.replaceChildren();
+    if (!matched.length) {
+      wfPin.hidden = true;
+      return wfSay(
+        unmatched.length
+          ? "None of those match a topic — check the names (ask for the EXACT names), or type a few yourself."
+          : "Paste the topic names it gave back into box 2, then Find those topics.",
+        !!unmatched.length,
+      );
+    }
+    for (const m of matched) {
+      const row = document.createElement("label");
+      row.className = "wf-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      cb.dataset.id = m.id;
+      const span = document.createElement("span");
+      span.textContent = m.name; // textContent — never trust the name as HTML
+      row.append(cb, span);
+      wfResults.append(row);
+    }
+    if (unmatched.length) {
+      const note = document.createElement("p");
+      note.className = "wf-unmatched";
+      note.textContent = `Couldn't place: ${unmatched.join(", ")}`;
+      wfResults.append(note);
+    }
+    wfPin.hidden = false;
+    wfSay(`Found ${matched.length} topic${matched.length > 1 ? "s" : ""} — untick any you don't want, then pin.`);
+  }
+  document.getElementById("wherefits-toggle").addEventListener("click", () => {
+    wfPanel.hidden = !wfPanel.hidden;
+    if (!wfPanel.hidden) {
+      renderWfHandoff();
+      wfStatus.hidden = true;
+      wfUrl.focus();
+    }
+  });
+  document.getElementById("wf-close").addEventListener("click", () => (wfPanel.hidden = true));
+  wfUrl.addEventListener("input", renderWfHandoff);
+  wfTitle.addEventListener("input", renderWfHandoff);
+  wfKind.addEventListener("change", renderWfHandoff);
+  document.getElementById("wf-match").addEventListener("click", renderWfResults);
+  wfPin.addEventListener("click", () => {
+    const url = wfUrl.value.trim();
+    if (!url) return wfSay("Paste the resource's URL first (box 1).", true);
+    const title = wfTitle.value.trim() || url;
+    const kind = wfKind.value;
+    const chosen = [...wfResults.querySelectorAll("input[type=checkbox]:checked")].map((c) => c.dataset.id);
+    if (!chosen.length) return wfSay("Tick at least one topic to pin to.", true);
+    for (const id of chosen) doc.add_resource(id, title, kind, url); // R-0023 grow-only pin
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    wfPin.hidden = true;
+    wfResults.replaceChildren();
+    wfSay(`Pinned to ${chosen.length} topic${chosen.length > 1 ? "s" : ""}. Open one to see it under its resources.`);
   });
 
   const draftPanel = document.getElementById("draft-plateau");
