@@ -74,6 +74,12 @@ import {
   MATH_RESOURCES,
   MATH_PATH,
 } from "./math-curriculum.js"; // R-0067: the detailed Khan/OpenStax mathematics core
+import {
+  MUSIC_PLATEAUS,
+  MUSIC_BRIDGES,
+  MUSIC_RESOURCES,
+  MUSIC_PATH,
+} from "./music-curriculum.js"; // R-0068: the detailed music-theory core
 import { loadPairRelay, pairRoomUrl, createPairChannel } from "./pair-relay.js"; // R-0058: cross-device Scan Note
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import {
@@ -311,12 +317,13 @@ const TRAILHEAD_OF = {
 
 // R-0065: each faceable domain → its seeded curriculum path id, so picking a lens
 // can surface a NUMBERED "Your path". Reuses the already-seeded paths (flagship,
-// CS, physics-lens) + the new physics-core (R-0066) and mathematics (R-0067) paths;
-// Music has no curriculum path yet (a later slice). Undefined for a domain = no
-// path panel for that lens.
+// CS, physics-lens) + the new physics-core (R-0066), mathematics (R-0067), and
+// music (R-0068) paths — every content domain now has one. Undefined for a domain
+// = no path panel for that lens.
 const DOMAIN_PATH_OF = {
   [PHYSICS_DOMAIN]: PHYS_CORE_PATH.id,
   [MATH_DOMAIN]: MATH_PATH.id,
+  [MUSIC_DOMAIN]: MUSIC_PATH.id,
   [CLASSICAL_DOMAIN]: SEED_PATHS[0]?.id,
   [INTUITIONISTIC_DOMAIN]: SEED_PATHS[0]?.id,
   [COMPUTATION_DOMAIN]: CS_PATHS[0]?.id,
@@ -353,13 +360,13 @@ async function main() {
   // touched (AC4).
   // (`description` rides the same upsert since the QC curriculum — seeds.js rows
   // have none, curriculum.js rows ship their Markdown body.)
-  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS, ...PHYS_CORE_PLATEAUS, ...MATH_PLATEAUS])
+  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS, ...PHYS_CORE_PLATEAUS, ...MATH_PLATEAUS, ...MUSIC_PLATEAUS])
     doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3, p.description ?? "");
-  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES, ...PHYS_CORE_BRIDGES, ...MATH_BRIDGES])
+  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES, ...PHYS_CORE_BRIDGES, ...MATH_BRIDGES, ...MUSIC_BRIDGES])
     doc.seed_bridge(b.id, b.from, b.to, b.concept);
   // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
   // fresh world has something to read; re-seeding never resets earned stones.
-  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES, ...CS_RESOURCES, ...PHYS_LENS_RESOURCES, ...PHYS_CORE_RESOURCES, ...MATH_RESOURCES])
+  for (const r of [...SEED_RESOURCES, ...QC_RESOURCES, ...CS_RESOURCES, ...PHYS_LENS_RESOURCES, ...PHYS_CORE_RESOURCES, ...MATH_RESOURCES, ...MUSIC_RESOURCES])
     doc.seed_resource(r.id, r.plateau, r.title, r.kind, r.uri);
 
   // Rebuild id→domain from the (possibly restored) doc so a restored authored
@@ -528,7 +535,7 @@ async function main() {
   // to follow the moment the world loads.
   (function seedPaths() {
     const all = loadPaths();
-    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS, PHYS_CORE_PATH, MATH_PATH]) all[p.id] = { ...p };
+    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS, PHYS_CORE_PATH, MATH_PATH, MUSIC_PATH]) all[p.id] = { ...p };
     savePaths(all);
   })();
   const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;
