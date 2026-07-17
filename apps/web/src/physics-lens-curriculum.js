@@ -349,6 +349,9 @@ export const PHYS_LENS_RESOURCES = [
   { id: "c0000000-0000-0000-0000-000000000002", plateau: "90000000-0000-0000-0000-000000000006", title: "Hestenes — Space-Time Algebra", kind: "Book", uri: "https://link.springer.com/book/10.1007/978-3-319-18413-5" },
   { id: "c0000000-0000-0000-0000-000000000003", plateau: "a0000000-0000-0000-0000-000000000001", title: "Bell — A Primer of Infinitesimal Analysis", kind: "Book", uri: "https://www.cambridge.org/9780521887182" },
   { id: "c0000000-0000-0000-0000-000000000004", plateau: "90000000-0000-0000-0000-000000000005", title: "Hestenes — Oersted Medal Lecture: Reforming the Mathematical Language of Physics", kind: "Article", uri: "https://davidhestenes.net/geocalc/pdf/OerstedMedalLecture.pdf" },
+  // Rotors ← the canonical rotors-not-quaternions piece (owner-added). Namespace note:
+  // c…0005/0006 are physics-core's, so this phys-lens resource takes the next free c…0007.
+  { id: "c0000000-0000-0000-0000-000000000007", plateau: "90000000-0000-0000-0000-000000000003", title: "Marc ten Bosch — Let's remove Quaternions from every 3D Engine (interactive)", kind: "Interactive", uri: "https://marctenbosch.com/quaternions/" },
 ];
 
 // (The physics-degree CORE numbered path moved to physics-core-curriculum.js in
