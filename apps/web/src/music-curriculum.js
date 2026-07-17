@@ -84,7 +84,7 @@ The **minor** scale and its three forms (natural, harmonic, melodic) give tonal 
 `# Intervals
 The distance between two pitches, named by **size** (second, third… octave) and **quality** (major, minor, perfect, augmented, diminished). Intervals are the atoms of both melody (played in sequence) and harmony (stacked). Consonance vs dissonance — why a perfect fifth sounds stable and a tritone tense — is heard here first.
 
-**Deliverable:** identify the intervals C→E, C→E♭, and C→G by size and quality, and say which is a tritone.
+**Deliverable:** identify the intervals C→E, C→E♭, C→G, and C→F♯ by size and quality, and say which is the tritone.
 
 **Study (official):** musictheory.net — *Generic Intervals* / *Specific Intervals*; Open Music Theory — *Intervals*.`,
   },
