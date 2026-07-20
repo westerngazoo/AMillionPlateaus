@@ -113,6 +113,7 @@ import {
 } from "./lesson-progress.js"; // R-0063 remember your place in the lesson · R-0064 continue
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
+import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
 import {
   PRESETS,
   PROVIDERS,
@@ -1813,6 +1814,7 @@ async function main() {
     renderNotepad(p); // R-0056 private Markdown notepad for this topic
     resetLesson(); // R-0060 collapse any open lesson when switching topics
     renderLessonEntry(p); // R-0063 reflect saved progress on the Teach-me button + course line
+    renderPrereqs(p); // R-0070 surface the curriculum steps to study before this one
     detail.hidden = false;
   }
 
@@ -2035,6 +2037,77 @@ async function main() {
       cont.textContent = "";
       cont.onclick = null;
     }
+  }
+  // R-0070: "Before this, study…" — the earlier steps of this topic's curriculum
+  // path you haven't studied yet (path ORDER is the prereq truth; bridge direction
+  // is unreliable). Each is tappable; a "Guide me →" hand-off builds a plan from the
+  // resources pinned on each prereq (R-0069/R-0023). Hoisted; called by openPlateau.
+  function renderPrereqs(p) {
+    const box = document.getElementById("detail-prereqs");
+    box.replaceChildren();
+    const course = Object.values(loadPaths()).find(
+      (pt) => Array.isArray(pt.steps) && pt.steps.includes(p.id),
+    );
+    if (!course) {
+      box.hidden = true;
+      return;
+    }
+    const doneSet = new Set(
+      course.steps.filter((id) => mastered.has(id) || lessonEntryOf(lessonProgMap, id).done),
+    );
+    const missing = missingPrereqs(course.steps, p.id, doneSet);
+    if (!missing.length) {
+      box.hidden = true;
+      return;
+    }
+    const g = doc.to_graph();
+    const platById = new Map(g.plateaus().map((q) => [q.id, q]));
+    const resAll = g.resources();
+    const rows = missing.map((m) => ({
+      n: m.n,
+      id: m.id,
+      name: platById.get(m.id)?.name || "…",
+      resources: resAll.filter((r) => r.plateau === m.id).map((r) => ({ title: r.title, uri: r.uri })),
+    }));
+    const pathTitle = String(course.title || "").replace(/^course:\s*/i, "");
+
+    box.hidden = false;
+    const label = document.createElement("p");
+    label.className = "prereq-label";
+    label.textContent = `Before this, study ${rows.length} prerequisite${rows.length > 1 ? "s" : ""}:`;
+    box.append(label);
+
+    const chips = document.createElement("div");
+    chips.className = "prereq-chips";
+    for (const r of rows) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "prereq-chip";
+      b.textContent = `${r.n} · ${r.name}`; // textContent — never trust the name as HTML
+      const target = platById.get(r.id);
+      if (target) b.addEventListener("click", () => flyTo(target.position, () => openPlateau(target)));
+      chips.append(b);
+    }
+    box.append(chips);
+
+    const guide = document.createElement("div");
+    guide.className = "prereq-guide";
+    const lbl = document.createElement("span");
+    lbl.className = "course-label";
+    lbl.textContent = "Guide me through them →";
+    guide.append(lbl);
+    for (const t of HANDOFF_TARGETS) {
+      const gb = document.createElement("button");
+      gb.type = "button";
+      gb.textContent = `${t.label} ↗`;
+      gb.title = t.note;
+      gb.addEventListener("click", async () => {
+        await copyToClipboard(prereqPlanPrompt({ target: p.name, pathTitle, prereqs: rows }));
+        window.open(t.url, "_blank", "noopener");
+      });
+      guide.append(gb);
+    }
+    box.append(guide);
   }
   document.getElementById("lesson-start").addEventListener("click", () => {
     if (!studyPlateau) return;
