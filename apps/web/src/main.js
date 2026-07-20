@@ -114,6 +114,7 @@ import {
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
 import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
+import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import {
   PRESETS,
   PROVIDERS,
@@ -1798,6 +1799,7 @@ async function main() {
     detailBody.innerHTML = renderMarkdown(
       stripChallenges(p.description || "") || "_No description yet._",
     );
+    segmentSentences(detailBody); // R-0071 BEFORE typeset — chunks never split $…$ math
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
@@ -1815,6 +1817,8 @@ async function main() {
     resetLesson(); // R-0060 collapse any open lesson when switching topics
     renderLessonEntry(p); // R-0063 reflect saved progress on the Teach-me button + course line
     renderPrereqs(p); // R-0070 surface the curriculum steps to study before this one
+    renderConfusionMarks(p.id); // R-0071 re-apply this topic's "I don't get this" marks
+    hideRhActions(); // R-0071 a fresh topic starts with no active rabbit hole
     detail.hidden = false;
   }
 
@@ -2109,6 +2113,155 @@ async function main() {
     }
     box.append(guide);
   }
+  // ── Mark the sentence that lost you (R-0071) ─────────────────────────────────
+  // The body reads like a lecture at full speed; the fix is sentence-level. The
+  // body is segmented into tappable sentences (BEFORE KaTeX typesets — chunks
+  // never split $…$ math, and dataset.rh keeps the pre-typeset canonical text so
+  // marks survive KaTeX rewriting textContent). Tap = mark "I don't get this"
+  // (persisted per topic, this browser only) + open the rabbit-hole actions:
+  // explain THIS sentence slowly, or name the hidden prerequisite it assumes —
+  // pasted back through matchTopics (R-0069) into tappable doors onto the
+  // plateaus you didn't know you needed.
+  const CONFUSIONS_KEY = "mp.confusions";
+  function loadConfusions() {
+    try {
+      const m = JSON.parse(localStorage.getItem(CONFUSIONS_KEY));
+      return m && typeof m === "object" ? m : {};
+    } catch {
+      return {};
+    }
+  }
+  function saveConfusions() {
+    try {
+      localStorage.setItem(CONFUSIONS_KEY, JSON.stringify(confusions));
+    } catch {
+      /* private mode / quota — marks just won't persist */
+    }
+  }
+  let confusions = loadConfusions();
+  let rhActive = null; // dataset.rh of the sentence the actions currently target
+  const rhActions = document.getElementById("rh-actions");
+  const rhQuote = document.getElementById("rh-quote");
+  const rhExplain = document.getElementById("rh-explain");
+  const rhMissing = document.getElementById("rh-missing");
+  const rhPaste = document.getElementById("rh-paste");
+  const rhDoors = document.getElementById("rh-doors");
+
+  // Wrap each leaf block's content into .rh-sentence spans. Runs on the raw
+  // markdown render, before typesetMath — sentenceChunks treats $…$ as atomic, so
+  // a math expression can never straddle two spans (which would break KaTeX).
+  function segmentSentences(root) {
+    for (const block of root.querySelectorAll("p, li")) {
+      if (block.querySelector("p, li")) continue; // leaf blocks only
+      const frag = document.createDocumentFragment();
+      let span = null;
+      const open = () => {
+        if (!span) {
+          span = document.createElement("span");
+          span.className = "rh-sentence";
+          frag.append(span);
+        }
+      };
+      for (const node of [...block.childNodes]) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          for (const c of sentenceChunks(node.textContent)) {
+            open();
+            span.append(document.createTextNode(c.text));
+            if (c.end) span = null;
+          }
+        } else {
+          open();
+          span.append(node); // inline elements (strong/em/code) ride the current sentence
+        }
+      }
+      block.replaceChildren(frag);
+      for (const s of [...block.querySelectorAll(":scope > .rh-sentence")]) {
+        const t = (s.textContent || "").trim();
+        if (t) s.dataset.rh = t.slice(0, 300);
+        else s.replaceWith(...s.childNodes); // whitespace-only — unwrap
+      }
+    }
+  }
+  function renderConfusionMarks(plateauId) {
+    const marked = new Set(confusions[plateauId] || []);
+    for (const s of detailBody.querySelectorAll(".rh-sentence"))
+      s.classList.toggle("rh-marked", marked.has(s.dataset.rh));
+  }
+  function hideRhActions() {
+    rhActive = null;
+    rhActions.hidden = true;
+    rhDoors.replaceChildren();
+    rhPaste.value = "";
+  }
+  function renderRhActions() {
+    if (!rhActive || !studyPlateau) return hideRhActions();
+    rhQuote.textContent = `“${rhActive.length > 140 ? `${rhActive.slice(0, 140)}…` : rhActive}”`;
+    const course = Object.values(loadPaths()).find(
+      (pt) => Array.isArray(pt.steps) && pt.steps.includes(studyPlateau.id),
+    );
+    const pathTitle = String(course?.title || "").replace(/^course:\s*/i, "");
+    const mount = (el, promptFor) => {
+      el.replaceChildren(
+        ...HANDOFF_TARGETS.map((t) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = `${t.label} ↗`;
+          b.title = t.note;
+          b.addEventListener("click", async () => {
+            await copyToClipboard(promptFor()); // reads rhActive at CLICK time
+            window.open(t.url, "_blank", "noopener");
+          });
+          return b;
+        }),
+      );
+    };
+    mount(rhExplain, () => explainSlowlyPrompt({ topic: studyPlateau.name, sentence: rhActive, pathTitle }));
+    mount(rhMissing, () => missingForPrompt({ topic: studyPlateau.name, sentence: rhActive, topics: wfTopics() }));
+    rhDoors.replaceChildren();
+    rhPaste.value = "";
+    rhActions.hidden = false;
+  }
+  detailBody.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return; // links keep their own behavior
+    const s = e.target.closest(".rh-sentence");
+    if (!s || !detailBody.contains(s) || !studyPlateau) return;
+    const key = s.dataset.rh || "";
+    if (!key) return;
+    const id = studyPlateau.id;
+    const marks = new Set(confusions[id] || []);
+    if (marks.has(key) && rhActive === key) {
+      marks.delete(key); // second tap on the active mark = "got it now" — unmark
+      s.classList.remove("rh-marked");
+      hideRhActions();
+    } else {
+      marks.add(key);
+      s.classList.add("rh-marked");
+      rhActive = key;
+      renderRhActions();
+    }
+    if (marks.size) confusions[id] = [...marks];
+    else delete confusions[id];
+    saveConfusions();
+  });
+  document.getElementById("rh-find").addEventListener("click", () => {
+    const { matched, unmatched } = matchTopics(rhPaste.value, wfTopics());
+    rhDoors.replaceChildren();
+    for (const m of matched) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "prereq-chip";
+      b.textContent = m.name; // textContent — never trust the name as HTML
+      const target = doc.to_graph().plateaus().find((q) => q.id === m.id);
+      if (target) b.addEventListener("click", () => flyTo(target.position, () => openPlateau(target)));
+      rhDoors.append(b);
+    }
+    if (unmatched.length) {
+      const note = document.createElement("p");
+      note.className = "wf-unmatched";
+      note.textContent = `Not on the map: ${unmatched.join(", ")}`;
+      rhDoors.append(note);
+    }
+  });
   document.getElementById("lesson-start").addEventListener("click", () => {
     if (!studyPlateau) return;
     const entry = lessonEntryOf(lessonProgMap, studyPlateau.id);
