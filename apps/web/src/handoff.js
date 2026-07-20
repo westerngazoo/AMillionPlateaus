@@ -27,9 +27,34 @@ export const HANDOFF_TARGETS = [
     url: "https://notebooklm.google.com/",
     note: "add your sources, then paste the pack into its chat — one step at a time",
   },
-  { id: "gemini", label: "Gemini", url: "https://gemini.google.com/app", note: "paste the prompt" },
-  { id: "aistudio", label: "AI Studio", url: "https://aistudio.google.com/", note: "paste the prompt" },
+  {
+    id: "gemini",
+    label: "Gemini",
+    url: "https://gemini.google.com/app",
+    note: "opens with your question already asked (Google AI Mode)",
+    // R-0073: gemini.google.com has no prompt-URL param, so a blank tab was all
+    // the owner ever saw ("it just opens the link, not the topic"). Google's AI
+    // Mode DOES carry the query — same Gemini answer, context included.
+    prefill: (p) => `https://www.google.com/search?udm=50&q=${encodeURIComponent(p)}`,
+  },
+  { id: "aistudio", label: "AI Studio", url: "https://aistudio.google.com/", note: "paste the prompt (Cmd/Ctrl+V)" },
 ];
+
+// Prompts longer than this can't ride a URL safely (and truncating instructions
+// mid-sentence is worse than pasting) — they fall back to clipboard + base URL.
+export const PREFILL_MAX = 1800;
+
+/**
+ * The URL a hand-off click should open (R-0073): the target's `prefill(prompt)`
+ * when it supports one AND the prompt fits in a URL — the tab then opens WITH the
+ * question already asked — otherwise the target's base URL (the prompt rides the
+ * clipboard, as before). Pure.
+ */
+export function handoffOpenUrl(target, prompt) {
+  const p = String(prompt || "");
+  if (target?.prefill && p && p.length <= PREFILL_MAX) return target.prefill(p);
+  return target?.url ?? "";
+}
 
 const NOTES_CAP = 1200; // keep a pasted prompt comfortably within any chat box
 
