@@ -115,6 +115,7 @@ import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-b
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
 import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
+import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import {
   PRESETS,
   PROVIDERS,
@@ -4721,6 +4722,78 @@ async function main() {
       focusedId = null;
       draw();
     }, 1800);
+  });
+
+  // ── Find a topic across every lens (R-0072) ─────────────────────────────────
+  // "I'm reading about degrees of freedom — which of MY topics is that, in which
+  // lens?" Searches every plateau's name + body (searchTopics: AND semantics,
+  // plural-forgiving, name-over-body ranking, md-stripped snippets), groups the
+  // results by lens, and a tap flies to + opens the chosen door. Offline, no
+  // model — unlike Travel (camera focus by exact name), this is discovery.
+  const tsPanel = document.getElementById("topic-search");
+  const tsInput = document.getElementById("ts-input");
+  const tsResults = document.getElementById("ts-results");
+  let tsTimer = null;
+  function renderTopicSearch() {
+    const q = tsInput.value.trim();
+    tsResults.replaceChildren();
+    if (q.length < 3) return; // sub-3-char queries are noise (searchTopics drops them anyway)
+    const topics = doc
+      .to_graph()
+      .plateaus()
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        lens: domainLabelOf(p.domain_id) || "Uncharted",
+        body: p.description || "",
+      }));
+    const groups = groupByLens(searchTopics(q, topics));
+    if (!groups.length) {
+      const none = document.createElement("p");
+      none.className = "ts-none";
+      none.textContent = "No topic matches — try fewer words, or 🎓 Build a course for it.";
+      tsResults.append(none);
+      return;
+    }
+    for (const [lens, rows] of groups) {
+      const h = document.createElement("p");
+      h.className = "ts-lens";
+      h.textContent = lens; // textContent — lens labels can be authored
+      tsResults.append(h);
+      for (const r of rows) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ts-row";
+        const name = document.createElement("strong");
+        name.textContent = r.name;
+        b.append(name);
+        if (r.snippet) {
+          const sn = document.createElement("span");
+          sn.className = "ts-snippet";
+          sn.textContent = r.snippet;
+          b.append(sn);
+        }
+        b.addEventListener("click", () => {
+          const p = doc.to_graph().plateaus().find((x) => x.id === r.id);
+          if (!p) return;
+          tsPanel.hidden = true;
+          flyTo(p.position, () => openPlateau(p));
+        });
+        tsResults.append(b);
+      }
+    }
+  }
+  document.getElementById("topic-search-toggle").addEventListener("click", () => {
+    tsPanel.hidden = !tsPanel.hidden;
+    if (!tsPanel.hidden) {
+      tsInput.focus();
+      renderTopicSearch();
+    }
+  });
+  document.getElementById("ts-close").addEventListener("click", () => (tsPanel.hidden = true));
+  tsInput.addEventListener("input", () => {
+    clearTimeout(tsTimer);
+    tsTimer = setTimeout(renderTopicSearch, 120); // debounce keystrokes
   });
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────

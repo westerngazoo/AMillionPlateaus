@@ -403,6 +403,13 @@
       .rh-quote { margin: 0; font-size: 12px; color: #e0b483; font-style: italic; }
       .rh-actions textarea { background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
       .rh-hint { margin: 0; font-size: 11px; color: #63788c; }
+      /* R-0072: find-a-topic results, grouped by lens */
+      .ts-results { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
+      .ts-lens { margin: 6px 0 2px; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #7fb0d8; }
+      .ts-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: #16202b; border: 1px solid #263447; border-radius: 6px; padding: 6px 9px; color: #dbe9f6; font-size: 13px; cursor: pointer; }
+      .ts-row:hover { background: #1c2a38; border-color: #3a5670; }
+      .ts-snippet { font-size: 11.5px; color: #8aa0b4; }
+      .ts-none { margin: 0; font-size: 12px; color: #8aa0b4; }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
         margin: 8px 0; padding: 12px 14px; border: 1px solid #2f5f83; border-radius: 10px;
@@ -836,6 +843,7 @@
           <p class="menu-group-label">Navigate</p>
           <button id="change-persona">Change lens</button>
           <button id="lens-path-toggle">🧭 Your path</button>
+          <button id="topic-search-toggle">🔎 Find a topic</button>
           <button id="travel-toggle">Travel</button>
           <button id="paths-toggle">Paths</button>
           <button id="legend-toggle">Legend</button>
@@ -941,6 +949,19 @@
         <button id="wf-close" type="button">Close</button>
       </div>
       <p id="wf-status" class="course-status" hidden></p>
+    </div>
+
+    <!-- Find a topic (R-0072): keyword search over every topic's name + body,
+         results grouped by lens — pick which lens's treatment to enter through.
+         Offline text search; filled by main.js. -->
+    <div id="topic-search" class="draft-plateau course-builder" hidden>
+      <h3 class="course-title">🔎 Find a topic — every lens</h3>
+      <p class="course-help">Reading about something? Type it — matches from every lens show below (name and notes are searched); pick the door you want to enter through.</p>
+      <input id="ts-input" type="text" placeholder="e.g. degrees of freedom, rotors, counterpoint" autocomplete="off" />
+      <div id="ts-results" class="ts-results"><!-- grouped results, by main.js --></div>
+      <div class="course-actions">
+        <button id="ts-close" type="button">Close</button>
+      </div>
     </div>
 
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
