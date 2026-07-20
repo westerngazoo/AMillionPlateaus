@@ -392,6 +392,17 @@
       .prereq-chip { font-size: 12px; background: #2c2113; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
       .prereq-chip:hover { background: #3a2c18; }
       .prereq-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      /* R-0071: tappable sentences + the rabbit-hole actions row. Marked = the same
+         amber "gap" language as the prereq block — a confusion IS a gap. */
+      .rh-sentence { cursor: pointer; border-radius: 3px; }
+      .rh-sentence:hover { background: rgba(127, 176, 216, 0.1); }
+      .rh-marked { background: rgba(224, 180, 131, 0.16); box-shadow: inset 2px 0 0 #e0b483; }
+      .rh-marked:hover { background: rgba(224, 180, 131, 0.24); }
+      .rh-actions { margin: 6px 0; padding: 8px 10px; border: 1px solid #4a3a2a; border-radius: 8px; background: #221a12; display: flex; flex-direction: column; gap: 6px; }
+      .rh-actions[hidden] { display: none; }
+      .rh-quote { margin: 0; font-size: 12px; color: #e0b483; font-style: italic; }
+      .rh-actions textarea { background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .rh-hint { margin: 0; font-size: 11px; color: #63788c; }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
         margin: 8px 0; padding: 12px 14px; border: 1px solid #2f5f83; border-radius: 10px;
@@ -508,6 +519,7 @@
       #plateau-detail[data-mode="bridge"] #lesson-course, /* R-0063 course line */
       #plateau-detail[data-mode="bridge"] #lesson-continue, /* R-0064 continue button */
       #plateau-detail[data-mode="bridge"] #detail-prereqs, /* R-0070 prerequisites */
+      #plateau-detail[data-mode="bridge"] #rh-actions, /* R-0071 rabbit-hole actions */
       #plateau-detail[data-mode="bridge"] #lesson-panel, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
       #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
@@ -1285,6 +1297,29 @@
       <div id="detail-bridge" class="detail-bridge"><!-- connection, by main.js --></div>
 
       <div id="detail-body" class="detail-body"><!-- rendered Markdown --></div>
+
+      <!-- Mark the sentence that lost you (R-0071): tap a sentence in the body to
+           mark "I don't get this" — this row offers a slow, sentence-scoped
+           explanation hand-off, or names the hidden prerequisite and turns the
+           pasted answer into doors onto those plateaus. Filled by main.js. -->
+      <div id="rh-actions" class="rh-actions" hidden>
+        <p id="rh-quote" class="rh-quote"></p>
+        <div class="course-actions">
+          <span class="course-label">🐇 Explain this slowly →</span>
+          <span id="rh-explain" class="course-targets"></span>
+        </div>
+        <div class="course-actions">
+          <span class="course-label">🧩 What am I missing? →</span>
+          <span id="rh-missing" class="course-targets"></span>
+        </div>
+        <label class="course-label" for="rh-paste">Paste the topic names it gave back — they become doors:</label>
+        <textarea id="rh-paste" rows="2" placeholder="Bivectors: Oriented Planes&#10;…"></textarea>
+        <div class="course-actions">
+          <button id="rh-find" type="button">Find those topics</button>
+        </div>
+        <div id="rh-doors" class="prereq-chips"></div>
+        <p class="rh-hint">Tap the marked sentence again when it clicks — the mark clears.</p>
+      </div>
 
       <!-- Guided lesson (R-0060): a stepped, Feynman-style course for THIS topic —
            summary → ground → analogy → example → check → teach-back → recall. Reuses
