@@ -101,7 +101,8 @@ import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
 import { pdfCheck, paneTarget } from "./library.js";
 import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
-import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack } from "./handoff.js";
+import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
+import { extractDeliverable, deliverableCoachPrompt } from "./deliverable.js"; // R-0073 walk me through the deliverable
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
 import {
   entryOf as lessonEntryOf,
@@ -1820,7 +1821,54 @@ async function main() {
     renderPrereqs(p); // R-0070 surface the curriculum steps to study before this one
     renderConfusionMarks(p.id); // R-0071 re-apply this topic's "I don't get this" marks
     hideRhActions(); // R-0071 a fresh topic starts with no active rabbit hole
+    renderDeliverableCoach(p); // R-0073 🎯 walk me through the deliverable
     detail.hidden = false;
+  }
+
+  // ── 🎯 Walk me through the deliverable (R-0073) ──────────────────────────────
+  // A stated Deliverable doesn't teach you to DO it. When the body carries one,
+  // this row hands it to the model AS A TUTOR — smallest steps, hints before
+  // answers, worked solution last — and (via handoffOpenUrl) Gemini opens with
+  // the coaching request already asked.
+  function renderDeliverableCoach(p) {
+    const box = document.getElementById("deliverable-coach");
+    const mountEl = document.getElementById("dc-targets");
+    const note = document.getElementById("dc-note");
+    const d = extractDeliverable(p.description || "");
+    if (!d) {
+      box.hidden = true;
+      mountEl.replaceChildren();
+      note.hidden = true;
+      return;
+    }
+    const course = Object.values(loadPaths()).find(
+      (pt) => Array.isArray(pt.steps) && pt.steps.includes(p.id),
+    );
+    const pathTitle = String(course?.title || "").replace(/^course:\s*/i, "");
+    note.hidden = true;
+    mountEl.replaceChildren(
+      ...HANDOFF_TARGETS.map((t) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = `${t.label} ↗`;
+        b.title = t.note;
+        b.addEventListener("click", async () => {
+          const prompt = deliverableCoachPrompt({ topic: p.name, deliverable: d, pathTitle });
+          const copied = await copyToClipboard(prompt);
+          const url = handoffOpenUrl(t, prompt);
+          window.open(url, "_blank", "noopener");
+          note.hidden = false;
+          note.textContent =
+            url !== t.url
+              ? `Opened ${t.label} as your tutor — it starts at step 1 and waits for your attempt.`
+              : copied
+                ? `Copied ✓ — in ${t.label}, click the chat box and press Cmd/Ctrl+V.`
+                : `Opened ${t.label}; clipboard blocked — retype the deliverable there.`;
+        });
+        return b;
+      }),
+    );
+    box.hidden = false;
   }
 
   // "Look it up" — external search deep-links prefilled with the plateau name.
@@ -1895,11 +1943,15 @@ async function main() {
           const prompt =
             t.id === "notebooklm" ? notebookLmPack(ctx.name, ctx.domainLabel) : handoffPrompt(ctx);
           const copied = await copyToClipboard(prompt);
-          window.open(t.url, "_blank", "noopener");
+          const url = handoffOpenUrl(t, prompt); // R-0073 carry the prompt in the URL when it fits
+          window.open(url, "_blank", "noopener");
           handoffNote.hidden = false;
-          handoffNote.textContent = copied
-            ? `Prompt copied — ${t.note}.`
-            : `Opened ${t.label}. Clipboard was blocked; retype your question there. (${t.note})`;
+          handoffNote.textContent =
+            url !== t.url
+              ? `Opened ${t.label} with your question already asked${copied ? " (also copied)" : ""}.`
+              : copied
+                ? `Copied ✓ — in ${t.label}, click the chat box and press Cmd/Ctrl+V. (${t.note})`
+                : `Opened ${t.label}. Clipboard was blocked; retype your question there. (${t.note})`;
         });
         return btn;
       }),
@@ -1939,12 +1991,15 @@ async function main() {
     b.title = target.note;
     b.addEventListener("click", async () => {
       const copied = await copyToClipboard(prompt);
-      window.open(target.url, "_blank", "noopener");
+      const url = handoffOpenUrl(target, prompt); // R-0073
+      window.open(url, "_blank", "noopener");
       lessonActions.querySelector(".lesson-hint")?.remove();
       lessonHint(
-        copied
-          ? `Prompt copied — paste it in ${target.label}, then keep the best answer in your notepad below.`
-          : `Opened ${target.label}; clipboard was blocked — retype your question there.`,
+        url !== target.url
+          ? `Opened ${target.label} with this step already asked — keep the best answer in your notepad below.`
+          : copied
+            ? `Copied ✓ — in ${target.label}, click the chat box and press Cmd/Ctrl+V; keep the best answer in your notepad below.`
+            : `Opened ${target.label}; clipboard was blocked — retype your question there.`,
       );
     });
     return b;
@@ -2107,8 +2162,9 @@ async function main() {
       gb.textContent = `${t.label} ↗`;
       gb.title = t.note;
       gb.addEventListener("click", async () => {
-        await copyToClipboard(prereqPlanPrompt({ target: p.name, pathTitle, prereqs: rows }));
-        window.open(t.url, "_blank", "noopener");
+        const prompt = prereqPlanPrompt({ target: p.name, pathTitle, prereqs: rows });
+        await copyToClipboard(prompt);
+        window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073
       });
       guide.append(gb);
     }
@@ -2209,8 +2265,9 @@ async function main() {
           b.textContent = `${t.label} ↗`;
           b.title = t.note;
           b.addEventListener("click", async () => {
-            await copyToClipboard(promptFor()); // reads rhActive at CLICK time
-            window.open(t.url, "_blank", "noopener");
+            const prompt = promptFor(); // reads rhActive at CLICK time
+            await copyToClipboard(prompt);
+            window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073
           });
           return b;
         }),
@@ -3737,12 +3794,16 @@ async function main() {
         b.textContent = `${t.label} ↗`;
         b.title = t.note;
         b.addEventListener("click", async () => {
-          const copied = await copyToClipboard(courseOutlinePrompt({ title, reference }));
-          window.open(t.url, "_blank", "noopener");
+          const prompt = courseOutlinePrompt({ title, reference });
+          const copied = await copyToClipboard(prompt);
+          const openUrl = handoffOpenUrl(t, prompt); // R-0073
+          window.open(openUrl, "_blank", "noopener");
           courseSay(
-            copied
-              ? `Prompt copied — paste it in ${t.label}, then bring the syllabus back to box 2.`
-              : `Opened ${t.label}; clipboard blocked — ask it for the syllabus yourself.`,
+            openUrl !== t.url
+              ? `Opened ${t.label} with the request already asked — bring the syllabus back to box 2.`
+              : copied
+                ? `Copied ✓ — in ${t.label}, press Cmd/Ctrl+V, then bring the syllabus back to box 2.`
+                : `Opened ${t.label}; clipboard blocked — ask it for the syllabus yourself.`,
           );
         });
         return b;
@@ -3873,11 +3934,12 @@ async function main() {
         b.textContent = `${t.label} ↗`;
         b.title = t.note;
         b.addEventListener("click", async () => {
-          const copied = await copyToClipboard(whereFitsPrompt({ title, url, kind, topics: wfTopics() }));
-          window.open(t.url, "_blank", "noopener");
+          const prompt = whereFitsPrompt({ title, url, kind, topics: wfTopics() });
+          const copied = await copyToClipboard(prompt);
+          window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 (topic list rarely fits — clipboard carries it)
           wfSay(
             copied
-              ? `Prompt copied — add the ${kind.toLowerCase()} as a source in ${t.label}, then paste the topic names it lists into box 2.`
+              ? `Copied ✓ — in ${t.label}, press Cmd/Ctrl+V (and add the ${kind.toLowerCase()} as a source), then paste the topic names it lists into box 2.`
               : `Opened ${t.label}; clipboard blocked — ask it which topics the ${kind.toLowerCase()} covers.`,
           );
         });

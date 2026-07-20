@@ -403,6 +403,10 @@
       .rh-quote { margin: 0; font-size: 12px; color: #e0b483; font-style: italic; }
       .rh-actions textarea { background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
       .rh-hint { margin: 0; font-size: 11px; color: #63788c; }
+      /* R-0073: the 🎯 deliverable-coach row — green "do it" language, distinct
+         from the amber "gap" blocks. */
+      .dc-row { margin: 6px 0; padding: 8px 10px; border: 1px solid #2a4a38; border-radius: 8px; background: #12211a; display: flex; flex-direction: column; gap: 6px; }
+      .dc-row[hidden] { display: none; }
       /* R-0072: find-a-topic results, grouped by lens */
       .ts-results { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
       .ts-lens { margin: 6px 0 2px; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #7fb0d8; }
@@ -527,6 +531,7 @@
       #plateau-detail[data-mode="bridge"] #lesson-continue, /* R-0064 continue button */
       #plateau-detail[data-mode="bridge"] #detail-prereqs, /* R-0070 prerequisites */
       #plateau-detail[data-mode="bridge"] #rh-actions, /* R-0071 rabbit-hole actions */
+      #plateau-detail[data-mode="bridge"] #deliverable-coach, /* R-0073 deliverable coach */
       #plateau-detail[data-mode="bridge"] #lesson-panel, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
       #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
@@ -1340,6 +1345,17 @@
         </div>
         <div id="rh-doors" class="prereq-chips"></div>
         <p class="rh-hint">Tap the marked sentence again when it clicks — the mark clears.</p>
+      </div>
+
+      <!-- 🎯 Walk me through the deliverable (R-0073): shown when the body carries
+           a **Deliverable:** — hands it to the model AS A TUTOR (smallest steps,
+           hints before answers, worked solution last). Filled by main.js. -->
+      <div id="deliverable-coach" class="dc-row" hidden>
+        <div class="course-actions">
+          <span class="course-label">🎯 Walk me through the deliverable →</span>
+          <span id="dc-targets" class="course-targets"></span>
+        </div>
+        <p id="dc-note" class="course-status" hidden></p>
       </div>
 
       <!-- Guided lesson (R-0060): a stepped, Feynman-style course for THIS topic —
