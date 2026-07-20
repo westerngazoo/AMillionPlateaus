@@ -384,6 +384,14 @@
       }
       .lesson-continue:hover { background: #1a2a38; border-color: #3a5670; }
       .lesson-continue[hidden] { display: none; }
+      /* R-0070: "Before this, study…" — missing-prerequisite chips + guide hand-off */
+      .detail-prereqs { margin: 6px 0; padding: 8px 10px; border: 1px solid #4a3a2a; border-radius: 8px; background: #221a12; display: flex; flex-direction: column; gap: 6px; }
+      .detail-prereqs[hidden] { display: none; }
+      .prereq-label { margin: 0; font-size: 12px; color: #e0b483; }
+      .prereq-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .prereq-chip { font-size: 12px; background: #2c2113; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+      .prereq-chip:hover { background: #3a2c18; }
+      .prereq-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
         margin: 8px 0; padding: 12px 14px; border: 1px solid #2f5f83; border-radius: 10px;
@@ -499,6 +507,7 @@
       #plateau-detail[data-mode="bridge"] #lesson-start, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #lesson-course, /* R-0063 course line */
       #plateau-detail[data-mode="bridge"] #lesson-continue, /* R-0064 continue button */
+      #plateau-detail[data-mode="bridge"] #detail-prereqs, /* R-0070 prerequisites */
       #plateau-detail[data-mode="bridge"] #lesson-panel, /* R-0060 guided lesson */
       #plateau-detail[data-mode="bridge"] #detail-notepad, /* R-0056 private notepad */
       #plateau-detail[data-mode="bridge"] #detail-handoff, /* R-0056 hand-off (class detail-search, so id-hidden here) */
@@ -1284,6 +1293,7 @@
       <button id="lesson-start" class="lesson-start" type="button">▶ Teach me this topic</button>
       <p id="lesson-course" class="lesson-course" hidden></p>
       <button id="lesson-continue" class="lesson-continue" type="button" hidden></button>
+      <div id="detail-prereqs" class="detail-prereqs" hidden><!-- R-0070 missing prereqs + guide, by main.js --></div>
       <section id="lesson-panel" class="lesson-panel" hidden aria-label="Guided lesson">
         <div class="lesson-head">
           <span id="lesson-progress" class="lesson-progress"></span>
