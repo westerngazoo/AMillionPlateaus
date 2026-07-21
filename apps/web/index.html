@@ -425,6 +425,8 @@
       /* R-0076: note → PDF. On screen the print container is invisible; in print
          mode (body.print-note) it is the ONLY thing on the page — white, serif,
          book-like, with the KaTeX already typeset in place. */
+      /* R-0077: embedded note images (notepad preview + topic bodies + PDF) */
+      .detail-body img { max-width: 100%; height: auto; border-radius: 6px; }
       #note-print { display: none; }
       @media print {
         body.print-note { background: #fff !important; }
@@ -433,6 +435,7 @@
         body.print-note #note-print h1 { font-size: 17pt; margin: 0 0 4pt; }
         body.print-note #note-print .np-meta { font-size: 9pt; color: #555; margin: 0 0 14pt; }
         body.print-note #note-print a { color: #000; text-decoration: underline; }
+        body.print-note #note-print img { max-width: 100%; height: auto; }
       }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
@@ -1510,6 +1513,8 @@
           <button type="button" id="notepad-preview-btn">Preview</button>
           <button type="button" id="notepad-save">Save now</button>
           <button type="button" id="notepad-pdf" title="Export this note as PDF (opens print → Save as PDF)">PDF ⬇</button>
+          <button type="button" id="notepad-img" title="Attach an image (e.g. a Boox page export) into the note">📷 Image</button>
+          <input type="file" id="notepad-img-file" accept="image/*" hidden />
           <button type="button" id="notepad-push" hidden title="Push this note to your GitHub notes repo">Push ↑</button>
           <button type="button" id="notepad-pull" hidden title="Pull this note from your GitHub notes repo (replaces local)">Pull ↓</button>
           <span id="notepad-status" class="notepad-status" aria-live="polite"></span>
