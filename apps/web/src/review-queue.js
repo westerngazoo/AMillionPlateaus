@@ -79,6 +79,16 @@ export function dueEntries(queue, ids, now) {
     .sort((a, b) => a.entry.due - b.entry.due);
 }
 
+/** Force `id` due at `now` for an EXPLICIT reassessment (R-0079: "reassess my
+ *  trig"). An enrolled card keeps its SM-2 stats but comes due now; an
+ *  unenrolled one enrolls with defaults, due now — bypassing the per-day new
+ *  cap, because the user asked for THESE specific topics, not a paced trickle. */
+export function enrollDue(queue, id, now) {
+  const base = queue && typeof queue === "object" ? queue : {};
+  const cur = entryOf(base, id) ?? { reps: 0, ease: START_EASE, interval: 0, introduced: now };
+  return { ...base, [id]: { ...cur, due: now } };
+}
+
 /** How many NEW topics (no queue state yet) may enter today, and which. The
  *  daily cap keeps a big backlog (111 seeded topics, months of notes) from
  *  flooding day one — entries whose `introduced` falls on the same UTC day as

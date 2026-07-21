@@ -104,7 +104,16 @@ import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
 import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
-import { GRADES, graded, dueEntries, freshIds, interleave, nextDue } from "./review-queue.js"; // R-0078 spaced review
+import { GRADES, graded, dueEntries, enrollDue, freshIds, interleave, nextDue } from "./review-queue.js"; // R-0078 spaced review · R-0079 reassess
+import {
+  exactMatch as captureExactMatch,
+  suggestNeighbors as captureSuggest,
+  placeNear as capturePlaceNear,
+  dominantDomain as captureDominantDomain,
+  resourceKindFor as captureKindFor,
+  captureBody,
+  unwiredIds as captureUnwiredIds,
+} from "./capture.js"; // R-0079 ⚡ capture a topic
 import {
   entryOf as lessonEntryOf,
   withStep as lessonWithStep,
@@ -5149,6 +5158,7 @@ async function main() {
     const ids = new Set(mastered);
     for (const [id, text] of Object.entries(privateNotes)) if (String(text ?? "").trim()) ids.add(id);
     for (const [id, e] of Object.entries(lessonProgMap)) if (e && (e.done || e.step > 0)) ids.add(id);
+    for (const id of Object.keys(reviewQueue)) ids.add(id); // R-0079: captured/reassessed enrol directly
     return [...ids].filter((id) => plateauById(id));
   }
   function buildReviewSession(now) {
@@ -5251,6 +5261,287 @@ async function main() {
     if (reviewPanel.hidden) renderReview();
   });
   renderReview(); // boot: sets the "📅 Review — N due" label
+
+  // ── ⚡ Capture a topic (R-0079) ──────────────────────────────────────────────
+  // Study starts from a standing start — a YouTube video, "I should reassess my
+  // trig" — not inside a curriculum. Capture names it, pins the reference,
+  // suggests where it belongs (OR-semantic over your words, so a note about "the
+  // dot product" surfaces Vectors even though the names share nothing), and on
+  // confirm creates a real plateau: bridged to the neighbours you ticked and
+  // placed near them, or parked in the 📥 Unwired inbox so nothing is lost.
+  // Placement/suggestion math is the pure capture.js module. The captured
+  // plateau is enrolled in Review (due now) — you grabbed it to study it.
+  const capturePanel = document.getElementById("capture-panel");
+  const captureNameEl = document.getElementById("capture-name");
+  const captureUrlEl = document.getElementById("capture-url");
+  const captureNoteEl = document.getElementById("capture-note");
+  const captureDupeEl = document.getElementById("capture-dupe");
+  const captureSuggestEl = document.getElementById("capture-suggest");
+  const captureNeighborsEl = document.getElementById("capture-neighbors");
+  const captureReassessBtn = document.getElementById("capture-reassess");
+  const captureStatusEl = document.getElementById("capture-status");
+  const unwiredPanel = document.getElementById("unwired-panel");
+  const unwiredListEl = document.getElementById("unwired-list");
+  const unwiredToggleBtn = document.getElementById("unwired-toggle");
+
+  function loadUnwired() {
+    try {
+      const v = JSON.parse(localStorage.getItem("mp.unwired"));
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveUnwired(ids) {
+    try {
+      localStorage.setItem("mp.unwired", JSON.stringify(ids));
+    } catch {
+      /* private mode / quota — capture still works, the inbox just won't persist */
+    }
+  }
+  let unwiredStored = loadUnwired();
+
+  // The candidate topics for dedup + neighbour suggestion (current graph).
+  function captureTopics() {
+    return doc
+      .to_graph()
+      .plateaus()
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        lens: domainLabelOf(p.domain_id) || "Uncharted",
+        domain: p.domain_id,
+        body: p.description || "",
+        position: p.position,
+      }));
+  }
+
+  let captureNeighborChoices = []; // the suggested neighbours currently rendered
+  function renderCaptureSuggest() {
+    const name = captureNameEl.value.trim();
+    const note = captureNoteEl.value;
+    captureStatusEl.hidden = true;
+    if (name.length < 3) {
+      captureDupeEl.hidden = true;
+      captureSuggestEl.hidden = true;
+      captureNeighborChoices = [];
+      return;
+    }
+    const topics = captureTopics();
+    // Dedup: an exact name already exists → offer to open it, not fork it.
+    const dupe = captureExactMatch(name, topics);
+    if (dupe) {
+      captureDupeEl.hidden = false;
+      captureDupeEl.textContent = `“${dupe.name}” already exists — open it instead of making a second one.`;
+      captureDupeEl.classList.remove("err");
+    } else {
+      captureDupeEl.hidden = true;
+    }
+    // Neighbours (proposals, not auto-wired).
+    captureNeighborChoices = captureSuggest({ name, note }, topics, { max: 6 });
+    captureNeighborsEl.replaceChildren();
+    if (!captureNeighborChoices.length) {
+      captureSuggestEl.hidden = true;
+      captureReassessBtn.hidden = true;
+      return;
+    }
+    captureSuggestEl.hidden = false;
+    for (const n of captureNeighborChoices) {
+      const row = document.createElement("label");
+      row.className = "capture-neighbor";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.dataset.id = n.id;
+      const nameEl = document.createElement("span");
+      nameEl.textContent = n.name; // textContent — never trust a topic name as HTML
+      const lensEl = document.createElement("span");
+      lensEl.className = "cn-lens";
+      lensEl.textContent = `· ${n.lens}`;
+      row.append(cb, nameEl, lensEl);
+      captureNeighborsEl.append(row);
+    }
+    captureReassessBtn.hidden = false; // there are existing topics you could re-review
+  }
+  const captureTicked = () =>
+    [...captureNeighborsEl.querySelectorAll("input:checked")].map((cb) => cb.dataset.id);
+
+  let captureTimer = null;
+  const onCaptureInput = () => {
+    clearTimeout(captureTimer);
+    captureTimer = setTimeout(renderCaptureSuggest, 250);
+  };
+  captureNameEl.addEventListener("input", onCaptureInput);
+  captureNoteEl.addEventListener("input", onCaptureInput);
+
+  document.getElementById("capture-create").addEventListener("click", () => {
+    const name = captureNameEl.value.trim();
+    if (name.length < 3) {
+      captureStatusEl.hidden = false;
+      captureStatusEl.classList.add("err");
+      captureStatusEl.textContent = "Give the topic a name (3+ characters).";
+      return;
+    }
+    const topics = captureTopics();
+    const dupe = captureExactMatch(name, topics);
+    if (dupe) {
+      const p = plateauById(dupe.id);
+      if (p) {
+        capturePanel.hidden = true;
+        flyTo(p.position, () => openPlateau(p));
+        return;
+      }
+    }
+    const tickedIds = new Set(captureTicked());
+    const ticked = captureNeighborChoices.filter((n) => tickedIds.has(n.id));
+    // Domain: the busiest ticked island, else the active persona's first faced
+    // domain, else the first domain that exists — a plateau must have a domain.
+    const domain =
+      captureDominantDomain(ticked) ??
+      activePersona?.orient?.[0]?.domain ??
+      allDomains()[0]?.id;
+    if (!domain) {
+      captureStatusEl.hidden = false;
+      captureStatusEl.classList.add("err");
+      captureStatusEl.textContent = "No lens available to file this under — pick a lens first.";
+      return;
+    }
+    const canonical = allDomains().find((d) => d.id === domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
+    const neighborPositions = ticked
+      .map((n) => plateauById(n.id)?.position)
+      .filter(Boolean)
+      .map((pos) => ({ e1: pos.e1, e2: pos.e2, e3: pos.e3 }));
+    const pos = capturePlaceNear(neighborPositions, name, canonical);
+    const body = captureBody({ name, note: captureNoteEl.value });
+
+    let newId;
+    try {
+      newId = doc.add_plateau(name, domain, pos.e1, pos.e2, pos.e3, body);
+    } catch (err) {
+      captureStatusEl.hidden = false;
+      captureStatusEl.classList.add("err");
+      captureStatusEl.textContent = `Could not capture that (${err?.message ?? err}).`;
+      return;
+    }
+    DOMAIN_OF.set(newId, domain);
+    // Bridge to each ticked neighbour (the concept label = the captured name).
+    let bridged = 0;
+    for (const n of ticked) {
+      try {
+        doc.add_bridge(n.id, newId, name);
+        bridged++;
+      } catch (err) {
+        console.error("[mp] capture bridge:", err);
+      }
+    }
+    // Pin the reference as this topic's first resource (R-0023), if it's a link.
+    const url = captureUrlEl.value.trim();
+    const kind = captureKindFor(url);
+    if (kind) {
+      try {
+        doc.add_resource(newId, name, kind, url);
+      } catch (err) {
+        console.error("[mp] capture resource:", err);
+      }
+    }
+    // Unwired inbox: track it if it has no bridge yet (auto-clears once wired).
+    if (bridged === 0) {
+      unwiredStored = [...new Set([...unwiredStored, newId])];
+      saveUnwired(unwiredStored);
+    }
+    // Enrol in Review, due now — you captured it to study it.
+    reviewQueue = enrollDue(reviewQueue, newId, Date.now());
+    saveReviewQueue(reviewQueue);
+
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    renderReview();
+    renderUnwiredLabel();
+
+    // Reset the form, then jump straight into the new plateau.
+    captureNameEl.value = "";
+    captureUrlEl.value = "";
+    captureNoteEl.value = "";
+    captureSuggestEl.hidden = true;
+    captureDupeEl.hidden = true;
+    captureNeighborChoices = [];
+    capturePanel.hidden = true;
+    const created = plateauById(newId);
+    if (created) flyTo(created.position, () => openPlateau(created));
+  });
+
+  captureReassessBtn.addEventListener("click", () => {
+    const tickedIds = new Set(captureTicked());
+    const chosen = captureNeighborChoices.filter((n) => tickedIds.has(n.id));
+    const targets = chosen.length ? chosen : captureNeighborChoices; // ticked, else all suggested
+    if (!targets.length) return;
+    const now = Date.now();
+    for (const n of targets) reviewQueue = enrollDue(reviewQueue, n.id, now);
+    saveReviewQueue(reviewQueue);
+    renderReview();
+    captureStatusEl.hidden = false;
+    captureStatusEl.classList.remove("err");
+    captureStatusEl.textContent = `Dropped ${targets.length} topic${targets.length === 1 ? "" : "s"} into 📅 Review — due now.`;
+  });
+
+  document.getElementById("capture-toggle").addEventListener("click", () => {
+    capturePanel.hidden = !capturePanel.hidden;
+    if (!capturePanel.hidden) {
+      renderCaptureSuggest();
+      captureNameEl.focus();
+    }
+  });
+  document.getElementById("capture-close").addEventListener("click", () => (capturePanel.hidden = true));
+
+  function renderUnwiredLabel() {
+    const n = captureUnwiredIds(unwiredStored, doc.to_graph().bridges()).length;
+    unwiredToggleBtn.textContent = n ? `📥 Unwired — ${n}` : "📥 Unwired";
+  }
+  function renderUnwired() {
+    const bridges = doc.to_graph().bridges();
+    const live = captureUnwiredIds(unwiredStored, bridges);
+    // Prune ids whose plateau was deleted, and persist the trimmed set.
+    const stillReal = live.filter((id) => plateauById(id));
+    if (stillReal.length !== unwiredStored.length) {
+      unwiredStored = stillReal;
+      saveUnwired(unwiredStored);
+    }
+    unwiredListEl.replaceChildren();
+    if (!stillReal.length) {
+      const p = document.createElement("p");
+      p.className = "unwired-empty";
+      p.textContent = "Nothing unwired — everything you've captured is connected. ✓";
+      unwiredListEl.append(p);
+      return;
+    }
+    for (const id of stillReal) {
+      const p = plateauById(id);
+      if (!p) continue;
+      const row = document.createElement("div");
+      row.className = "unwired-row";
+      const label = document.createElement("span");
+      label.textContent = `${p.name} · ${labelForDomain(p.domain_id)}`;
+      const open = document.createElement("button");
+      open.type = "button";
+      open.textContent = "Open →";
+      open.addEventListener("click", () => {
+        unwiredPanel.hidden = true;
+        flyTo(p.position, () => openPlateau(p));
+      });
+      row.append(label, open);
+      unwiredListEl.append(row);
+    }
+  }
+  unwiredToggleBtn.addEventListener("click", () => {
+    unwiredPanel.hidden = !unwiredPanel.hidden;
+    if (!unwiredPanel.hidden) renderUnwired();
+  });
+  document.getElementById("unwired-close").addEventListener("click", () => (unwiredPanel.hidden = true));
+  document.getElementById("menu-toggle").addEventListener("click", () => {
+    if (capturePanel.hidden && unwiredPanel.hidden) renderUnwiredLabel();
+  });
+  renderUnwiredLabel(); // boot: "📥 Unwired — N"
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
   // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
