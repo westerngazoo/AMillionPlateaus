@@ -4,10 +4,13 @@
 // CONTRACT: the returned string is SAFE to assign to innerHTML. Every run of
 // source text is HTML-escaped; the ONLY tags that ever appear are ones this
 // module emits, from a fixed allowlist:
-//   h1..h6, p, br, strong, em, code, pre, ul, ol, li, a, span
-// the ONLY attributes emitted are href/rel/target (on <a>) and
-// class/data-display/data-tex (on span.mp-math); class/data-display are fixed
-// literals, never copied from input. Link/resource URLs pass a scheme whitelist
+//   h1..h6, p, br, strong, em, code, pre, ul, ol, li, a, span, img
+// the ONLY attributes emitted are href/rel/target (on <a>), src/alt/loading (on
+// <img> — src passes safeImgSrc: https or base64 RASTER data URIs only, never
+// svg, which can script; loading="lazy" on https srcs only) and
+// class/data-display/data-tex (on span.mp-math);
+// class/data-display/loading are fixed literals, never copied from input.
+// Link/resource URLs pass a scheme whitelist
 // applied to the CONTROL-STRIPPED url. Math is handed off as an INERT placeholder
 // whose TeX lives in an escaped data-tex attribute (katex.js typesets it later).
 //
@@ -32,6 +35,17 @@ export function esc(s) {
 export function safeHref(url) {
   const u = String(url ?? "").replace(/[\x00-\x20]/g, "");
   return SAFE_SCHEMES.test(u) ? u : null;
+}
+
+// R-0077: image sources are STRICTER than links — https, or a base64 RASTER
+// data URI (png/jpeg/gif/webp). data:image/svg+xml is deliberately excluded
+// (SVG can carry script); so is http: (mixed content on the hosted app).
+const SAFE_IMG_SCHEMES = /^(https:|data:image\/(png|jpe?g|gif|webp);base64,)/i;
+
+/** Return a safe <img> src, or null. Same control-char stripping as safeHref. */
+export function safeImgSrc(url) {
+  const u = String(url ?? "").replace(/[\x00-\x20]/g, "");
+  return SAFE_IMG_SCHEMES.test(u) ? u : null;
 }
 
 // Private-use sentinels delimit extracted verbatim/validated tokens. esc() leaves
@@ -60,6 +74,18 @@ export function renderMarkdown(src) {
   );
   // Display math $$…$$, block-level.
   s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => hold(mathSpan(tex, true), true));
+  // Images ![alt](src) — R-0077, extracted BEFORE links so `![…](…)` never
+  // half-matches as a link with a stray "!". src passes safeImgSrc (https or
+  // base64 raster data URI); anything else renders as inert escaped text.
+  s = s.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (whole, alt, url) => {
+    const imgSrc = safeImgSrc(url);
+    if (!imgSrc) return hold(esc(whole)); // held, so the LINK pass can't re-parse it
+    // lazy-load ONLY network images: a lazy data: URI that starts offscreen
+    // (notepad preview, print view) can sit at complete=false forever and
+    // render 0×0 — the bytes are already inline, there is nothing to defer.
+    const lazy = /^https:/i.test(imgSrc) ? ' loading="lazy"' : "";
+    return hold(`<img src="${esc(imgSrc)}" alt="${esc(alt)}"${lazy} />`);
+  });
   // Links [text](url) — URL validated here, on the raw text.
   s = s.replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (whole, text, url) => {
     const href = safeHref(url);

@@ -148,3 +148,31 @@ test("empty / nullish body renders to empty string (no crash)", () => {
   assert.equal(renderMarkdown(null), "");
   assert.equal(renderMarkdown(undefined), "");
 });
+
+test("images (R-0077): https + base64 raster data URIs render; everything else is inert", () => {
+  // https image with an XSS-attempt alt — alt escapes, tag renders
+  const ok = renderMarkdown('![my "boox" <note>](https://example.com/page.png)');
+  assert.match(ok, /<img src="https:\/\/example\.com\/page\.png" alt="my &quot;boox&quot; &lt;note&gt;" loading="lazy" \/>/);
+  // base64 raster data URI renders — WITHOUT loading="lazy" (a lazy offscreen
+  // data: URI never loads; its bytes are already inline)
+  const dataOk = renderMarkdown("![n](data:image/jpeg;base64,AAAA)");
+  assert.match(dataOk, /<img src="data:image\/jpeg;base64,AAAA"/);
+  assert.doesNotMatch(dataOk, /loading=/);
+  assert.match(renderMarkdown("![n](data:image/png;base64,AAAA)"), /<img /);
+  // hostile sources render as escaped literal text, never a tag
+  for (const bad of [
+    "![x](javascript:alert(1))",
+    "![x](data:text/html;base64,PHNjcmlwdD4=)",
+    "![x](data:image/svg+xml;base64,PHN2Zz4=)", // svg can script — excluded
+    "![x](http://insecure.example/x.png)", // mixed content — excluded
+    "![x](data:image/png,notbase64)",
+  ]) {
+    const html = renderMarkdown(bad);
+    assert.doesNotMatch(html, /<img/, `no <img> for ${bad}`);
+    assert.match(html, /!\[x\]/, `inert literal survives for ${bad}`);
+  }
+  // control-char smuggling in the scheme is stripped-then-rejected
+  assert.doesNotMatch(renderMarkdown("![x](java\tscript:alert(1))"), /<img|<a /);
+  // an image does NOT half-match as a link with a stray "!"
+  assert.doesNotMatch(renderMarkdown("![n](https://e.com/i.png)"), /<a /);
+});

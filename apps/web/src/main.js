@@ -5068,6 +5068,45 @@ async function main() {
     window.print();
     setTimeout(cleanup, 60000); // safety net: some webviews never fire afterprint
   });
+  // R-0077: attach an image (a Boox page export, a photo) INTO the note. The
+  // image is downscaled (≤1280px, JPEG) and embedded as a base64 data URI in the
+  // markdown text itself — so it travels with Push/Pull to the other tablets and
+  // into the PDF, with no separate storage to sync. renderMarkdown only accepts
+  // https / base64 RASTER data URIs, so the embed renders and nothing else can.
+  const notepadImgFile = document.getElementById("notepad-img-file");
+  document.getElementById("notepad-img").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    notepadImgFile.click();
+  });
+  notepadImgFile.addEventListener("change", async () => {
+    const file = notepadImgFile.files?.[0];
+    notepadImgFile.value = ""; // re-attaching the same file must re-fire change
+    if (!file || !studyPlateau) return;
+    notepadStatus.textContent = "embedding image…";
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bmp.width * scale));
+      canvas.height = Math.max(1, Math.round(bmp.height * scale));
+      canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      const alt = String(file.name || "boox note").replace(/[[\]()\n]/g, " ");
+      const md = `\n\n![${alt}](${dataUrl})\n`;
+      const at = notepadInput.selectionEnd ?? notepadInput.value.length;
+      notepadInput.value = notepadInput.value.slice(0, at) + md + notepadInput.value.slice(at);
+      notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
+      flushNotepad();
+      const kb = Math.round(dataUrl.length / 1024);
+      const totalKb = Math.round(notepadInput.value.length / 1024);
+      notepadStatus.textContent =
+        totalKb > 700
+          ? `Image embedded (~${kb} KB) — the note is now ${totalKb} KB; GitHub may reject very large pushes.`
+          : `Image embedded (~${kb} KB) ✓ — Preview to see it.`;
+    } catch (e) {
+      notepadStatus.textContent = `Could not embed that image (${e?.message ?? e}).`;
+    }
+  });
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
   // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
