@@ -50,7 +50,18 @@ Newton's $F = \\dot p$ is the start, not the story. **Lagrangian** mechanics rec
 
 Symmetry ⇒ conservation is the crown jewel (Noether): time-invariance ⇒ energy, translation ⇒ momentum, rotation ⇒ angular momentum.
 
-**Deliverable:** derive the Euler–Lagrange equation from $\\delta S = 0$ for one degree of freedom.`,
+**Deliverable:** derive the Euler–Lagrange equation from $\\delta S = 0$ for one degree of freedom.
+
+### Worked derivation — Euler–Lagrange from $\\delta S = 0$
+**Step 1 — the setup.** The action is $S[q] = \\int_{t_1}^{t_2} L(q, \\dot q)\\,dt$. Nudge the path: $q(t) \\to q(t) + \\epsilon\\,\\eta(t)$, with $\\eta(t_1) = \\eta(t_2) = 0$ — the endpoints are pinned, only the route between them varies.
+
+**Step 2 — expand to first order.** By the chain rule, keeping only terms linear in $\\epsilon$: $\\delta S = \\epsilon\\int \\big(\\tfrac{\\partial L}{\\partial q}\\,\\eta + \\tfrac{\\partial L}{\\partial \\dot q}\\,\\dot\\eta\\big)\\,dt$.
+
+**Step 3 — integrate the $\\dot\\eta$ term by parts.** $\\int \\tfrac{\\partial L}{\\partial \\dot q}\\,\\dot\\eta\\,dt = \\big[\\tfrac{\\partial L}{\\partial \\dot q}\\,\\eta\\big]_{t_1}^{t_2} - \\int \\tfrac{d}{dt}\\big(\\tfrac{\\partial L}{\\partial \\dot q}\\big)\\,\\eta\\,dt$. The boundary term dies because $\\eta$ vanishes at the endpoints — this is exactly WHY the endpoints were pinned in step 1.
+
+**Step 4 — the nudge is arbitrary.** $\\delta S = \\epsilon\\int \\big(\\tfrac{\\partial L}{\\partial q} - \\tfrac{d}{dt}\\tfrac{\\partial L}{\\partial \\dot q}\\big)\\,\\eta\\,dt$ must vanish for EVERY $\\eta$. If the bracket were nonzero anywhere, choose $\\eta$ concentrated there and $\\delta S \\ne 0$ — contradiction. So the bracket vanishes at every instant.
+
+**Step 5 — the equation, sanity-checked.** $\\tfrac{d}{dt}\\tfrac{\\partial L}{\\partial \\dot q} = \\tfrac{\\partial L}{\\partial q}$. Feed it $L = \\tfrac12 m\\dot q^2 - V(q)$: the left side is $\\tfrac{d}{dt}(m\\dot q) = m\\ddot q$, the right side $-V'(q) = F$. Newton's $F = ma$ drops out — the variational principle contains the mechanics you already knew.`,
   },
   {
     id: "80000000-0000-0000-0000-000000000003",
@@ -152,7 +163,18 @@ One product to replace the dot and the cross. For vectors $a,b$: $ab = a\\cdot b
 
 Everything downstream is this product wearing different clothes: complex numbers are the even part in 2D, quaternions in 3D, rotations are $RxR^{-1}$, and calculus becomes one operator. Learn this and the rest of the lens is bookkeeping.
 
-**Deliverable:** show $a\\wedge b = \\tfrac12(ab-ba)$ and $a\\cdot b = \\tfrac12(ab+ba)$, so the geometric product really does carry both.`,
+**Deliverable:** show $a\\wedge b = \\tfrac12(ab-ba)$ and $a\\cdot b = \\tfrac12(ab+ba)$, so the geometric product really does carry both.
+
+### Worked derivation — where $\\tfrac12(ab \\pm ba)$ comes from
+**Step 1 — the one axiom.** The geometric product is associative, distributes over addition, and for any vector $a a = |a|^2$ — a vector times itself is its squared length, a scalar. Everything below is bookkeeping on that single axiom.
+
+**Step 2 — expand a squared sum.** Apply the axiom to $a + b$: $(a+b)(a+b) = |a+b|^2$, a scalar. Expand the left side with distributivity: $aa + ab + ba + bb = |a|^2 + (ab + ba) + |b|^2$. The total is a scalar and both squared terms are scalars — so the leftover $ab + ba$ must be a scalar too.
+
+**Step 3 — split any product into two halves.** Identically, with no assumptions: $ab = \\tfrac12(ab + ba) + \\tfrac12(ab - ba)$. (Add the halves — the $ba$ terms cancel and $ab$ comes back.)
+
+**Step 4 — identify the halves.** The symmetric half $\\tfrac12(ab+ba)$ is the scalar from step 2. Check its behavior: for perpendicular vectors $ab = -ba$ so it vanishes; for parallel ones it equals $|a||b|$ — exactly the dot product. So $a\\cdot b = \\tfrac12(ab+ba)$. The antisymmetric half flips sign when you swap $a$ and $b$ — the signature of an ORIENTED area — and vanishes when $a \\parallel b$ (no area spanned). That is the wedge: $a\\wedge b = \\tfrac12(ab-ba)$.
+
+**Step 5 — the payoff, checked concretely.** Add them: $ab = a\\cdot b + a\\wedge b$ — the deliverable, derived. With unit axes: step 2 on $e_1 + e_2$ (where $|e_1+e_2|^2 = 2$) forces $e_1e_2 + e_2e_1 = 0$, so perpendicular vectors anticommute. Then $e_1\\cdot e_2 = 0$ ✓ and $e_1\\wedge e_2 = e_1e_2$, the unit oriented plane. One more multiply: $(e_1e_2)^2 = e_1e_2e_1e_2 = -e_1e_1e_2e_2 = -1$ — the imaginary unit was hiding in the plane all along.`,
   },
   {
     id: "90000000-0000-0000-0000-000000000002",
@@ -176,7 +198,18 @@ A **rotor** is $R = e^{-B\\theta/2}$, an exponential of a bivector $B$ (the plan
 
 Rotors are the even sub-algebra: in 3D they ARE the unit quaternions; the half-angle (the $\\theta/2$) is exactly the spin-½ double cover, sitting in plain sight. This is the app's own math — garust rotors are these.
 
-**Deliverable:** rotate a vector $90°$ in the $e_1e_2$ plane with $R = e^{-e_1e_2\\,\\pi/4}$ and confirm the sandwich gives the right answer.`,
+**Deliverable:** rotate a vector $90°$ in the $e_1e_2$ plane with $R = e^{-e_1e_2\\,\\pi/4}$ and confirm the sandwich gives the right answer.
+
+### Worked derivation — why rotation is a sandwich, and why the half-angle
+**Step 1 — a mirror first.** Reflecting $x$ in the plane perpendicular to a unit vector $n$ is $x \\mapsto -nxn$. Why: split $x = x_\\parallel + x_\\perp$ (along $n$, and perpendicular). From $ab + ba = 2\\,a\\cdot b$: parallel vectors commute ($n x_\\parallel = x_\\parallel n$), perpendicular ones anticommute ($n x_\\perp = -x_\\perp n$). So $-nxn = -x_\\parallel + x_\\perp$: the along-$n$ part flips, the rest survives — a mirror.
+
+**Step 2 — two mirrors make a rotation.** Reflect in $n$, then in $m$: $x \\mapsto -m(-nxn)m = (mn)\\,x\\,(nm)$. Two reflections compose to a rotation by TWICE the angle between the mirror planes, in their common plane — try it with two hand-mirrors.
+
+**Step 3 — name the sandwich.** Set $R = mn$ — a geometric product of two unit vectors, so a scalar plus a bivector (even-grade). Then rotation is $x \\mapsto R\\,x\\,\\tilde R$, with $\\tilde R = nm$ the reverse ($= R^{-1}$ for unit $R$). Mirrors $\\theta/2$ apart rotate by $\\theta$: the famous HALF-ANGLE enters here, geometrically — not by convention.
+
+**Step 4 — the exponential.** Expand $R = mn = m\\cdot n + m\\wedge n = \\cos(\\theta/2) + B\\sin(\\theta/2)$, where $B$ is the unit bivector of the mirrors' plane and $B^2 = -1$. That is Euler's formula with the plane as the imaginary unit: $R = e^{B\\theta/2}$.
+
+**Step 5 — the deliverable, worked.** $R = e^{-e_1e_2\\pi/4} = \\cos45° - e_1e_2\\sin45°$. Then $R\\,e_1\\,\\tilde R$: using $e_1e_2e_1 = -e_1e_1e_2 = -e_2$, the terms collect to $e_2$ — the $90°$ turn, on the nose.`,
   },
   {
     id: "90000000-0000-0000-0000-000000000004",
@@ -200,7 +233,16 @@ Pack $E$ and $B$ into a single **electromagnetic bivector** $F = E + IcB$ (with 
 
 This isn't cosmetics: the single equation makes the Lorentz-covariance manifest (boosts just rotate $F$), makes $E$/$B$ frame-mixing obvious, and generalizes cleanly. It is the headline result of the whole GA-for-physics program.
 
-**Deliverable:** expand $\\nabla F = J$ by grade and recover Gauss' and Ampère's laws as two of the four graded parts.`,
+**Deliverable:** expand $\\nabla F = J$ by grade and recover Gauss' and Ampère's laws as two of the four graded parts.
+
+### Worked derivation — unpacking $\\nabla F = J$ into the four laws
+**Step 1 — the objects.** $F = E + IcB$ (the field bivector; $I = e_1e_2e_3$ the unit pseudoscalar, $I^2 = -1$), $\\nabla$ the vector derivative, and $J$ packing the sources: a scalar part ($\\rho/\\varepsilon_0$) and a vector part (the current).
+
+**Step 2 — one product, four grades.** The geometric product $\\nabla F$ splits by grade, exactly like $ab = a\\cdot b + a\\wedge b$ did: a scalar part $\\nabla\\cdot E$; a vector part carrying $\\partial_t E$ and $\\nabla\\times B$; a bivector part carrying $\\partial_t B$ and $\\nabla\\times E$; and a trivector part $I\\,(\\nabla\\cdot B)$.
+
+**Step 3 — match grades on both sides.** An equation between multivectors holds grade by grade. $J$ has only scalar + vector parts, so: scalar → $\\nabla\\cdot E = \\rho/\\varepsilon_0$ (**Gauss**); vector → **Ampère–Maxwell**; bivector, source-free → **Faraday** ($\\nabla\\times E = -\\partial_t B$); trivector, source-free → $\\nabla\\cdot B = 0$ (**no monopoles**).
+
+**Step 4 — why this is not a party trick.** The "four laws" were the four grade-components of ONE derivative all along. A Lorentz boost just rotates $F$ (mixing $E$ and $B$ — the frame-dependence you memorized), and the single equation is manifestly covariant.`,
   },
   {
     id: "90000000-0000-0000-0000-000000000006",

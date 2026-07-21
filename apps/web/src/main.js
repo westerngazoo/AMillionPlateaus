@@ -102,7 +102,7 @@ import { pdfCheck, paneTarget } from "./library.js";
 import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
-import { extractDeliverable, deliverableCoachPrompt } from "./deliverable.js"; // R-0073 walk me through the deliverable
+import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
 import {
   entryOf as lessonEntryOf,
@@ -1798,10 +1798,22 @@ async function main() {
     detailName.textContent = p.name; // textContent — never trust the name as HTML
     // R-0034: strip author ```solve blocks BEFORE rendering — markdown.js would
     // otherwise show the raw prompt:/answer: lines (and leak the answer).
-    detailBody.innerHTML = renderMarkdown(
-      stripChallenges(p.description || "") || "_No description yet._",
-    );
-    segmentSentences(detailBody); // R-0071 BEFORE typeset — chunks never split $…$ math
+    // R-0074: depth behind a toggle — the readable body renders as-is; a
+    // "### Worked derivation" section becomes a collapsible, so the full
+    // step-by-step math is one tap away without intimidating the first read.
+    const { main: bodyMain, derivation } = splitDerivation(stripChallenges(p.description || ""));
+    detailBody.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+    if (derivation) {
+      const det = document.createElement("details");
+      det.className = "derivation";
+      const sum = document.createElement("summary");
+      sum.textContent = "📜 Worked derivation — step by step";
+      const inner = document.createElement("div");
+      inner.innerHTML = renderMarkdown(derivation);
+      det.append(sum, inner);
+      detailBody.append(det);
+    }
+    segmentSentences(detailBody); // R-0071 BEFORE typeset — chunks never split $…$ math (derivation included)
     typesetMath(detailBody); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = true; // clear any prior plateau's study answer
     detailReply.textContent = "";
@@ -1854,9 +1866,9 @@ async function main() {
         b.title = t.note;
         b.addEventListener("click", async () => {
           const prompt = deliverableCoachPrompt({ topic: p.name, deliverable: d, pathTitle });
-          const copied = await copyToClipboard(prompt);
           const url = handoffOpenUrl(t, prompt);
-          window.open(url, "_blank", "noopener");
+          window.open(url, "_blank", "noopener"); // R-0074 open BEFORE await (popup activation)
+          const copied = await copyToClipboard(prompt);
           note.hidden = false;
           note.textContent =
             url !== t.url
@@ -1942,9 +1954,11 @@ async function main() {
           const ctx = handoffContext(studyPlateau || p);
           const prompt =
             t.id === "notebooklm" ? notebookLmPack(ctx.name, ctx.domainLabel) : handoffPrompt(ctx);
-          const copied = await copyToClipboard(prompt);
+          // R-0074: open BEFORE any await — an await can consume the click's
+          // user-activation and get the popup silently blocked.
           const url = handoffOpenUrl(t, prompt); // R-0073 carry the prompt in the URL when it fits
           window.open(url, "_blank", "noopener");
+          const copied = await copyToClipboard(prompt);
           handoffNote.hidden = false;
           handoffNote.textContent =
             url !== t.url
@@ -1990,9 +2004,9 @@ async function main() {
     b.textContent = `${target.label} ↗`;
     b.title = target.note;
     b.addEventListener("click", async () => {
-      const copied = await copyToClipboard(prompt);
       const url = handoffOpenUrl(target, prompt); // R-0073
-      window.open(url, "_blank", "noopener");
+      window.open(url, "_blank", "noopener"); // R-0074 open BEFORE await (popup activation)
+      const copied = await copyToClipboard(prompt);
       lessonActions.querySelector(".lesson-hint")?.remove();
       lessonHint(
         url !== target.url
@@ -2163,8 +2177,8 @@ async function main() {
       gb.title = t.note;
       gb.addEventListener("click", async () => {
         const prompt = prereqPlanPrompt({ target: p.name, pathTitle, prereqs: rows });
+        window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 · open BEFORE await (R-0074)
         await copyToClipboard(prompt);
-        window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073
       });
       guide.append(gb);
     }
@@ -2266,8 +2280,8 @@ async function main() {
           b.title = t.note;
           b.addEventListener("click", async () => {
             const prompt = promptFor(); // reads rhActive at CLICK time
+            window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 · open BEFORE await (R-0074)
             await copyToClipboard(prompt);
-            window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073
           });
           return b;
         }),
@@ -3795,9 +3809,9 @@ async function main() {
         b.title = t.note;
         b.addEventListener("click", async () => {
           const prompt = courseOutlinePrompt({ title, reference });
-          const copied = await copyToClipboard(prompt);
           const openUrl = handoffOpenUrl(t, prompt); // R-0073
-          window.open(openUrl, "_blank", "noopener");
+          window.open(openUrl, "_blank", "noopener"); // R-0074 open BEFORE await (popup activation)
+          const copied = await copyToClipboard(prompt);
           courseSay(
             openUrl !== t.url
               ? `Opened ${t.label} with the request already asked — bring the syllabus back to box 2.`
@@ -3935,8 +3949,8 @@ async function main() {
         b.title = t.note;
         b.addEventListener("click", async () => {
           const prompt = whereFitsPrompt({ title, url, kind, topics: wfTopics() });
+          window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 · open BEFORE await (R-0074)
           const copied = await copyToClipboard(prompt);
-          window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 (topic list rarely fits — clipboard carries it)
           wfSay(
             copied
               ? `Copied ✓ — in ${t.label}, press Cmd/Ctrl+V (and add the ${kind.toLowerCase()} as a source), then paste the topic names it lists into box 2.`

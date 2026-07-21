@@ -28,7 +28,30 @@ export const SEED_PLATEAUS = [
   { id: "00000000-0000-0000-0000-0000000000c4", name: "Counterpoint", domain: MUSIC_DOMAIN, e1: 0.3, e2: 0.3, e3: 0.6 },
   // Physics (e2 axis, R-0022) — the Physicist's trailhead. Named "Motion" so it
   // never collides with imported vault note names ("Mecánica…") in Travel.
-  { id: "00000000-0000-0000-0000-0000000000d1", name: "Motion", domain: PHYSICS_DOMAIN, e1: 0.05, e2: 1.0, e3: 0.05 },
+  {
+    id: "00000000-0000-0000-0000-0000000000d1",
+    name: "Motion",
+    domain: PHYSICS_DOMAIN,
+    e1: 0.05,
+    e2: 1.0,
+    e3: 0.05,
+    // R-0074: the Physicist's trailhead was a bare label — now it TEACHES.
+    description: `# Motion — Kinematics in One Dimension
+Where all of physics starts: describing HOW things move before asking why. Position $x(t)$, displacement $\\Delta x$, average velocity $v = \\Delta x/\\Delta t$, instantaneous velocity $v = dx/dt$, acceleration $a = dv/dt$. For CONSTANT acceleration — free fall, a braking car — three equations answer every question, and none of them is a fact to memorize: each is two lines of algebra away from the definitions (open the worked derivation below).
+
+**Deliverable:** a ball is dropped from rest. Using the derivation — not memory — find how far it falls in $t$ seconds, and how fast it moves after falling a height $h$.
+
+**Study (official):** Khan Academy — *One-dimensional motion*; OpenStax *University Physics I*, Ch. 3.
+
+### Worked derivation — the three constant-acceleration equations
+**1. $v = v_0 + at$ — straight from the definition.** Constant acceleration means $a = (v - v_0)/t$: the change in velocity, spread evenly over the time it took. Multiply both sides by $t$, add $v_0$: $v = v_0 + at$.
+
+**2. $x = x_0 + v_0 t + \\tfrac12 a t^2$ — average velocity does the work.** When $v$ grows at a steady rate, the average over the trip is the midpoint: $\\bar v = \\tfrac12(v_0 + v)$. Displacement is average velocity times time: $x - x_0 = \\tfrac12(v_0 + v)\\,t$. Substitute equation 1 for $v$: $x - x_0 = \\tfrac12(v_0 + v_0 + at)\\,t = v_0 t + \\tfrac12 a t^2$.
+
+**3. $v^2 = v_0^2 + 2a(x - x_0)$ — eliminate time.** From equation 1, $t = (v - v_0)/a$. Put that into $x - x_0 = \\tfrac12(v_0 + v)\\,t$: $x - x_0 = \\tfrac12(v_0 + v)(v - v_0)/a = (v^2 - v_0^2)/2a$, because $(v + v_0)(v - v_0) = v^2 - v_0^2$. Rearranged: $v^2 = v_0^2 + 2a(x - x_0)$.
+
+**Sanity check — the dropped ball.** $v_0 = 0$, $a = g$: equation 2 gives $x = \\tfrac12 g t^2$; equation 3 gives $v = \\sqrt{2gh}$ after falling $h$. The deliverable falls out — nothing memorized.`,
+  },
 ];
 
 // Bridges are decorative — reachability is positional, not adjacency-based, so a

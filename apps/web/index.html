@@ -407,6 +407,11 @@
          from the amber "gap" blocks. */
       .dc-row { margin: 6px 0; padding: 8px 10px; border: 1px solid #2a4a38; border-radius: 8px; background: #12211a; display: flex; flex-direction: column; gap: 6px; }
       .dc-row[hidden] { display: none; }
+      /* R-0074: the collapsible worked derivation — depth one tap away. */
+      details.derivation { margin: 10px 0; border: 1px solid #2f4a6a; border-radius: 8px; background: #101a26; padding: 0 12px; }
+      details.derivation > summary { cursor: pointer; padding: 9px 0; font-size: 13.5px; font-weight: 600; color: #9fd0ff; list-style-position: inside; }
+      details.derivation[open] > summary { border-bottom: 1px solid #223850; margin-bottom: 6px; }
+      details.derivation > div { padding-bottom: 10px; }
       /* R-0072: find-a-topic results, grouped by lens */
       .ts-results { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
       .ts-lens { margin: 6px 0 2px; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #7fb0d8; }
