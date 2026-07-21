@@ -21,6 +21,20 @@ export function extractDeliverable(md) {
 }
 
 /**
+ * Split a body at its `### Worked derivation` heading (R-0074): `main` is
+ * everything before it (the readable topic), `derivation` the step-by-step math
+ * after it (rendered as a collapsible, so depth never intimidates the first
+ * read). Case-insensitive on the heading; `derivation` is "" when absent. Pure.
+ */
+export function splitDerivation(md) {
+  const s = String(md || "");
+  const m = s.match(/\n#{2,4}\s*Worked derivation[^\n]*\n/i);
+  if (!m) return { main: s, derivation: "" };
+  const at = m.index;
+  return { main: s.slice(0, at).trimEnd(), derivation: s.slice(at + m[0].length).trim() };
+}
+
+/**
  * The tutor prompt: coach me through DOING this deliverable — don't just answer
  * it. Small enough (~topic + deliverable) to ride the Gemini prefill URL. Pure.
  */

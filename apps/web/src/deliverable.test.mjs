@@ -1,7 +1,7 @@
 // deliverable.test.mjs — node --test, pure (R-0073).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractDeliverable, deliverableCoachPrompt } from "./deliverable.js";
+import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js";
 import { handoffOpenUrl, HANDOFF_TARGETS, PREFILL_MAX } from "./handoff.js";
 
 test("extractDeliverable pulls the task out of a real curriculum-shaped body", () => {
@@ -30,6 +30,21 @@ test("deliverableCoachPrompt demands tutoring, not answers", () => {
   assert.match(p, /smallest sensible steps/);
   assert.match(p, /wait for my attempt/);
   assert.doesNotMatch(deliverableCoachPrompt({ topic: "X", deliverable: "d" }), /\(in ""\)/);
+});
+
+test("splitDerivation separates the readable body from the step-by-step math (R-0074)", () => {
+  const body = `# The Geometric Product\nOne product to replace both.\n\n**Deliverable:** show $a\\wedge b = \\tfrac12(ab-ba)$.\n\n**Study (official):** Doran & Lasenby.\n\n### Worked derivation — the symmetric/antisymmetric split\nStart from the axioms: $a^2 = |a|^2$.\n\nStep 2 follows.`;
+  const { main, derivation } = splitDerivation(body);
+  assert.match(main, /One product to replace both\./);
+  assert.match(main, /Study \(official\)/, "main keeps everything before the heading");
+  assert.doesNotMatch(main, /Worked derivation/);
+  assert.match(derivation, /^Start from the axioms/);
+  assert.match(derivation, /Step 2 follows\.$/);
+  // absent → derivation "" and main untouched
+  const none = splitDerivation("# T\njust a body");
+  assert.equal(none.derivation, "");
+  assert.equal(none.main, "# T\njust a body");
+  assert.deepEqual(splitDerivation(null), { main: "", derivation: "" });
 });
 
 test("handoffOpenUrl: Gemini prefill carries the prompt in the URL when it fits", () => {

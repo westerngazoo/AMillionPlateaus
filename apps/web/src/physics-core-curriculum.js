@@ -41,7 +41,16 @@ Motion in 1D generalizes to vectors: position, velocity, and acceleration each s
 
 **Deliverable:** for a projectile launched at speed $v_0$, angle $\\theta$, derive the range $R = v_0^2\\sin 2\\theta / g$ and the angle that maximizes it.
 
-**Study (official):** Khan Academy — *Two-dimensional motion*; OpenStax *University Physics I*, Ch. 4 (Motion in Two and Three Dimensions).`,
+**Study (official):** Khan Academy — *Two-dimensional motion*; OpenStax *University Physics I*, Ch. 4 (Motion in Two and Three Dimensions).
+
+### Worked derivation — the range $R = v_0^2\\sin 2\\theta/g$
+**Step 1 — split the launch velocity.** $v_{0x} = v_0\\cos\\theta$ (never changes — nothing pushes horizontally) and $v_{0y} = v_0\\sin\\theta$ (fights gravity).
+
+**Step 2 — time of flight, from the vertical problem alone.** Height: $y(t) = v_0\\sin\\theta\\,t - \\tfrac12 g t^2 = t\\,(v_0\\sin\\theta - \\tfrac12 g t)$. It's back on the ground when the bracket vanishes: $T = 2v_0\\sin\\theta/g$.
+
+**Step 3 — range, from the horizontal problem alone.** Uniform motion for time $T$: $R = v_{0x}\\,T = v_0\\cos\\theta\\cdot\\dfrac{2v_0\\sin\\theta}{g} = \\dfrac{v_0^2\\,(2\\sin\\theta\\cos\\theta)}{g}$.
+
+**Step 4 — the double angle.** $2\\sin\\theta\\cos\\theta = \\sin 2\\theta$, so $R = v_0^2\\sin 2\\theta/g$ — maximized where $\\sin 2\\theta = 1$, i.e. $\\theta = 45°$. Sanity: $\\theta = 0$ or $90°$ gives $R = 0$ ✓. The whole result is the two 1D problems glued by a shared clock.`,
   },
   {
     id: "80000000-0000-0000-0000-000000000011",
@@ -53,7 +62,16 @@ The three laws (inertia; $\\vec F = m\\vec a$; action–reaction) plus the stand
 
 **Deliverable:** a block on a frictionless incline of angle $\\theta$ — draw the free-body diagram and show $a = g\\sin\\theta$.
 
-**Study (official):** Khan Academy — *Forces and Newton's laws of motion*; OpenStax *University Physics I*, Ch. 5–6.`,
+**Study (official):** Khan Academy — *Forces and Newton's laws of motion*; OpenStax *University Physics I*, Ch. 5–6.
+
+### Worked derivation — $a = g\\sin\\theta$ on a frictionless incline
+**Step 1 — free-body diagram.** Exactly two forces on the block: weight $mg$ straight down, and the normal force $N$ perpendicular to the surface. (No friction, by assumption.)
+
+**Step 2 — tilt the axes to match the motion.** Take $x$ along the incline (downhill positive) and $y$ perpendicular to it. $N$ is purely $+y$. The weight splits: the angle between the weight vector and the $-y$ axis equals the incline angle $\\theta$ (both are measured from the vertical), so $W_x = mg\\sin\\theta$ downhill and $W_y = -mg\\cos\\theta$.
+
+**Step 3 — Newton's second law, one axis at a time.** $y$: the block never leaves the surface, so $N - mg\\cos\\theta = 0$, giving $N = mg\\cos\\theta$. $x$: the only force is $mg\\sin\\theta$, so $m a = mg\\sin\\theta$.
+
+**Step 4 — the mass cancels.** $a = g\\sin\\theta$ — independent of $m$, which is Galileo's ramp result. Sanity: $\\theta = 0$ gives $a = 0$ (flat ground); $\\theta = 90°$ gives $a = g$ (free fall). The sine interpolates between them, exactly as the geometry demands.`,
   },
   {
     id: "80000000-0000-0000-0000-000000000012",
