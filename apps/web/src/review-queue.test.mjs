@@ -7,6 +7,7 @@ import {
   entryOf,
   graded,
   dueEntries,
+  enrollDue,
   freshIds,
   interleave,
   nextDue,
@@ -111,6 +112,27 @@ test("interleave round-robins across lenses, preserving within-lens order", () =
   const out = interleave(items, (x) => x.lens).map((x) => x.id);
   assert.deepEqual(out, [1, 4, 6, 2, 5, 3]);
   assert.deepEqual(interleave([], (x) => x), []);
+});
+
+test("enrollDue: reassessment forces due now, keeping SM-2 stats, bypassing the cap", () => {
+  // enrol a fresh (unenrolled) topic — due now, default ease, ready to review
+  let q = enrollDue({}, "trig", T0);
+  let e = entryOf(q, "trig");
+  assert.equal(e.due, T0);
+  assert.equal(e.reps, 0);
+  assert.deepEqual(dueEntries(q, ["trig"], T0).map((x) => x.id), ["trig"]);
+
+  // an already-scheduled card keeps its reps/ease/interval but comes due now
+  let sched = graded({}, "sines", GRADES.GOOD, T0); // due T0+1d, reps 1
+  sched = graded(sched, "sines", GRADES.GOOD, T0 + 86_400_000); // reps 2, far future
+  const before = entryOf(sched, "sines");
+  const forced = enrollDue(sched, "sines", T0 + 2 * 86_400_000);
+  const after = entryOf(forced, "sines");
+  assert.equal(after.reps, before.reps); // stats preserved
+  assert.equal(after.ease, before.ease);
+  assert.equal(after.interval, before.interval);
+  assert.equal(after.due, T0 + 2 * 86_400_000); // but due now
+  assert.deepEqual(sched, sched); // input untouched (pure)
 });
 
 test("nextDue: earliest FUTURE due among live ids, null when nothing is scheduled", () => {
