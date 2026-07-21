@@ -5035,6 +5035,39 @@ async function main() {
       notepadStatus.textContent = `Pull failed (${e?.message ?? e}).`;
     }
   });
+  // R-0076: export the note as a PDF via the browser's own print → "Save as PDF"
+  // — offline, dependency-free, and the Boox tablets have the same dialog. The
+  // note renders (with math typeset, AWAITED — the PDF must not show raw TeX)
+  // into #note-print; print CSS makes it the only visible element.
+  document.getElementById("notepad-pdf").addEventListener("click", async () => {
+    if (!studyPlateau) return;
+    notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
+    flushNotepad();
+    const text = notepadInput.value.trim();
+    if (!text) {
+      notepadStatus.textContent = "Nothing to export — write a note first.";
+      return;
+    }
+    const box = document.getElementById("note-print");
+    const h = document.createElement("h1");
+    h.textContent = studyPlateau.name; // textContent — never trust names as HTML
+    const meta = document.createElement("p");
+    meta.className = "np-meta";
+    meta.textContent = `Private note · A Million Plateaus · ${new Date().toLocaleDateString()}`;
+    const noteEl = document.createElement("div");
+    noteEl.innerHTML = renderMarkdown(text);
+    box.replaceChildren(h, meta, noteEl);
+    await typesetMath(noteEl);
+    document.body.classList.add("print-note");
+    const cleanup = () => {
+      document.body.classList.remove("print-note");
+      box.replaceChildren();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    setTimeout(cleanup, 60000); // safety net: some webviews never fire afterprint
+  });
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
   // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
