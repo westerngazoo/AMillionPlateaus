@@ -104,6 +104,7 @@ import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
 import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
 import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
+import { GRADES, graded, dueEntries, freshIds, interleave, nextDue } from "./review-queue.js"; // R-0078 spaced review
 import {
   entryOf as lessonEntryOf,
   withStep as lessonWithStep,
@@ -5107,6 +5108,149 @@ async function main() {
       notepadStatus.textContent = `Could not embed that image (${e?.message ?? e}).`;
     }
   });
+
+  // ── Spaced review queue (R-0078) ────────────────────────────────────────────
+  // Retrieval practice with SM-2 spacing over the topics you've engaged with:
+  // mastered (R-0030), lesson-touched (R-0063), or noted (R-0056). The card
+  // hides the answer until you've tried to recall it (testing effect), grading
+  // stretches or resets the next gap (spacing effect), and the session
+  // round-robins lenses (interleaving). Scheduling math is the pure
+  // review-queue.js module; state is mp.reviewQueue in localStorage — THIS
+  // browser only, never synced, never in the CRDT.
+  const reviewPanel = document.getElementById("review-panel");
+  const reviewSummary = document.getElementById("review-summary");
+  const reviewCard = document.getElementById("review-card");
+  const reviewTopicEl = document.getElementById("review-topic");
+  const reviewPromptEl = document.getElementById("review-prompt");
+  const reviewAnswerEl = document.getElementById("review-answer");
+  const reviewGradesEl = document.getElementById("review-grades");
+  const reviewRevealBtn = document.getElementById("review-reveal");
+  const reviewToggleBtn = document.getElementById("review-toggle");
+  function loadReviewQueue() {
+    try {
+      return JSON.parse(localStorage.getItem("mp.reviewQueue")) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  function saveReviewQueue(q) {
+    try {
+      localStorage.setItem("mp.reviewQueue", JSON.stringify(q));
+    } catch {
+      /* private mode / quota — this session's reviews still work */
+    }
+  }
+  let reviewQueue = loadReviewQueue();
+  let reviewDueIds = [];
+  let reviewFreshIds = [];
+  // The candidate pool: topics you've actually engaged with (and that still
+  // exist in the graph — imports/deletions can orphan queue entries).
+  function reviewCandidates() {
+    const ids = new Set(mastered);
+    for (const [id, text] of Object.entries(privateNotes)) if (String(text ?? "").trim()) ids.add(id);
+    for (const [id, e] of Object.entries(lessonProgMap)) if (e && (e.done || e.step > 0)) ids.add(id);
+    return [...ids].filter((id) => plateauById(id));
+  }
+  function buildReviewSession(now) {
+    const ids = reviewCandidates();
+    const lensOf = (id) => DOMAIN_OF.get(id) ?? "";
+    reviewDueIds = interleave(dueEntries(reviewQueue, ids, now).map((x) => x.id), lensOf);
+    reviewFreshIds = interleave(freshIds(reviewQueue, ids, now), lensOf);
+  }
+  function renderReview() {
+    const now = Date.now();
+    buildReviewSession(now);
+    const total = reviewDueIds.length + reviewFreshIds.length;
+    reviewToggleBtn.textContent = total ? `📅 Review — ${total} due` : "📅 Review";
+    if (reviewPanel.hidden) return;
+    reviewAnswerEl.hidden = true;
+    reviewGradesEl.hidden = true;
+    reviewRevealBtn.hidden = false;
+    if (!total) {
+      reviewCard.hidden = true;
+      const upcoming = nextDue(reviewQueue, reviewCandidates(), now);
+      reviewSummary.textContent = upcoming
+        ? `All done for now ✓ — next review ${new Date(upcoming).toLocaleString()}.`
+        : "Nothing to review yet — master a topic, finish a lesson, or write a note and it enrolls here.";
+      return;
+    }
+    reviewCard.hidden = false;
+    const isFresh = reviewDueIds.length === 0;
+    const id = isFresh ? reviewFreshIds[0] : reviewDueIds[0];
+    const p = plateauById(id);
+    reviewSummary.textContent =
+      `${reviewDueIds.length} due · ${reviewFreshIds.length} new today` + (isFresh ? " — new card" : "");
+    reviewTopicEl.textContent = `${p.name} · ${labelForDomain(DOMAIN_OF.get(id))}`;
+    const deliverable = extractDeliverable(p.description || "");
+    reviewPromptEl.innerHTML = renderMarkdown(
+      deliverable
+        ? `**Recall from memory, then check:** ${deliverable}`
+        : `**Recall from memory:** what is _${p.name}_ about? State the key idea and one formula or example, out loud or on paper.`,
+    );
+    typesetMath(reviewPromptEl);
+    reviewPanel.dataset.reviewId = id; // the card the grade buttons apply to
+  }
+  reviewRevealBtn.addEventListener("click", () => {
+    const p = plateauById(reviewPanel.dataset.reviewId);
+    if (!p) return;
+    // The answer = the topic's full teaching body (challenges stripped, the
+    // derivation collapsible — same treatment as openPlateau) + your own note,
+    // images included.
+    const { main: bodyMain, derivation } = splitDerivation(stripChallenges(p.description || ""));
+    reviewAnswerEl.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+    if (derivation) {
+      const det = document.createElement("details");
+      det.className = "derivation";
+      const sum = document.createElement("summary");
+      sum.textContent = "📜 Worked derivation — step by step";
+      const inner = document.createElement("div");
+      inner.innerHTML = renderMarkdown(derivation);
+      det.append(sum, inner);
+      reviewAnswerEl.append(det);
+    }
+    const note = noteFor(privateNotes, p.id);
+    if (String(note ?? "").trim()) {
+      const h = document.createElement("p");
+      h.innerHTML = "<strong>Your note:</strong>";
+      const div = document.createElement("div");
+      div.innerHTML = renderMarkdown(note);
+      reviewAnswerEl.append(h, div);
+    }
+    typesetMath(reviewAnswerEl);
+    reviewAnswerEl.hidden = false;
+    reviewGradesEl.hidden = false;
+    reviewRevealBtn.hidden = true;
+  });
+  for (const [btnId, grade] of [
+    ["review-again", GRADES.AGAIN],
+    ["review-hard", GRADES.HARD],
+    ["review-good", GRADES.GOOD],
+    ["review-easy", GRADES.EASY],
+  ]) {
+    document.getElementById(btnId).addEventListener("click", () => {
+      const id = reviewPanel.dataset.reviewId;
+      if (!id) return;
+      reviewQueue = graded(reviewQueue, id, grade, Date.now());
+      saveReviewQueue(reviewQueue);
+      renderReview(); // next card (an Again card returns later in the session)
+    });
+  }
+  document.getElementById("review-open").addEventListener("click", () => {
+    const p = plateauById(reviewPanel.dataset.reviewId);
+    if (!p) return;
+    reviewPanel.hidden = true;
+    flyTo(p.position, () => openPlateau(p));
+  });
+  reviewToggleBtn.addEventListener("click", () => {
+    reviewPanel.hidden = !reviewPanel.hidden;
+    renderReview();
+  });
+  document.getElementById("review-close").addEventListener("click", () => (reviewPanel.hidden = true));
+  // Keep the menu label honest: refresh the count whenever the menu opens.
+  document.getElementById("menu-toggle").addEventListener("click", () => {
+    if (reviewPanel.hidden) renderReview();
+  });
+  renderReview(); // boot: sets the "📅 Review — N due" label
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
   // A stepped welcome overlay, remembered LOCALLY (localStorage only — never
