@@ -419,6 +419,9 @@
       .ts-row:hover { background: #1c2a38; border-color: #3a5670; }
       .ts-snippet { font-size: 11.5px; color: #8aa0b4; }
       .ts-none { margin: 0; font-size: 12px; color: #8aa0b4; }
+      /* R-0075: notes-sync wizard deep-links */
+      .ns-link { font-size: 12px; color: #9fd0ff; text-decoration: none; background: #1a2734; border: 1px solid #2a3543; border-radius: 6px; padding: 3px 8px; }
+      .ns-link:hover { border-color: #3a5670; }
       .lesson-panel[hidden] { display: none; }
       .lesson-panel {
         margin: 8px 0; padding: 12px 14px; border: 1px solid #2f5f83; border-radius: 10px;
@@ -879,6 +882,7 @@
           <button id="import-world">Import a world</button>
           <button id="connect-peer-toggle">Connect a peer (P2P)</button>
           <button id="discover">Discover wizards</button>
+          <button id="notesync-toggle">📓 Notes sync (GitHub)</button>
         </div>
         <!-- Wizard identity + optional relay (SPEC-0010 / R-0010): the relay URL is
              a local-only setting; empty ⇒ offline. Typing here does NOT close the
@@ -972,6 +976,31 @@
       <div class="course-actions">
         <button id="ts-close" type="button">Close</button>
       </div>
+    </div>
+
+    <!-- Notes sync wizard (R-0075): the owner's OWN private repo + fine-grained
+         token, pasted by THEM — localStorage only, sent only to api.github.com.
+         One markdown file per topic → readable on the Boox tablets. -->
+    <div id="notesync" class="draft-plateau course-builder" hidden>
+      <h3 class="course-title">📓 Notes sync — your own GitHub repo</h3>
+      <p class="course-help">Your notepads live in this browser; sync them as one Markdown file per topic to a <strong>private repo you own</strong> — then pull or read them on your Boox tablets. The token you paste is stored in this browser only and is sent only to api.github.com — never anywhere else.</p>
+      <div class="course-actions">
+        <span class="course-label">1 · Create a private repo →</span>
+        <a class="ns-link" href="https://github.com/new?name=plateaus-notes&amp;visibility=private" target="_blank" rel="noopener noreferrer">github.com/new ↗</a>
+      </div>
+      <input id="ns-repo" type="text" placeholder="owner/repo — e.g. yourname/plateaus-notes (or paste the repo URL)" autocomplete="off" />
+      <div class="course-actions">
+        <span class="course-label">2 · Create a fine-grained token →</span>
+        <a class="ns-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">token settings ↗</a>
+      </div>
+      <p class="course-help">On that page: <strong>Repository access → Only select repositories</strong> → pick your notes repo · <strong>Permissions → Contents: Read and write</strong>. Generate, copy, and paste it here:</p>
+      <input id="ns-token" type="password" placeholder="github_pat_… (stays in THIS browser only)" autocomplete="off" />
+      <div class="course-actions">
+        <button id="ns-test" type="button">3 · Test &amp; save</button>
+        <button id="ns-pushall" type="button">Push all notes ↑</button>
+        <button id="ns-close" type="button">Close</button>
+      </div>
+      <p id="ns-status" class="course-status" hidden></p>
     </div>
 
     <!-- Draft Plateau form (SPEC-0011 / R-0011). Shown/hidden by main.js;
@@ -1467,6 +1496,9 @@
         <textarea id="notepad-input" placeholder="Your private notes on this topic — Markdown + $math$. Saved in this browser only."></textarea>
         <div class="notepad-actions">
           <button type="button" id="notepad-preview-btn">Preview</button>
+          <button type="button" id="notepad-save">Save now</button>
+          <button type="button" id="notepad-push" hidden title="Push this note to your GitHub notes repo">Push ↑</button>
+          <button type="button" id="notepad-pull" hidden title="Pull this note from your GitHub notes repo (replaces local)">Pull ↓</button>
           <span id="notepad-status" class="notepad-status" aria-live="polite"></span>
         </div>
         <div id="notepad-preview" class="detail-body" hidden><!-- rendered, by main.js --></div>

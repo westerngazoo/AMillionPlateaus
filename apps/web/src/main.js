@@ -117,6 +117,7 @@ import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route 
 import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
+import { parseRepo, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, ghHeaders } from "./notes-sync.js"; // R-0075 notes → your GitHub repo
 import {
   PRESETS,
   PROVIDERS,
@@ -4870,6 +4871,169 @@ async function main() {
   tsInput.addEventListener("input", () => {
     clearTimeout(tsTimer);
     tsTimer = setTimeout(renderTopicSearch, 120); // debounce keystrokes
+  });
+
+  // ── Notes sync to YOUR OWN GitHub repo (R-0075) ──────────────────────────────
+  // The notepad is this-browser-only; the owner reads on two Boox tablets. A
+  // setup WIZARD walks through: create a private repo → create a fine-grained
+  // token (Contents: read/write, that repo only) → paste it — stored in THIS
+  // browser's localStorage only (the model-key pattern, R-0007 AC5) and sent
+  // ONLY to api.github.com (cross-origin: the SW never touches it) → test →
+  // Push/Pull on every notepad + Push-all. One markdown file per topic
+  // (noteFilePath), readable raw in any Boox reader.
+  const NOTES_SYNC_KEY = "mp.notesSync";
+  function loadNotesSyncCfg() {
+    try {
+      const c = JSON.parse(localStorage.getItem(NOTES_SYNC_KEY));
+      return c && typeof c === "object" && c.owner && c.repo && c.token ? c : null;
+    } catch {
+      return null;
+    }
+  }
+  let notesSyncCfg = loadNotesSyncCfg();
+  const nsPanel = document.getElementById("notesync");
+  const nsRepo = document.getElementById("ns-repo");
+  const nsToken = document.getElementById("ns-token");
+  const nsStatus = document.getElementById("ns-status");
+  function nsSay(text, isErr) {
+    nsStatus.hidden = false;
+    nsStatus.textContent = text;
+    nsStatus.classList.toggle("err", !!isErr);
+  }
+  async function ghGetNote(path) {
+    const { owner, repo, branch, token } = notesSyncCfg;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`,
+      { headers: ghHeaders(token) },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    const j = await res.json();
+    return { sha: j.sha, text: b64DecodeUtf8(j.content || "") };
+  }
+  async function ghPutNote(path, text, sha) {
+    const { owner, repo, branch, token } = notesSyncCfg;
+    const body = { message: `notes: ${path}`, content: b64EncodeUtf8(text), branch };
+    if (sha) body.sha = sha; // updating an existing file needs its sha
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(path)}`,
+      { method: "PUT", headers: { ...ghHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    );
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+  }
+  document.getElementById("notesync-toggle").addEventListener("click", () => {
+    nsPanel.hidden = !nsPanel.hidden;
+    if (!nsPanel.hidden) {
+      if (notesSyncCfg) {
+        nsRepo.value = `${notesSyncCfg.owner}/${notesSyncCfg.repo}`;
+        nsSay("Connected earlier ✓ — retest any time, or push all notes.");
+      } else {
+        nsStatus.hidden = true;
+      }
+      nsRepo.focus();
+    }
+  });
+  document.getElementById("ns-close").addEventListener("click", () => (nsPanel.hidden = true));
+  document.getElementById("ns-test").addEventListener("click", async () => {
+    const parsed = parseRepo(nsRepo.value);
+    if (!parsed) return nsSay("That doesn't look like owner/repo (or a GitHub URL) — see step 1.", true);
+    const token = nsToken.value.trim() || notesSyncCfg?.token || "";
+    if (!token) return nsSay("Paste the fine-grained token from step 2 (it stays in THIS browser only).", true);
+    nsSay("Testing…");
+    try {
+      const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
+        headers: ghHeaders(token),
+      });
+      if (res.status === 401)
+        return nsSay("Token rejected (401) — recreate it in step 2 and check it hasn't expired.", true);
+      if (res.status === 404)
+        return nsSay("Repo not found (404) — check the name, and that the token's Repository access includes it.", true);
+      if (!res.ok) return nsSay(`GitHub said ${res.status} — try again.`, true);
+      const j = await res.json();
+      notesSyncCfg = { owner: parsed.owner, repo: parsed.repo, branch: j.default_branch || "main", token };
+      try {
+        localStorage.setItem(NOTES_SYNC_KEY, JSON.stringify(notesSyncCfg));
+      } catch {
+        /* private mode — works this session only */
+      }
+      nsToken.value = ""; // never leave the token sitting in a visible field
+      renderNotepadSync();
+      nsSay(
+        j.private
+          ? `Connected ✓ — private repo ${parsed.owner}/${parsed.repo} (branch ${notesSyncCfg.branch}). Push/Pull is now on every notepad.`
+          : `Connected — but ⚠️ ${parsed.owner}/${parsed.repo} is PUBLIC: anyone could read your notes. Make it private in the repo settings.`,
+      );
+    } catch (e) {
+      nsSay(`Could not reach GitHub (${e?.message ?? e}) — are you online?`, true);
+    }
+  });
+  document.getElementById("ns-pushall").addEventListener("click", async () => {
+    if (!notesSyncCfg) return nsSay("Connect first (steps 1–3).", true);
+    flushNotepad();
+    privateNotes = loadNotes(localStorage);
+    const entries = Object.entries(privateNotes).filter(([, v]) => String(v ?? "").trim());
+    if (!entries.length) return nsSay("No notes to push yet — write one in a topic's notepad first.");
+    nsSay(`Pushing ${entries.length} note${entries.length > 1 ? "s" : ""}…`);
+    let ok = 0;
+    let failed = 0;
+    for (const [id, text] of entries) {
+      try {
+        const p = plateauById(id);
+        const path = noteFilePath(p?.name || "topic", id);
+        const existing = await ghGetNote(path);
+        await ghPutNote(path, text, existing?.sha);
+        ok++;
+      } catch {
+        failed++;
+      }
+    }
+    nsSay(failed ? `Pushed ${ok} ✓ — ${failed} failed (retry, or retest the connection).` : `Pushed ${ok} note${ok > 1 ? "s" : ""} ✓`, !!failed);
+  });
+  // The notepad's explicit save + per-topic Push/Pull (shown once connected).
+  const notepadPush = document.getElementById("notepad-push");
+  const notepadPull = document.getElementById("notepad-pull");
+  function renderNotepadSync() {
+    notepadPush.hidden = !notesSyncCfg;
+    notepadPull.hidden = !notesSyncCfg;
+  }
+  renderNotepadSync();
+  document.getElementById("notepad-save").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
+    flushNotepad();
+    notepadStatus.textContent = "Saved ✓ (this browser)";
+  });
+  notepadPush.addEventListener("click", async () => {
+    if (!studyPlateau || !notesSyncCfg) return;
+    notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
+    flushNotepad();
+    notepadStatus.textContent = "pushing…";
+    try {
+      const path = noteFilePath(studyPlateau.name, studyPlateau.id);
+      const existing = await ghGetNote(path);
+      await ghPutNote(path, notepadInput.value, existing?.sha);
+      notepadStatus.textContent = `Pushed ✓ → ${path}`;
+    } catch (e) {
+      notepadStatus.textContent = `Push failed (${e?.message ?? e}) — retest in 📓 Notes sync.`;
+    }
+  });
+  notepadPull.addEventListener("click", async () => {
+    if (!studyPlateau || !notesSyncCfg) return;
+    notepadStatus.textContent = "pulling…";
+    try {
+      const path = noteFilePath(studyPlateau.name, studyPlateau.id);
+      const got = await ghGetNote(path);
+      if (!got) {
+        notepadStatus.textContent = "No note in the repo for this topic yet — Push ↑ first.";
+        return;
+      }
+      notepadInput.value = got.text;
+      notepadDirty = { id: studyPlateau.id, val: got.text };
+      flushNotepad();
+      notepadStatus.textContent = "Pulled ✓ (replaced the local note)";
+    } catch (e) {
+      notepadStatus.textContent = `Pull failed (${e?.message ?? e}).`;
+    }
   });
 
   // ── First-run tutorial (SPEC-0019 / R-0019) ─────────────────────────────────
