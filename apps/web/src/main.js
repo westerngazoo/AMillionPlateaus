@@ -103,7 +103,7 @@ import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./p
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
 import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
-import { LESSON_STEPS, lessonStepPrompt, clampStep } from "./lesson.js"; // R-0060 guided lesson
+import { LESSON_STEPS, lessonStepPrompt, pretestQuestions, clampStep } from "./lesson.js"; // R-0060 guided lesson · R-0080 pretest
 import { GRADES, graded, dueEntries, enrollDue, freshIds, interleave, nextDue } from "./review-queue.js"; // R-0078 spaced review · R-0079 reassess
 import {
   exactMatch as captureExactMatch,
@@ -1803,6 +1803,26 @@ async function main() {
   }
   let lessonProgMap = loadLessonProgress();
 
+  // R-0080: your pretest attempt per topic — the guesses you make BEFORE the
+  // lesson teaches you. Kept in localStorage (this browser only, never synced,
+  // never in the CRDT — like the notepad and lesson progress) so the attempt
+  // survives navigation and you can see later how far you've come.
+  function loadPretest() {
+    try {
+      return JSON.parse(localStorage.getItem("mp.pretest")) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  function savePretest(map) {
+    try {
+      localStorage.setItem("mp.pretest", JSON.stringify(map));
+    } catch {
+      /* private mode / quota — the pretest still works this session */
+    }
+  }
+  let pretestMap = loadPretest();
+
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
     studyPlateau = p;
@@ -2039,7 +2059,35 @@ async function main() {
     lessonBody.replaceChildren();
     lessonActions.replaceChildren();
 
-    if (step.kind === "read") {
+    if (step.kind === "pretest") {
+      // R-0080: try before you're taught. Questions from graph context (prior
+      // knowledge + the deliverable + a neighbour link); your attempt persists.
+      const questions = pretestQuestions({
+        name: ctx.name,
+        deliverable: extractDeliverable(studyPlateau.description || ""),
+        neighbors: ctx.neighbors,
+      });
+      const ol = document.createElement("ol");
+      ol.className = "pretest-qs";
+      for (const q of questions) {
+        const li = document.createElement("li");
+        li.innerHTML = renderMarkdown(q); // esc-safe; q may contain $…$/markdown from the deliverable
+        ol.append(li);
+      }
+      lessonBody.append(ol);
+      typesetMath(lessonBody); // the deliverable question can carry TeX
+      const ta = document.createElement("textarea");
+      ta.className = "pretest-attempt";
+      ta.rows = 4;
+      ta.placeholder = "Your attempt, from memory — bullet points are fine. Being wrong here is the point.";
+      ta.value = pretestMap[studyPlateau.id] ?? "";
+      ta.addEventListener("input", () => {
+        pretestMap = { ...pretestMap, [studyPlateau.id]: ta.value };
+        savePretest(pretestMap);
+      });
+      lessonBody.append(ta);
+      lessonHint("No peeking at the notes yet — answer from what you already have, then Next → to start learning.");
+    } else if (step.kind === "read") {
       lessonBody.innerHTML = renderMarkdown(
         ctx.notes || "_This topic has no notes yet — jump to an analogy or example below to build them._",
       );

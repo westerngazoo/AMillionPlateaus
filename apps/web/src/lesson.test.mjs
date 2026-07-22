@@ -1,16 +1,48 @@
 // lesson.test.mjs — node --test, pure (R-0060).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LESSON_STEPS, lessonStepPrompt, analogyPrompt, examplePrompt, clampStep } from "./lesson.js";
+import {
+  LESSON_STEPS,
+  lessonStepPrompt,
+  analogyPrompt,
+  examplePrompt,
+  pretestQuestions,
+  clampStep,
+} from "./lesson.js";
 
-test("the lesson is an ordered Feynman arc, summary → recall", () => {
+test("the lesson is an ordered Feynman arc, pretest → recall", () => {
   const keys = LESSON_STEPS.map((s) => s.key);
-  assert.deepEqual(keys, ["summary", "ground", "analogy", "example", "check", "teach", "recall"]);
+  assert.deepEqual(keys, ["pretest", "summary", "ground", "analogy", "example", "check", "teach", "recall"]);
   for (const s of LESSON_STEPS) {
     assert.ok(s.title && s.coach && s.kind, `${s.key} has title/coach/kind`);
   }
-  assert.equal(LESSON_STEPS[0].kind, "read"); // summary is a read step
+  assert.equal(LESSON_STEPS[0].kind, "pretest"); // R-0080: try before you learn
+  assert.equal(LESSON_STEPS[1].kind, "read"); // then summary is a read step
   assert.equal(LESSON_STEPS.at(-1).kind, "master"); // recall ends at mastery
+});
+
+test("pretestQuestions (R-0080): prior-knowledge always; deliverable + neighbours when present", () => {
+  // bare topic → just the prior-knowledge guess
+  const bare = pretestQuestions({ name: "Rotors" });
+  assert.equal(bare.length, 1);
+  assert.match(bare[0], /"Rotors"/);
+  assert.match(bare[0], /from memory/i);
+
+  // with a deliverable + neighbours → three questions, none revealing an answer
+  const full = pretestQuestions({
+    name: "The Geometric Product",
+    deliverable: "show a∧b = ½(ab − ba)",
+    neighbors: [{ name: "Vectors" }, { name: "Rotors" }, { name: "Bivectors" }],
+  });
+  assert.equal(full.length, 3);
+  assert.match(full[1], /½\(ab − ba\)/); // attempts the goal itself
+  assert.match(full[2], /"Vectors"/);
+  assert.match(full[2], /"Rotors"/);
+  assert.ok(!full[2].includes("Bivectors"), "caps neighbour mentions at two");
+  // accepts plain-string neighbours too, and is safe with no args
+  assert.match(pretestQuestions({ name: "X", neighbors: ["Y"] })[1], /"Y"/);
+  assert.doesNotThrow(() => pretestQuestions());
+  assert.equal(pretestQuestions().length, 1);
 });
 
 test("analogy + example prompts ground in the topic, notes, and name their limits/insight", () => {
