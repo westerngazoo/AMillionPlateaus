@@ -40,10 +40,35 @@ export function examplePrompt({ name = "this topic", domainLabel = "", notes = "
   );
 }
 
+/**
+ * 2–3 PRETEST questions asked BEFORE any teaching (R-0080). Attempting to
+ * retrieve an answer you don't have yet — and getting it wrong — primes the
+ * brain to encode the right answer far better than reading it cold (the
+ * "pretesting" / errorful-generation effect). Built purely from graph context,
+ * no model: a prior-knowledge guess, the topic's own deliverable if it has one,
+ * and a connection guess when neighbours exist. `neighbors` accepts strings or
+ * `{ name }` objects. Returns 2–3 short strings. Pure + deterministic.
+ */
+export function pretestQuestions({ name = "this topic", deliverable = "", neighbors = [] } = {}) {
+  const qs = [
+    `From memory, before we start: what do you think "${name}" means or is for? A rough guess is fine — being wrong now makes the answer stick harder later.`,
+  ];
+  const d = String(deliverable || "").trim();
+  if (d) qs.push(`Attempt the goal before we teach it — ${d} — and note the exact step where you get stuck.`);
+  const near = (neighbors || [])
+    .map((n) => (typeof n === "string" ? n : n?.name))
+    .filter(Boolean)
+    .slice(0, 2);
+  if (near.length) qs.push(`Guess the link: how might "${name}" connect to ${near.map((n) => `"${n}"`).join(" or ")}?`);
+  return qs;
+}
+
 // The ordered lesson. `kind` tells the UI how to render the step; `prompt` (when
 // present) is the hand-off prompt key. Keep it short — a lesson you finish beats
-// one you abandon.
+// one you abandon. R-0080 opens with a PRETEST: you try before you're taught.
 export const LESSON_STEPS = [
+  { key: "pretest", title: "Pretest", kind: "pretest",
+    coach: "Try BEFORE you learn. Answer from memory — even a wrong guess primes the right answer (the pretesting effect). Nothing here is graded; we teach it next." },
   { key: "summary", title: "Summary", kind: "read",
     coach: "Start with the map of the idea — its notes. Then we build the territory. (🎧 listen if you'd rather hear it.)" },
   { key: "ground", title: "Ground it", kind: "ground",
