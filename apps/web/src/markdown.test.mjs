@@ -123,6 +123,27 @@ test("math → inert .mp-math placeholder carrying the ESCAPED tex (AC4)", () =>
   assert.match(disp, /data-display="1"/);
 });
 
+test("LaTeX delimiters (R-0087): \\(…\\) inline and \\[…\\] display — what pasted Gemini answers use", () => {
+  // inline
+  const inline = renderMarkdown("pasted: \\(\\alpha \\cdot \\beta\\) done");
+  assert.match(inline, /<span class="mp-math" data-display="0"[^>]*>\\alpha \\cdot \\beta<\/span>/);
+  assert.doesNotMatch(inline, /\\\(/); // no raw delimiter survives
+  // display, on its own block → emitted directly, not wrapped in <p>
+  const disp = renderMarkdown("Before.\n\n\\[ c^2 = a^2 + b^2 - 2ab\\cos\\theta \\]\n\nAfter.");
+  assert.match(disp, /data-display="1"/);
+  assert.doesNotMatch(disp, /<p><span class="mp-math" data-display="1"/);
+  assert.doesNotMatch(disp, /\\\[/);
+  // a bracket-math block can NEVER half-match the link rule (extracted first)
+  assert.doesNotMatch(renderMarkdown("\\[x\\](https://e.com)"), /<a /);
+  // a script breakout inside \(…\) stays inert, exactly like the $ forms
+  const evil = renderMarkdown("\\(x</span><script>alert(1)</script>\\)");
+  assert.doesNotMatch(evil, /<script/i);
+  assert.match(evil, /data-tex="x&lt;\/span&gt;&lt;script&gt;/);
+  // all four delimiter forms coexist in one body
+  const mixed = renderMarkdown("$a$ and \\(b\\) and $$c$$ and \\[d\\]");
+  assert.equal((mixed.match(/class="mp-math"/g) || []).length, 4);
+});
+
 test("a script breakout inside $…$ stays inert as an escaped attribute value (AC4, finding 3)", () => {
   const html = renderMarkdown('$x</span><script>alert(1)</script>$');
   // The payload is escaped INSIDE the data-tex attribute — never a sibling node.
