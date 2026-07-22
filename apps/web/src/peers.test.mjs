@@ -30,6 +30,26 @@ test("addPeer appends with defaults and dedups by key (refreshing branch/label)"
   assert.deepEqual(addPeer(null, { owner: "z", repo: "r" }).map(peerKey), ["z/r"]);
 });
 
+test("addPeer token (R-0085): carried for private repos, kept on re-follow, never invented", () => {
+  // a public follow stores NO token key at all
+  const pub = addPeer([], { owner: "ada", repo: "world" });
+  assert.ok(!("token" in pub[0]));
+
+  // a private follow carries the token
+  let list = addPeer([], { owner: "bob", repo: "secret", token: "github_pat_x" });
+  assert.equal(list[0].token, "github_pat_x");
+
+  // re-following WITHOUT a token keeps the stored one (don't lose access on refresh)
+  list = addPeer(list, { owner: "Bob", repo: "Secret", label: "Bob's map" });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].token, "github_pat_x");
+  assert.equal(list[0].label, "Bob's map");
+
+  // re-following WITH a new token replaces it (rotation)
+  list = addPeer(list, { owner: "bob", repo: "secret", token: "github_pat_y" });
+  assert.equal(list[0].token, "github_pat_y");
+});
+
 test("removePeer drops by key (case-insensitive), leaves the rest", () => {
   const list = addPeer(addPeer([], { owner: "ada", repo: "world" }), { owner: "bob", repo: "graph" });
   assert.deepEqual(removePeer(list, "ADA/WORLD").map(peerKey), ["bob/graph"]);
