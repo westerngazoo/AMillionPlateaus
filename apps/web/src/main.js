@@ -5163,6 +5163,30 @@ async function main() {
     }
     await ghPutWorld(doc.save(), remote?.sha);
   }
+  // R-0084: back the world up AUTOMATICALLY after a graph-changing moment (a
+  // capture), so a topic can never strand in one browser again. Debounced so
+  // rapid captures coalesce into one push, guarded so pushes never overlap,
+  // quiet on success (a brief top-bar chip), loud on failure. A no-op until
+  // 📓 Sync is connected — nothing changes for an unsynced world.
+  let worldAutoPushTimer = null;
+  let worldAutoPushing = false;
+  function queueWorldAutoPush() {
+    if (!notesSyncCfg) return;
+    clearTimeout(worldAutoPushTimer);
+    worldAutoPushTimer = setTimeout(async () => {
+      if (worldAutoPushing) return queueWorldAutoPush(); // wait out the in-flight push
+      worldAutoPushing = true;
+      try {
+        await pushWorld();
+        importNote("🌍 world backed up to GitHub ✓", true);
+        setTimeout(() => (importStatus.hidden = true), 6000); // success chip fades; failures stay
+      } catch (e) {
+        importNote(`🌍 auto-backup failed (${e?.message ?? e}) — use 📓 Sync → Back up everything ↑`, false);
+      } finally {
+        worldAutoPushing = false;
+      }
+    }, 3000);
+  }
 
   // ── Follow a wizard's world (R-0082) ────────────────────────────────────────
   // The old "Connect a peer" was a live WebRTC handshake (copy-paste SDP, same
@@ -5861,6 +5885,7 @@ async function main() {
     captureDupeEl.hidden = true;
     captureNeighborChoices = [];
     capturePanel.hidden = true;
+    queueWorldAutoPush(); // R-0084: a captured topic backs itself up — no strands
     const created = plateauById(newId);
     if (created) flyTo(created.position, () => openPlateau(created));
   });
