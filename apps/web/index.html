@@ -422,6 +422,11 @@
       /* R-0075: notes-sync wizard deep-links */
       .ns-link { font-size: 12px; color: #9fd0ff; text-decoration: none; background: #1a2734; border: 1px solid #2a3543; border-radius: 6px; padding: 3px 8px; }
       .ns-link:hover { border-color: #3a5670; }
+      /* R-0082 followed-peers list */
+      .follow-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+      .follow-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #223; }
+      .follow-row .fr-name { font-size: 13px; }
+      .follow-row .fr-actions { display: flex; gap: 6px; flex: 0 0 auto; }
       /* R-0076: note → PDF. On screen the print container is invisible; in print
          mode (body.print-note) it is the ONLY thing on the page — white, serif,
          book-like, with the KaTeX already typeset in place. */
@@ -923,9 +928,10 @@
         <div class="menu-group">
           <p class="menu-group-label">World &amp; peers</p>
           <button id="import-world">Import a world</button>
+          <button id="follow-toggle">👣 Follow a wizard</button>
           <button id="connect-peer-toggle">Connect a peer (P2P)</button>
           <button id="discover">Discover wizards</button>
-          <button id="notesync-toggle">📓 Notes sync (GitHub)</button>
+          <button id="notesync-toggle">📓 Sync (GitHub)</button>
         </div>
         <!-- Wizard identity + optional relay (SPEC-0010 / R-0010): the relay URL is
              a local-only setting; empty ⇒ offline. Typing here does NOT close the
@@ -1045,6 +1051,22 @@
         <button id="ns-close" type="button">Close</button>
       </div>
       <p id="ns-status" class="course-status" hidden></p>
+    </div>
+
+    <!-- Follow a wizard (R-0082): add another wizard's PUBLIC repo → pull their
+         world snapshot (world/graph.mpworld) and CRDT-merge their islands onto
+         your map. Read-only: you never write to their repo; the union only adds.
+         Followed repos live in mp.peers (this browser only). Filled by main.js. -->
+    <div id="follow-panel" class="draft-plateau course-builder" hidden>
+      <h3 class="course-title">👣 Follow a wizard's world</h3>
+      <p class="course-help">Paste another wizard's <strong>public</strong> repo (the one they sync their world to) to pull their map onto yours. It's one-way and safe: their topics merge in as new islands, and nothing of yours is touched or sent to them. Re-pull any time to catch up.</p>
+      <input id="follow-repo" type="text" placeholder="owner/repo — e.g. ada/plateaus-world (or paste the GitHub URL)" autocomplete="off" />
+      <div class="course-actions">
+        <button id="follow-add" type="button">Follow + pull ↓</button>
+        <button id="follow-close" type="button">Close</button>
+      </div>
+      <p id="follow-status" class="course-status" hidden></p>
+      <div id="follow-list" class="follow-list"><!-- followed peers, by main.js --></div>
     </div>
 
     <!-- Spaced review queue (R-0078): SM-2 retrieval practice over the topics

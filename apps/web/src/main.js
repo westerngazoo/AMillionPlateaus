@@ -128,6 +128,7 @@ import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders } from "./notes-sync.js"; // R-0075 notes → your GitHub repo · R-0081 graph too
+import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
   PRESETS,
   PROVIDERS,
@@ -5029,6 +5030,134 @@ async function main() {
     }
     await ghPutWorld(doc.save(), remote?.sha);
   }
+
+  // ── Follow a wizard's world (R-0082) ────────────────────────────────────────
+  // The old "Connect a peer" was a live WebRTC handshake (copy-paste SDP, same
+  // LAN, both online). Following a repo is async and read-only: pull another
+  // wizard's PUBLIC world snapshot and CRDT-merge their islands onto your map.
+  // No token — public repos read unauthenticated; you never write to their repo.
+  const followPanel = document.getElementById("follow-panel");
+  const followRepo = document.getElementById("follow-repo");
+  const followStatus = document.getElementById("follow-status");
+  const followListEl = document.getElementById("follow-list");
+  function followSay(text, isErr) {
+    followStatus.hidden = false;
+    followStatus.textContent = text;
+    followStatus.classList.toggle("err", !!isErr);
+  }
+  function loadPeers() {
+    try {
+      const v = JSON.parse(localStorage.getItem("mp.peers"));
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  }
+  function savePeers(list) {
+    try {
+      localStorage.setItem("mp.peers", JSON.stringify(list));
+    } catch {
+      /* private mode / quota — following still works this session */
+    }
+  }
+  let peers = loadPeers();
+  // Read a world snapshot from ANY repo, unauthenticated (public repos). Distinct
+  // from ghGetWorld, which uses the owner's token for their own private repo.
+  async function ghGetWorldFrom(owner, repo, branch) {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}?ref=${encodeURIComponent(branch || "main")}`,
+      { headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } },
+    );
+    if (res.status === 404) return null; // repo/world not found (or private)
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    const j = await res.json();
+    return bytesFromB64(j.content || "");
+  }
+  async function followPull(peer) {
+    const bytes = await ghGetWorldFrom(peer.owner, peer.repo, peer.branch);
+    if (!bytes) return null; // no world file there
+    const before = doc.to_graph().plateaus().length;
+    doc.merge_bytes(bytes); // union — only ADDS their islands, never touches yours
+    for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    return doc.to_graph().plateaus().length - before;
+  }
+  function renderFollowList() {
+    followListEl.replaceChildren();
+    if (!peers.length) return;
+    for (const peer of peers) {
+      const row = document.createElement("div");
+      row.className = "follow-row";
+      const name = document.createElement("span");
+      name.className = "fr-name";
+      name.textContent = peer.label || peerKey(peer); // textContent — never trust a repo label as HTML
+      const actions = document.createElement("div");
+      actions.className = "fr-actions";
+      const repull = document.createElement("button");
+      repull.type = "button";
+      repull.textContent = "Re-pull ↓";
+      repull.addEventListener("click", async () => {
+        followSay(`Pulling ${peerKey(peer)}…`);
+        try {
+          const gained = await followPull(peer);
+          followSay(
+            gained === null
+              ? `No world found at ${peerKey(peer)} — is the repo public and synced?`
+              : gained > 0
+                ? `Pulled ${peerKey(peer)} ✓ — ${gained} new topic${gained === 1 ? "" : "s"} on your map.`
+                : `${peerKey(peer)} — already up to date ✓`,
+            gained === null,
+          );
+        } catch (e) {
+          followSay(`Couldn't reach ${peerKey(peer)} (${e?.message ?? e}).`, true);
+        }
+      });
+      const unfollow = document.createElement("button");
+      unfollow.type = "button";
+      unfollow.textContent = "Unfollow";
+      unfollow.title = "Stop following — their topics already merged onto your map stay.";
+      unfollow.addEventListener("click", () => {
+        peers = removePeer(peers, peerKey(peer));
+        savePeers(peers);
+        renderFollowList();
+      });
+      actions.append(repull, unfollow);
+      row.append(name, actions);
+      followListEl.append(row);
+    }
+  }
+  document.getElementById("follow-add").addEventListener("click", async () => {
+    const parsed = parseRepo(followRepo.value);
+    if (!parsed) return followSay("That doesn't look like owner/repo (or a GitHub URL).", true);
+    followSay(`Following ${parsed.owner}/${parsed.repo} — pulling their world…`);
+    const peer = { owner: parsed.owner, repo: parsed.repo, branch: "main", label: `${parsed.owner}/${parsed.repo}` };
+    let gained;
+    try {
+      gained = await followPull(peer);
+    } catch (e) {
+      return followSay(`Couldn't reach that repo (${e?.message ?? e}) — is it public?`, true);
+    }
+    if (gained === null)
+      return followSay(`No world found there — that repo has no synced graph (world/graph.mpworld). Ask them to “Back up everything ↑”.`, true);
+    peers = addPeer(peers, peer);
+    savePeers(peers);
+    renderFollowList();
+    followRepo.value = "";
+    followSay(gained > 0 ? `Following ${peerKey(peer)} ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged onto your map.` : `Following ${peerKey(peer)} ✓ — nothing new to add yet.`);
+  });
+  document.getElementById("follow-toggle").addEventListener("click", () => {
+    followPanel.hidden = !followPanel.hidden;
+    if (!followPanel.hidden) {
+      followStatus.hidden = true;
+      renderFollowList();
+      followRepo.focus();
+    }
+  });
+  document.getElementById("follow-close").addEventListener("click", () => (followPanel.hidden = true));
+
   document.getElementById("notesync-toggle").addEventListener("click", () => {
     nsPanel.hidden = !nsPanel.hidden;
     if (!nsPanel.hidden) {
