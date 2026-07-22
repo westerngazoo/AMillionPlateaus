@@ -104,6 +104,7 @@ import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
 import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
 import { LESSON_STEPS, lessonStepPrompt, pretestQuestions, clampStep } from "./lesson.js"; // R-0060 guided lesson · R-0080 pretest
+import { parseSteps, clampFade, fadedView, levelUp as fadeUp, levelDown as fadeDown, fadeLabel } from "./faded.js"; // R-0083 fill the missing step
 import { GRADES, graded, dueEntries, enrollDue, freshIds, interleave, nextDue } from "./review-queue.js"; // R-0078 spaced review · R-0079 reassess
 import {
   exactMatch as captureExactMatch,
@@ -1824,6 +1825,137 @@ async function main() {
   }
   let pretestMap = loadPretest();
 
+  // R-0083: your fade level per topic — how many derivation steps are YOURS to
+  // produce in practice (backward fading: always the last ones). localStorage,
+  // this browser only, like the pretest/lesson stores.
+  function loadFade() {
+    try {
+      return JSON.parse(localStorage.getItem("mp.fade")) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  function saveFade(map) {
+    try {
+      localStorage.setItem("mp.fade", JSON.stringify(map));
+    } catch {
+      /* private mode / quota — practice still works this session */
+    }
+  }
+  let fadeMap = loadFade();
+
+  // Attach the fill-the-missing-step practice (R-0083) to a rendered derivation
+  // <details>. Worked → faded: hide the LAST k steps, the learner produces each
+  // (paper/notepad), reveals to check, then self-assesses — Got it fades one
+  // more next time; More support restores one. k is persisted per topic.
+  function attachFadedPractice(det, inner, derivationMd, topicId) {
+    const { preamble, steps } = parseSteps(derivationMd);
+    if (steps.length < 2) return; // one step (or prose) — nothing worth fading
+    const total = steps.length;
+    const levelOf = () => Math.max(1, clampFade(fadeMap[topicId] ?? 1, total));
+    const bar = document.createElement("div");
+    bar.className = "faded-bar";
+    const practiceBtn = document.createElement("button");
+    practiceBtn.type = "button";
+    const setBtnLabel = () => {
+      const k = levelOf();
+      practiceBtn.textContent = k === 1 ? fadeLabel(0, total) : fadeLabel(k, total);
+    };
+    setBtnLabel();
+    const workedBtn = document.createElement("button");
+    workedBtn.type = "button";
+    workedBtn.textContent = "📜 Show worked again";
+    workedBtn.hidden = true;
+    const note = document.createElement("p");
+    note.className = "faded-note";
+    note.hidden = true;
+    bar.append(practiceBtn, workedBtn, note);
+
+    const showWorked = () => {
+      inner.innerHTML = renderMarkdown(derivationMd);
+      typesetMath(inner);
+      workedBtn.hidden = true;
+      practiceBtn.hidden = false;
+      setBtnLabel();
+    };
+    const showPractice = () => {
+      const k = levelOf();
+      inner.replaceChildren();
+      if (preamble) {
+        const d = document.createElement("div");
+        d.innerHTML = renderMarkdown(preamble);
+        inner.append(d);
+      }
+      let unrevealed = 0;
+      const assess = document.createElement("div");
+      assess.className = "faded-assess";
+      assess.hidden = true;
+      for (const { step, hidden } of fadedView(steps, k)) {
+        if (!hidden) {
+          const d = document.createElement("div");
+          d.innerHTML = renderMarkdown(step.md);
+          inner.append(d);
+          continue;
+        }
+        unrevealed++;
+        const card = document.createElement("div");
+        card.className = "faded-step";
+        const label = document.createElement("p");
+        const strong = document.createElement("strong");
+        strong.textContent = `✍️ Step ${step.n} — ${step.title}.`; // textContent — titles are body text, not HTML
+        label.append(strong, document.createTextNode(" Your turn: write this step out (paper or the notepad below), then check."));
+        const reveal = document.createElement("button");
+        reveal.type = "button";
+        reveal.textContent = "Reveal step";
+        reveal.addEventListener("click", () => {
+          card.classList.add("revealed");
+          card.replaceChildren();
+          card.innerHTML = renderMarkdown(step.md);
+          typesetMath(card);
+          if (--unrevealed === 0) assess.hidden = false; // all checked → self-assess
+        });
+        card.append(label, reveal);
+        inner.append(card);
+      }
+      const q = document.createElement("p");
+      q.className = "faded-note";
+      q.textContent = "All steps checked — how did the recall go?";
+      const got = document.createElement("button");
+      got.type = "button";
+      got.textContent = "✓ Got them — fade one more next time";
+      got.addEventListener("click", () => {
+        fadeMap = { ...fadeMap, [topicId]: fadeUp(k, total) };
+        saveFade(fadeMap);
+        note.hidden = false;
+        note.textContent =
+          fadeMap[topicId] >= total
+            ? "Next practice: the whole derivation is yours — blank page. 💪"
+            : `Next practice hides the last ${fadeMap[topicId]} step${fadeMap[topicId] === 1 ? "" : "s"}.`;
+        showWorked();
+      });
+      const support = document.createElement("button");
+      support.type = "button";
+      support.textContent = "↩ More support next time";
+      support.addEventListener("click", () => {
+        fadeMap = { ...fadeMap, [topicId]: Math.max(1, fadeDown(k, total)) };
+        saveFade(fadeMap);
+        note.hidden = false;
+        note.textContent = `No shame in it — next practice hides the last ${fadeMap[topicId]} step${fadeMap[topicId] === 1 ? "" : "s"}.`;
+        showWorked();
+      });
+      assess.append(q, got, support);
+      inner.append(assess);
+      typesetMath(inner);
+      det.open = true; // practicing with the derivation folded shut helps nobody
+      practiceBtn.hidden = true;
+      workedBtn.hidden = false;
+      note.hidden = true;
+    };
+    practiceBtn.addEventListener("click", showPractice);
+    workedBtn.addEventListener("click", showWorked);
+    det.append(bar);
+  }
+
   function openPlateau(p) {
     detail.dataset.mode = "plateau"; // FIRST — restores body/study/resources from a bridge view (R-0029)
     studyPlateau = p;
@@ -1843,6 +1975,7 @@ async function main() {
       const inner = document.createElement("div");
       inner.innerHTML = renderMarkdown(derivation);
       det.append(sum, inner);
+      attachFadedPractice(det, inner, derivation, p.id); // R-0083 fill-the-missing-step
       detailBody.append(det);
     }
     segmentSentences(detailBody); // R-0071 BEFORE typeset — chunks never split $…$ math (derivation included)
