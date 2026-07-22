@@ -50,6 +50,21 @@ test("addPeer token (R-0085): carried for private repos, kept on re-follow, neve
   assert.equal(list[0].token, "github_pat_y");
 });
 
+test("forge base (R-0086): a Gitea peer is distinct from the same owner/repo on GitHub", () => {
+  const gh = { owner: "ada", repo: "world" };
+  const gt = { owner: "ada", repo: "world", base: "https://gitea.example.com" };
+  assert.equal(peerKey(gh), "ada/world");
+  assert.equal(peerKey(gt), "gitea.example.com/ada/world");
+  // both can be followed side by side
+  let list = addPeer(addPeer([], gh), gt);
+  assert.equal(list.length, 2);
+  assert.ok(!("base" in list[0])); // GitHub entries stay lean
+  assert.equal(list[1].base, "https://gitea.example.com");
+  // removing the Gitea one leaves the GitHub one
+  list = removePeer(list, peerKey(gt));
+  assert.deepEqual(list.map(peerKey), ["ada/world"]);
+});
+
 test("removePeer drops by key (case-insensitive), leaves the rest", () => {
   const list = addPeer(addPeer([], { owner: "ada", repo: "world" }), { owner: "bob", repo: "graph" });
   assert.deepEqual(removePeer(list, "ADA/WORLD").map(peerKey), ["bob/graph"]);

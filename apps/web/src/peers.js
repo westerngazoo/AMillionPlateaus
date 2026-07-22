@@ -11,9 +11,16 @@
 // + merge edges live in main.js. The peer list is `mp.peers` in localStorage —
 // this browser only, like the relay URL and the notes-sync config. Unit-tested.
 
-/** A stable identity for a followed repo: "owner/repo" (lowercased for dedup). */
+import { GITHUB_API } from "./notes-sync.js"; // R-0086: peers can live on any forge
+
+/** A stable identity for a followed repo: "owner/repo" (lowercased), prefixed
+ *  with the forge host when it isn't GitHub — ada/world on your Gitea and
+ *  ada/world on github.com are DIFFERENT peers (R-0086). */
 export function peerKey(p) {
-  return p && p.owner && p.repo ? `${p.owner}/${p.repo}`.toLowerCase() : "";
+  if (!p || !p.owner || !p.repo) return "";
+  const core = `${p.owner}/${p.repo}`.toLowerCase();
+  const base = p.base && p.base !== GITHUB_API ? `${String(p.base).toLowerCase().replace(/^https?:\/\//, "")}/` : "";
+  return base + core;
 }
 
 /**
@@ -36,6 +43,7 @@ export function addPeer(list, peer) {
     branch: peer.branch || "main",
     label: peer.label || `${peer.owner}/${peer.repo}`,
   };
+  if (peer.base && peer.base !== GITHUB_API) entry.base = peer.base; // R-0086: non-GitHub forge
   const token = peer.token || prev?.token || "";
   if (token) entry.token = token;
   return [...without, entry];

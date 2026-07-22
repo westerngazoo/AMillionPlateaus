@@ -10,6 +10,11 @@ import {
   bytesFromB64,
   WORLD_FILE,
   ghHeaders,
+  GITHUB_API,
+  normalizeForgeBase,
+  repoApiUrl,
+  contentsApiUrl,
+  parseRepoUrl,
 } from "./notes-sync.js";
 
 test("parseRepo accepts owner/repo, full URLs, .git and trailing slashes; rejects junk", () => {
@@ -57,6 +62,48 @@ test("binary base64 (R-0081): round-trips raw graph-snapshot bytes, incl. >127 a
   assert.equal(b64FromBytes(null), "");
   // accepts a plain array too
   assert.deepEqual([...bytesFromB64(b64FromBytes([1, 2, 250]))], [1, 2, 250]);
+});
+
+test("forge base (R-0086): normalize — empty→GitHub, bare hosts get https, /api/v1 stripped", () => {
+  assert.equal(normalizeForgeBase(""), GITHUB_API);
+  assert.equal(normalizeForgeBase("  "), GITHUB_API);
+  assert.equal(normalizeForgeBase("github.com"), GITHUB_API);
+  assert.equal(normalizeForgeBase("https://api.github.com/"), GITHUB_API);
+  assert.equal(normalizeForgeBase("gitea.goosethropic.systems"), "https://gitea.goosethropic.systems");
+  assert.equal(normalizeForgeBase("https://gitea.example.com/api/v1/"), "https://gitea.example.com");
+  assert.equal(normalizeForgeBase("http://localhost:3000/"), "http://localhost:3000");
+});
+
+test("forge URLs (R-0086): GitHub is bare /repos, Gitea nests under /api/v1; subpaths survive", () => {
+  assert.equal(repoApiUrl(GITHUB_API, "me", "world"), "https://api.github.com/repos/me/world");
+  assert.equal(repoApiUrl("", "me", "world"), "https://api.github.com/repos/me/world"); // legacy cfg without base
+  assert.equal(repoApiUrl("https://gitea.example.com", "me", "world"), "https://gitea.example.com/api/v1/repos/me/world");
+  assert.equal(
+    contentsApiUrl("https://gitea.example.com", "me", "world", "world/graph.mpworld", "main"),
+    "https://gitea.example.com/api/v1/repos/me/world/contents/world/graph.mpworld?ref=main",
+  );
+  assert.equal(
+    contentsApiUrl(GITHUB_API, "me", "world", "notes/a.md"),
+    "https://api.github.com/repos/me/world/contents/notes/a.md", // PUT form: no ref
+  );
+});
+
+test("parseRepoUrl (R-0086): bare + github.com → GitHub; other forges keep origin + subpath", () => {
+  assert.deepEqual(parseRepoUrl("me/world"), { base: GITHUB_API, owner: "me", repo: "world" });
+  assert.deepEqual(parseRepoUrl("https://github.com/me/world.git/"), { base: GITHUB_API, owner: "me", repo: "world" });
+  assert.deepEqual(parseRepoUrl("https://gitea.example.com/ada/plateaus-world"), {
+    base: "https://gitea.example.com",
+    owner: "ada",
+    repo: "plateaus-world",
+  });
+  // Gitea under a subpath: base keeps the prefix, last two segments are owner/repo
+  assert.deepEqual(parseRepoUrl("https://host.example/gitea/ada/world/"), {
+    base: "https://host.example/gitea",
+    owner: "ada",
+    repo: "world",
+  });
+  assert.equal(parseRepoUrl("https://gitea.example.com/onlyowner"), null);
+  assert.equal(parseRepoUrl("not a repo"), null);
 });
 
 test("WORLD_FILE is a single stable path under world/", () => {
