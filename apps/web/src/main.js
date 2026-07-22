@@ -5134,7 +5134,11 @@ async function main() {
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}`,
       { method: "PUT", headers: { ...ghHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) },
     );
-    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    if (!res.ok) {
+      const err = new Error(`GitHub ${res.status}`);
+      err.status = res.status; // pushWorld retries the 409 sha race (R-0085)
+      throw err;
+    }
   }
   // Merge the remote world into the local doc. CRDT union → never deletes local
   // topics; returns how many NEW plateaus arrived. Redraws + persists.
@@ -5154,14 +5158,25 @@ async function main() {
   // topics another device pushed since (the file is not itself CRDT-aware; the
   // doc is). The union is what we write back.
   async function pushWorld() {
-    const remote = await ghGetWorld();
-    if (remote) {
-      doc.merge_bytes(remote.bytes);
-      for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
-      persist();
-      draw();
+    // R-0085: two devices pointed at the SAME repo (co-study / auto-push racing)
+    // can lose the GET→PUT race — GitHub answers 409 on a stale sha. That's the
+    // one failure that's always safe to retry: re-merge the newer remote (CRDT
+    // union) and write the union back. One retry settles any two-writer race.
+    for (let attempt = 0; ; attempt++) {
+      const remote = await ghGetWorld();
+      if (remote) {
+        doc.merge_bytes(remote.bytes);
+        for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+        persist();
+        draw();
+      }
+      try {
+        await ghPutWorld(doc.save(), remote?.sha);
+        return;
+      } catch (e) {
+        if (e?.status !== 409 || attempt >= 1) throw e;
+      }
     }
-    await ghPutWorld(doc.save(), remote?.sha);
   }
   // R-0084: back the world up AUTOMATICALLY after a graph-changing moment (a
   // capture), so a topic can never strand in one browser again. Debounced so
@@ -5220,18 +5235,22 @@ async function main() {
   let peers = loadPeers();
   // Read a world snapshot from ANY repo, unauthenticated (public repos). Distinct
   // from ghGetWorld, which uses the owner's token for their own private repo.
-  async function ghGetWorldFrom(owner, repo, branch) {
+  async function ghGetWorldFrom(owner, repo, branch, token) {
+    // R-0085: an optional per-peer token unlocks a PRIVATE repo you were granted
+    // read access to. It rides only this request, to api.github.com, nowhere else.
+    const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}?ref=${encodeURIComponent(branch || "main")}`,
-      { headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } },
+      { headers },
     );
-    if (res.status === 404) return null; // repo/world not found (or private)
+    if (res.status === 404) return null; // repo/world not found (or private without a token)
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
     const j = await res.json();
     return bytesFromB64(j.content || "");
   }
   async function followPull(peer) {
-    const bytes = await ghGetWorldFrom(peer.owner, peer.repo, peer.branch);
+    const bytes = await ghGetWorldFrom(peer.owner, peer.repo, peer.branch, peer.token);
     if (!bytes) return null; // no world file there
     const before = doc.to_graph().plateaus().length;
     doc.merge_bytes(bytes); // union — only ADDS their islands, never touches yours
@@ -5290,19 +5309,31 @@ async function main() {
     const parsed = parseRepo(followRepo.value);
     if (!parsed) return followSay("That doesn't look like owner/repo (or a GitHub URL).", true);
     followSay(`Following ${parsed.owner}/${parsed.repo} — pulling their world…`);
+    const followTokenEl = document.getElementById("follow-token");
     const peer = { owner: parsed.owner, repo: parsed.repo, branch: "main", label: `${parsed.owner}/${parsed.repo}` };
+    // R-0085: an optional token unlocks a PRIVATE repo you were granted read
+    // access to. Stored in mp.peers (this browser only), sent only to
+    // api.github.com — the same envelope as the sync token.
+    const token = followTokenEl.value.trim();
+    if (token) peer.token = token;
     let gained;
     try {
       gained = await followPull(peer);
     } catch (e) {
-      return followSay(`Couldn't reach that repo (${e?.message ?? e}) — is it public?`, true);
+      return followSay(`Couldn't reach that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
     }
     if (gained === null)
-      return followSay(`No world found there — that repo has no synced graph (world/graph.mpworld). Ask them to “Back up everything ↑”.`, true);
+      return followSay(
+        peer.token
+          ? `No world found there — no synced graph (world/graph.mpworld), or the token can't read the repo.`
+          : `No world found there — that repo has no synced graph (world/graph.mpworld), or it's private (paste a read token below). Ask them to “Back up everything ↑”.`,
+        true,
+      );
     peers = addPeer(peers, peer);
     savePeers(peers);
     renderFollowList();
     followRepo.value = "";
+    followTokenEl.value = ""; // never leave a token sitting in a visible field
     followSay(gained > 0 ? `Following ${peerKey(peer)} ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged onto your map.` : `Following ${peerKey(peer)} ✓ — nothing new to add yet.`);
   });
   document.getElementById("follow-toggle").addEventListener("click", () => {

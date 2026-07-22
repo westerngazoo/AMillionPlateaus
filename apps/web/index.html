@@ -1067,8 +1067,9 @@
          Followed repos live in mp.peers (this browser only). Filled by main.js. -->
     <div id="follow-panel" class="draft-plateau course-builder" hidden>
       <h3 class="course-title">👣 Follow a wizard's world</h3>
-      <p class="course-help">Paste another wizard's <strong>public</strong> repo (the one they sync their world to) to pull their map onto yours. It's one-way and safe: their topics merge in as new islands, and nothing of yours is touched or sent to them. Re-pull any time to catch up.</p>
+      <p class="course-help">Paste another wizard's repo (the one they sync their world to) to pull their map onto yours. It's one-way and safe: their topics merge in as new islands, and nothing of yours is touched or sent to them. Re-pull any time to catch up. <strong>Co-studying?</strong> Point both of your 📓 Sync setups at ONE shared repo instead — every Back up ↑ merges both worlds.</p>
       <input id="follow-repo" type="text" placeholder="owner/repo — e.g. ada/plateaus-world (or paste the GitHub URL)" autocomplete="off" />
+      <input id="follow-token" type="password" placeholder="private repo? paste a token that can read it (optional — stays in THIS browser only)" autocomplete="off" />
       <div class="course-actions">
         <button id="follow-add" type="button">Follow + pull ↓</button>
         <button id="follow-close" type="button">Close</button>

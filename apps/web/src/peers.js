@@ -17,19 +17,28 @@ export function peerKey(p) {
 }
 
 /**
- * A NEW list with `peer` added (or its branch/label refreshed if already
+ * A NEW list with `peer` added (or its branch/label/token refreshed if already
  * followed — dedup by key). Ignores a peer missing owner/repo. Newest last.
- * Pure.
+ * R-0085: an optional `token` rides along for PRIVATE repos the owner was
+ * granted read access to — pasted by the owner, stored in this browser only
+ * (mp.peers), sent only to api.github.com, same envelope as the sync token.
+ * Re-following without a token keeps the one already stored. Pure.
  */
 export function addPeer(list, peer) {
   const key = peerKey(peer);
   const base = Array.isArray(list) ? list : [];
   if (!key) return base;
+  const prev = base.find((p) => peerKey(p) === key);
   const without = base.filter((p) => peerKey(p) !== key);
-  return [
-    ...without,
-    { owner: peer.owner, repo: peer.repo, branch: peer.branch || "main", label: peer.label || `${peer.owner}/${peer.repo}` },
-  ];
+  const entry = {
+    owner: peer.owner,
+    repo: peer.repo,
+    branch: peer.branch || "main",
+    label: peer.label || `${peer.owner}/${peer.repo}`,
+  };
+  const token = peer.token || prev?.token || "";
+  if (token) entry.token = token;
+  return [...without, entry];
 }
 
 /** A NEW list with the peer whose key === `key` removed. Pure. */
