@@ -12,7 +12,9 @@
 // class/data-display/loading are fixed literals, never copied from input.
 // Link/resource URLs pass a scheme whitelist
 // applied to the CONTROL-STRIPPED url. Math is handed off as an INERT placeholder
-// whose TeX lives in an escaped data-tex attribute (katex.js typesets it later).
+// whose TeX lives in an escaped data-tex attribute (katex.js typesets it later);
+// delimiters: $…$/\(…\) inline, $$…$$/\[…\] display (the \(\)/\[\] forms are
+// what Gemini/ChatGPT answers use — R-0087).
 //
 // Bodies arrive from UNTRUSTED synced/imported peers — this must never be an
 // injection vector. The pure surface (esc, safeHref, renderMarkdown) is
@@ -74,6 +76,12 @@ export function renderMarkdown(src) {
   );
   // Display math $$…$$, block-level.
   s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => hold(mathSpan(tex, true), true));
+  // R-0087: LaTeX-style delimiters — what Gemini/ChatGPT answers use, and the
+  // notepad's most common paste source. Display \[…\] (block-level), inline
+  // \(…\). Extracted HERE, before images/links, so `\[…\]` can never
+  // half-match the link rule.
+  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => hold(mathSpan(tex, true), true));
+  s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, tex) => hold(mathSpan(tex, false)));
   // Images ![alt](src) — R-0077, extracted BEFORE links so `![…](…)` never
   // half-matches as a link with a stray "!". src passes safeImgSrc (https or
   // base64 raster data URI); anything else renders as inert escaped text.
