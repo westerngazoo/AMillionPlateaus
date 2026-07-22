@@ -128,7 +128,7 @@ import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route 
 import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
-import { parseRepo, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders } from "./notes-sync.js"; // R-0075 notes → your GitHub repo · R-0081 graph too
+import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
 import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
   PRESETS,
@@ -5092,12 +5092,12 @@ async function main() {
     nsStatus.textContent = text;
     nsStatus.classList.toggle("err", !!isErr);
   }
+  // R-0086: the connected forge's base — GitHub by default; a legacy cfg saved
+  // before bases existed reads as GitHub too.
+  const nsBase = () => notesSyncCfg?.base || GITHUB_API;
   async function ghGetNote(path) {
     const { owner, repo, branch, token } = notesSyncCfg;
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`,
-      { headers: ghHeaders(token) },
-    );
+    const res = await fetch(contentsApiUrl(nsBase(), owner, repo, path, branch), { headers: ghHeaders(token) });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
     const j = await res.json();
@@ -5107,20 +5107,18 @@ async function main() {
     const { owner, repo, branch, token } = notesSyncCfg;
     const body = { message: `notes: ${path}`, content: b64EncodeUtf8(text), branch };
     if (sha) body.sha = sha; // updating an existing file needs its sha
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(path)}`,
-      { method: "PUT", headers: { ...ghHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) },
-    );
+    const res = await fetch(contentsApiUrl(nsBase(), owner, repo, path), {
+      method: "PUT",
+      headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
   }
   // R-0081: the graph snapshot (Automerge bytes) as ONE binary file. GET/PUT
   // mirror the note helpers but carry raw bytes (b64FromBytes/bytesFromB64).
   async function ghGetWorld() {
     const { owner, repo, branch, token } = notesSyncCfg;
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}?ref=${encodeURIComponent(branch)}`,
-      { headers: ghHeaders(token) },
-    );
+    const res = await fetch(contentsApiUrl(nsBase(), owner, repo, WORLD_FILE, branch), { headers: ghHeaders(token) });
     if (res.status === 404) return null; // no world pushed yet
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
     const j = await res.json();
@@ -5130,10 +5128,11 @@ async function main() {
     const { owner, repo, branch, token } = notesSyncCfg;
     const body = { message: "world: graph snapshot", content: b64FromBytes(bytes), branch };
     if (sha) body.sha = sha;
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}`,
-      { method: "PUT", headers: { ...ghHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) },
-    );
+    const res = await fetch(contentsApiUrl(nsBase(), owner, repo, WORLD_FILE), {
+      method: "PUT",
+      headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!res.ok) {
       const err = new Error(`GitHub ${res.status}`);
       err.status = res.status; // pushWorld retries the 409 sha race (R-0085)
@@ -5235,22 +5234,20 @@ async function main() {
   let peers = loadPeers();
   // Read a world snapshot from ANY repo, unauthenticated (public repos). Distinct
   // from ghGetWorld, which uses the owner's token for their own private repo.
-  async function ghGetWorldFrom(owner, repo, branch, token) {
+  async function ghGetWorldFrom(owner, repo, branch, token, base) {
     // R-0085: an optional per-peer token unlocks a PRIVATE repo you were granted
-    // read access to. It rides only this request, to api.github.com, nowhere else.
+    // read access to. It rides only this request, to that peer's forge, nowhere
+    // else. R-0086: `base` picks the forge (GitHub default, or their Gitea).
     const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}?ref=${encodeURIComponent(branch || "main")}`,
-      { headers },
-    );
+    const res = await fetch(contentsApiUrl(base || GITHUB_API, owner, repo, WORLD_FILE, branch || "main"), { headers });
     if (res.status === 404) return null; // repo/world not found (or private without a token)
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
     const j = await res.json();
     return bytesFromB64(j.content || "");
   }
   async function followPull(peer) {
-    const bytes = await ghGetWorldFrom(peer.owner, peer.repo, peer.branch, peer.token);
+    const bytes = await ghGetWorldFrom(peer.owner, peer.repo, peer.branch, peer.token, peer.base);
     if (!bytes) return null; // no world file there
     const before = doc.to_graph().plateaus().length;
     doc.merge_bytes(bytes); // union — only ADDS their islands, never touches yours
@@ -5306,14 +5303,20 @@ async function main() {
     }
   }
   document.getElementById("follow-add").addEventListener("click", async () => {
-    const parsed = parseRepo(followRepo.value);
-    if (!parsed) return followSay("That doesn't look like owner/repo (or a GitHub URL).", true);
+    // R-0086: a full URL follows a repo on ANY forge (their Gitea, github.com);
+    // bare owner/repo still means GitHub.
+    const parsed = parseRepoUrl(followRepo.value);
+    if (!parsed) return followSay("That doesn't look like owner/repo (or a repo URL).", true);
     followSay(`Following ${parsed.owner}/${parsed.repo} — pulling their world…`);
     const followTokenEl = document.getElementById("follow-token");
     const peer = { owner: parsed.owner, repo: parsed.repo, branch: "main", label: `${parsed.owner}/${parsed.repo}` };
+    if (parsed.base !== GITHUB_API) {
+      peer.base = parsed.base;
+      peer.label = `${new URL(parsed.base).host}/${parsed.owner}/${parsed.repo}`;
+    }
     // R-0085: an optional token unlocks a PRIVATE repo you were granted read
-    // access to. Stored in mp.peers (this browser only), sent only to
-    // api.github.com — the same envelope as the sync token.
+    // access to. Stored in mp.peers (this browser only), sent only to that
+    // peer's forge — the same envelope as the sync token.
     const token = followTokenEl.value.trim();
     if (token) peer.token = token;
     let gained;
@@ -5351,7 +5354,8 @@ async function main() {
     if (!nsPanel.hidden) {
       if (notesSyncCfg) {
         nsRepo.value = `${notesSyncCfg.owner}/${notesSyncCfg.repo}`;
-        nsSay("Connected earlier ✓ — retest any time, or push all notes.");
+        document.getElementById("ns-server").value = nsBase() === GITHUB_API ? "" : nsBase(); // R-0086
+        nsSay(`Connected earlier ✓ (${nsBase() === GITHUB_API ? "GitHub" : new URL(nsBase()).host}) — retest any time, or back everything up.`);
       } else {
         nsStatus.hidden = true;
       }
@@ -5360,22 +5364,28 @@ async function main() {
   });
   document.getElementById("ns-close").addEventListener("click", () => (nsPanel.hidden = true));
   document.getElementById("ns-test").addEventListener("click", async () => {
-    const parsed = parseRepo(nsRepo.value);
-    if (!parsed) return nsSay("That doesn't look like owner/repo (or a GitHub URL) — see step 1.", true);
+    // R-0086: a full forge URL in the repo field carries its own base (Gitea/
+    // Forgejo); the optional server field overrides for bare owner/repo.
+    const parsedUrl = parseRepoUrl(nsRepo.value);
+    if (!parsedUrl) return nsSay("That doesn't look like owner/repo (or a repo URL) — see step 1.", true);
+    const serverField = normalizeForgeBase(document.getElementById("ns-server").value);
+    const base = parsedUrl.base !== GITHUB_API ? parsedUrl.base : serverField;
+    const parsed = { owner: parsedUrl.owner, repo: parsedUrl.repo };
+    const forgeName = base === GITHUB_API ? "GitHub" : new URL(base).host;
     const token = nsToken.value.trim() || notesSyncCfg?.token || "";
-    if (!token) return nsSay("Paste the fine-grained token from step 2 (it stays in THIS browser only).", true);
-    nsSay("Testing…");
+    if (!token) return nsSay("Paste the token from step 2 (it stays in THIS browser only).", true);
+    nsSay(`Testing ${forgeName}…`);
     try {
-      const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
+      const res = await fetch(repoApiUrl(base, parsed.owner, parsed.repo), {
         headers: ghHeaders(token),
       });
       if (res.status === 401)
         return nsSay("Token rejected (401) — recreate it in step 2 and check it hasn't expired.", true);
       if (res.status === 404)
-        return nsSay("Repo not found (404) — check the name, and that the token's Repository access includes it.", true);
-      if (!res.ok) return nsSay(`GitHub said ${res.status} — try again.`, true);
+        return nsSay("Repo not found (404) — check the name, and that the token can read it.", true);
+      if (!res.ok) return nsSay(`${forgeName} said ${res.status} — try again.`, true);
       const j = await res.json();
-      notesSyncCfg = { owner: parsed.owner, repo: parsed.repo, branch: j.default_branch || "main", token };
+      notesSyncCfg = { base, owner: parsed.owner, repo: parsed.repo, branch: j.default_branch || "main", token };
       try {
         localStorage.setItem(NOTES_SYNC_KEY, JSON.stringify(notesSyncCfg));
       } catch {

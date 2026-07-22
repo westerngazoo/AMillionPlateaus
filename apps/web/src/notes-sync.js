@@ -20,6 +20,64 @@
  *  Under `world/` so it sits apart from the human-readable `notes/`. */
 export const WORLD_FILE = "world/graph.mpworld";
 
+// R-0086: the repo layer is FORGE-AGNOSTIC. GitHub is the default, but any
+// Gitea/Forgejo instance works — their contents API is deliberately
+// GitHub-shaped (base64 + sha, same GET/PUT verbs); only the URL prefix
+// differs (Gitea nests under /api/v1). These pure builders are the single
+// place that difference lives.
+
+export const GITHUB_API = "https://api.github.com";
+
+/** Normalize a pasted forge URL to a stable base: "" → GitHub; bare hosts get
+ *  https://; trailing slashes and an accidental /api/v1 suffix are stripped;
+ *  github.com spellings collapse to GITHUB_API. */
+export function normalizeForgeBase(input) {
+  let s = String(input || "").trim().replace(/\/+$/, "");
+  if (!s) return GITHUB_API;
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  s = s.replace(/\/api\/v1$/i, "").replace(/\/+$/, "");
+  if (/^https:\/\/(www\.|api\.)?github\.com$/i.test(s)) return GITHUB_API;
+  return s;
+}
+
+/** The repo endpoint on a forge: GitHub → /repos/o/r; Gitea → /api/v1/repos/o/r. */
+export function repoApiUrl(base, owner, repo) {
+  const b = base || GITHUB_API;
+  return b === GITHUB_API ? `${b}/repos/${owner}/${repo}` : `${b}/api/v1/repos/${owner}/${repo}`;
+}
+
+/** The contents endpoint for a path (optionally at a ref) on any forge. */
+export function contentsApiUrl(base, owner, repo, path, ref) {
+  return `${repoApiUrl(base, owner, repo)}/contents/${encodeURI(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`;
+}
+
+/**
+ * Parse a repo reference into `{ base, owner, repo }`: bare "owner/repo" and
+ * github.com URLs → GitHub; any other forge URL keeps its origin (+ subpath —
+ * Gitea often lives under one) as `base`, its last two path segments as
+ * owner/repo. `.git` and trailing slashes tolerated. null on junk.
+ */
+export function parseRepoUrl(input) {
+  const s = String(input || "").trim().replace(/\/+$/, "").replace(/\.git$/i, "");
+  if (!/^https?:\/\//i.test(s)) {
+    const p = parseRepo(s);
+    return p ? { base: GITHUB_API, ...p } : null;
+  }
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return null;
+  }
+  const segs = u.pathname.split("/").filter(Boolean);
+  if (segs.length < 2) return null;
+  const repo = segs.pop();
+  const owner = segs.pop();
+  if (!/^[A-Za-z0-9._-]+$/.test(repo) || !/^[A-Za-z0-9._-]+$/.test(owner)) return null;
+  if (/(^|\.)github\.com$/i.test(u.hostname)) return { base: GITHUB_API, owner, repo };
+  return { base: `${u.origin}${segs.length ? `/${segs.join("/")}` : ""}`, owner, repo };
+}
+
 /** "owner/repo", a github.com URL, or trailing ".git"/slash → { owner, repo } | null. */
 export function parseRepo(input) {
   const s = String(input || "")
