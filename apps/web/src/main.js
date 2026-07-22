@@ -127,7 +127,7 @@ import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route 
 import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
-import { parseRepo, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, ghHeaders } from "./notes-sync.js"; // R-0075 notes → your GitHub repo
+import { parseRepo, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders } from "./notes-sync.js"; // R-0075 notes → your GitHub repo · R-0081 graph too
 import {
   PRESETS,
   PROVIDERS,
@@ -4979,6 +4979,56 @@ async function main() {
     );
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
   }
+  // R-0081: the graph snapshot (Automerge bytes) as ONE binary file. GET/PUT
+  // mirror the note helpers but carry raw bytes (b64FromBytes/bytesFromB64).
+  async function ghGetWorld() {
+    const { owner, repo, branch, token } = notesSyncCfg;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}?ref=${encodeURIComponent(branch)}`,
+      { headers: ghHeaders(token) },
+    );
+    if (res.status === 404) return null; // no world pushed yet
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    const j = await res.json();
+    return { sha: j.sha, bytes: bytesFromB64(j.content || "") };
+  }
+  async function ghPutWorld(bytes, sha) {
+    const { owner, repo, branch, token } = notesSyncCfg;
+    const body = { message: "world: graph snapshot", content: b64FromBytes(bytes), branch };
+    if (sha) body.sha = sha;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(WORLD_FILE)}`,
+      { method: "PUT", headers: { ...ghHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    );
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+  }
+  // Merge the remote world into the local doc. CRDT union → never deletes local
+  // topics; returns how many NEW plateaus arrived. Redraws + persists.
+  async function pullWorld() {
+    const remote = await ghGetWorld();
+    if (!remote) return 0;
+    const before = doc.to_graph().plateaus().length;
+    doc.merge_bytes(remote.bytes); // Automerge union; throws only on a corrupt blob
+    for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id); // register imported domains
+    sync.pump();
+    pumpPeer();
+    persist();
+    draw();
+    return doc.to_graph().plateaus().length - before;
+  }
+  // Push the local world — but MERGE the remote first so a push can never clobber
+  // topics another device pushed since (the file is not itself CRDT-aware; the
+  // doc is). The union is what we write back.
+  async function pushWorld() {
+    const remote = await ghGetWorld();
+    if (remote) {
+      doc.merge_bytes(remote.bytes);
+      for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+      persist();
+      draw();
+    }
+    await ghPutWorld(doc.save(), remote?.sha);
+  }
   document.getElementById("notesync-toggle").addEventListener("click", () => {
     nsPanel.hidden = !nsPanel.hidden;
     if (!nsPanel.hidden) {
@@ -5018,20 +5068,52 @@ async function main() {
       renderNotepadSync();
       nsSay(
         j.private
-          ? `Connected ✓ — private repo ${parsed.owner}/${parsed.repo} (branch ${notesSyncCfg.branch}). Push/Pull is now on every notepad.`
+          ? `Connected ✓ — private repo ${parsed.owner}/${parsed.repo} (branch ${notesSyncCfg.branch}). Pulling your world…`
           : `Connected — but ⚠️ ${parsed.owner}/${parsed.repo} is PUBLIC: anyone could read your notes. Make it private in the repo settings.`,
       );
+      // R-0081: on connecting a device, pull the graph so topics captured
+      // elsewhere show up immediately — this is what makes it "just sync".
+      try {
+        const gained = await pullWorld();
+        nsSay(
+          (j.private ? `Connected ✓ — ${parsed.owner}/${parsed.repo}. ` : `Connected (⚠️ public). `) +
+            (gained > 0
+              ? `Pulled your world: ${gained} new topic${gained === 1 ? "" : "s"} merged in. Push/Pull is on every notepad.`
+              : `World up to date. Push/Pull is on every notepad.`),
+          !j.private,
+        );
+      } catch (e) {
+        nsSay(`Connected ✓, but couldn't pull the world yet (${e?.message ?? e}) — try “Pull world ↓”.`, true);
+      }
     } catch (e) {
       nsSay(`Could not reach GitHub (${e?.message ?? e}) — are you online?`, true);
+    }
+  });
+  document.getElementById("ns-pullworld").addEventListener("click", async () => {
+    if (!notesSyncCfg) return nsSay("Connect first (steps 1–3).", true);
+    nsSay("Pulling your world…");
+    try {
+      const gained = await pullWorld();
+      nsSay(gained > 0 ? `Pulled ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged into your map.` : "World already up to date ✓");
+    } catch (e) {
+      nsSay(`Pull failed (${e?.message ?? e}) — is the repo reachable?`, true);
     }
   });
   document.getElementById("ns-pushall").addEventListener("click", async () => {
     if (!notesSyncCfg) return nsSay("Connect first (steps 1–3).", true);
     flushNotepad();
+    // R-0081: the whole map first — the graph snapshot (merges remote so nothing
+    // another device pushed is lost), then every notepad note.
+    nsSay("Backing up your world…");
+    let worldOk = false;
+    try {
+      await pushWorld();
+      worldOk = true;
+    } catch (e) {
+      nsSay(`World push failed (${e?.message ?? e}) — retrying notes anyway…`, true);
+    }
     privateNotes = loadNotes(localStorage);
     const entries = Object.entries(privateNotes).filter(([, v]) => String(v ?? "").trim());
-    if (!entries.length) return nsSay("No notes to push yet — write one in a topic's notepad first.");
-    nsSay(`Pushing ${entries.length} note${entries.length > 1 ? "s" : ""}…`);
     let ok = 0;
     let failed = 0;
     for (const [id, text] of entries) {
@@ -5045,7 +5127,9 @@ async function main() {
         failed++;
       }
     }
-    nsSay(failed ? `Pushed ${ok} ✓ — ${failed} failed (retry, or retest the connection).` : `Pushed ${ok} note${ok > 1 ? "s" : ""} ✓`, !!failed);
+    const worldMsg = worldOk ? "World ✓" : "World ✗";
+    const noteMsg = entries.length ? ` · ${ok}/${entries.length} note${entries.length === 1 ? "" : "s"} ✓` : " · no notes yet";
+    nsSay(`${worldMsg}${noteMsg}${failed ? ` (${failed} failed — retry)` : ""}`, !worldOk || !!failed);
   });
   // The notepad's explicit save + per-topic Push/Pull (shown once connected).
   const notepadPush = document.getElementById("notepad-push");
