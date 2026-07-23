@@ -436,6 +436,11 @@
       .follow-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #223; }
       .follow-row .fr-name { font-size: 13px; }
       .follow-row .fr-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+      /* Publish / adopt a lens (R-0093): two distinct halves in one panel — a rule
+         between them so "publish mine" and "adopt theirs" don't read as one form. */
+      .lens-share-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid #23304a; }
+      .lens-share-sec:first-of-type { margin-top: 8px; padding-top: 0; border-top: 0; }
+      .lens-share-sec select { width: 100%; margin: 6px 0; }
       /* R-0076: note → PDF. On screen the print container is invisible; in print
          mode (body.print-note) it is the ONLY thing on the page — white, serif,
          book-like, with the KaTeX already typeset in place. */
