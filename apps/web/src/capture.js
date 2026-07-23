@@ -133,6 +133,28 @@ export function resourceKindFor(url) {
   return "Article";
 }
 
+/**
+ * A plateau title from a note's first meaningful line (R-0092): the first
+ * non-empty line, stripped of leading Markdown heading/bullet marks and inline
+ * emphasis/backticks, collapsed and capped at 60 chars. "" when the note is
+ * blank or only images/whitespace. Pure.
+ */
+export function titleFromNote(note) {
+  const lines = String(note || "").split("\n");
+  for (const raw of lines) {
+    let line = raw
+      .replace(/^\s*#{1,6}\s+/, "") // heading marker
+      .replace(/^\s*[-*+]\s+/, "") // bullet
+      .replace(/^\s*\d+\.\s+/, "") // ordered item
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // drop image syntax
+      .replace(/[*_`>#]/g, "") // inline emphasis / stray marks
+      .replace(/\s+/g, " ")
+      .trim();
+    if (line) return line.length > 60 ? `${line.slice(0, 60).trim()}…` : line;
+  }
+  return "";
+}
+
 /** Assemble the starter Markdown body for a captured topic: an H1 of the name,
  *  then your note (already Markdown) or an honest stub inviting the first pass. */
 export function captureBody({ name = "", note = "" } = {}) {

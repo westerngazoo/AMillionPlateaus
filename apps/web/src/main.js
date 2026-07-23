@@ -115,6 +115,7 @@ import {
   resourceKindFor as captureKindFor,
   captureBody,
   unwiredIds as captureUnwiredIds,
+  titleFromNote as captureTitleFromNote,
 } from "./capture.js"; // R-0079 ⚡ capture a topic
 import {
   entryOf as lessonEntryOf,
@@ -5625,6 +5626,18 @@ async function main() {
     flushNotepad();
     notepadStatus.textContent = "Saved ✓ (this browser)";
   });
+  // R-0092: promote a private note into its OWN plateau. The note stays here (a
+  // scratchpad is non-destructive); Capture opens prefilled with a title from
+  // the note's first line + the note as the new plateau's body, with neighbour
+  // suggestions — so you can keep jotting and spin off as many topics as you like.
+  document.getElementById("notepad-plateau").addEventListener("click", () => {
+    const note = notepadInput.value;
+    if (!note.trim()) {
+      notepadStatus.textContent = "Write a note first — its first line becomes the new plateau's name.";
+      return;
+    }
+    openCaptureWith(captureTitleFromNote(note), note);
+  });
   notepadPush.addEventListener("click", async () => {
     if (!studyPlateau || !notesSyncCfg) return;
     notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
@@ -6109,14 +6122,16 @@ async function main() {
   // R-0090: open ⚡ Capture prefilled with a name (from a "no match" search).
   // Closes the search panel, fills the name, runs neighbour suggestions so the
   // learner can wire it in one screen, and focuses the note for a first thought.
-  function openCaptureWith(name) {
+  function openCaptureWith(name, note = "") {
     tsPanel.hidden = true;
     capturePanel.hidden = false;
     captureNameEl.value = String(name || "").trim();
     captureUrlEl.value = "";
-    captureNoteEl.value = "";
+    captureNoteEl.value = String(note || ""); // R-0092: a note promoted to a plateau carries its text
     renderCaptureSuggest();
-    captureNoteEl.focus();
+    // Focus the name if it needs a title, else the note; either way the learner
+    // lands where the next edit belongs.
+    (captureNameEl.value ? captureNoteEl : captureNameEl).focus();
   }
   document.getElementById("capture-close").addEventListener("click", () => (capturePanel.hidden = true));
 
