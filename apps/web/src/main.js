@@ -5030,19 +5030,24 @@ async function main() {
         body: p.description || "",
       }));
     const groups = groupByLens(searchTopics(q, topics));
-    if (!groups.length) {
-      const none = document.createElement("p");
-      none.className = "ts-none";
-      none.textContent = "No topic matches — capture it as a new plateau, or try fewer words.";
-      tsResults.append(none);
-      // R-0090: didn't find it? make it. Hands the exact query to ⚡ Capture
-      // (prefilled + neighbour suggestions), the one create-a-topic flow.
+    // R-0090/91: didn't find it — OR none of the matches is the one you mean?
+    // Always offer to make it. Hands the exact query to ⚡ Capture (prefilled +
+    // neighbour suggestions). Appended AFTER results too, so partial matches
+    // never trap you without a create path.
+    const appendCreate = () => {
       const create = document.createElement("button");
       create.type = "button";
       create.className = "ts-create";
       create.textContent = `➕ Create “${q.length > 40 ? `${q.slice(0, 40)}…` : q}”`;
       create.addEventListener("click", () => openCaptureWith(q));
       tsResults.append(create);
+    };
+    if (!groups.length) {
+      const none = document.createElement("p");
+      none.className = "ts-none";
+      none.textContent = "No topic matches — capture it as a new plateau, or try fewer words.";
+      tsResults.append(none);
+      appendCreate();
       return;
     }
     for (const [lens, rows] of groups) {
@@ -5072,6 +5077,12 @@ async function main() {
         tsResults.append(b);
       }
     }
+    // R-0091: "none of these"? the create path lives below the matches too.
+    const hint = document.createElement("p");
+    hint.className = "ts-none";
+    hint.textContent = "None of these?";
+    tsResults.append(hint);
+    appendCreate();
   }
   document.getElementById("topic-search-toggle").addEventListener("click", () => {
     tsPanel.hidden = !tsPanel.hidden;
