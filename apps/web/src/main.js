@@ -5636,7 +5636,17 @@ async function main() {
       notepadStatus.textContent = "Write a note first — its first line becomes the new plateau's name.";
       return;
     }
-    openCaptureWith(captureTitleFromNote(note), note);
+    const title = captureTitleFromNote(note);
+    // R-0093: search first — if a plateau with this exact name already exists,
+    // just open it (no duplicate); otherwise fall into the create-new flow.
+    const dupe = captureExactMatch(title, captureTopics());
+    const existing = dupe && plateauById(dupe.id);
+    if (existing) {
+      notepadStatus.textContent = `“${existing.name}” already exists — opened it.`;
+      flyTo(existing.position, () => openPlateau(existing));
+      return;
+    }
+    openCaptureWith(title, note);
   });
   notepadPush.addEventListener("click", async () => {
     if (!studyPlateau || !notesSyncCfg) return;
