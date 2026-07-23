@@ -81,6 +81,7 @@ import {
   MUSIC_PATH,
 } from "./music-curriculum.js"; // R-0068: the detailed music-theory core
 import { loadPairRelay, pairRoomUrl, createPairChannel } from "./pair-relay.js"; // R-0058: cross-device Scan Note
+import { createLiveSession, newSessionId, roomIdFor } from "./live-sync.js"; // R-0089: live same-network P2P sync
 import { isGrowable, childPosition, starterBody, draftPlateauPrompt, inlinePrompt, existingChild } from "./rhizome.js";
 import {
   DEEP_STUDY_ACTIONS,
@@ -739,10 +740,13 @@ async function main() {
     let msg;
     while ((msg = doc.generate_message(peerSession)) !== undefined) peer.send(msg);
   }
-  function startPeer() {
+  function startPeer(onOpenExtra) {
     peerSession = new WasmSyncSession();
     peer = createPeer({
-      onOpen: () => pumpPeer(), // catch the remote up with our state on connect
+      onOpen: () => {
+        pumpPeer(); // catch the remote up with our state on connect
+        onOpenExtra?.(); // R-0089: live-sync flips its status to "🟢 live" here
+      },
       onMessage: (bytes) => {
         doc.receive_message(peerSession, bytes);
         pumpPeer(); // a received change may unblock more to send
@@ -5373,6 +5377,92 @@ async function main() {
     }
   });
   document.getElementById("follow-close").addEventListener("click", () => (followPanel.hidden = true));
+
+  // ── 🔴 Live sync — same-network P2P (R-0089) ────────────────────────────────
+  // Two of YOUR devices on the same network auto-pair through the R-0058 relay
+  // (which carries only the WebRTC handshake) and open a DIRECT data channel —
+  // graph bytes flow device-to-device, never through the relay. Reuses the
+  // existing peer pump (startPeer/pumpPeer). The room is derived from your sync
+  // repo, so your devices share it with no code to type; you can also paste a
+  // room code to pair with someone else. Empty ICE → LAN host candidates only.
+  const livePanel = document.getElementById("live-panel");
+  const liveRelayInput = document.getElementById("live-relay");
+  const liveRoomInput = document.getElementById("live-room");
+  const liveStatus = document.getElementById("live-status");
+  const liveGoBtn = document.getElementById("live-go");
+  const liveStopBtn = document.getElementById("live-stop");
+  let liveSession = null;
+  let liveChannel = null;
+  function liveSay(text, cls) {
+    liveStatus.hidden = false;
+    liveStatus.textContent = text;
+    liveStatus.className = `course-status${cls ? ` ${cls}` : ""}`;
+  }
+  function defaultLiveRoom() {
+    if (notesSyncCfg) return roomIdFor(`${nsBase()}|${notesSyncCfg.owner}/${notesSyncCfg.repo}`);
+    return "";
+  }
+  function stopLive() {
+    try {
+      liveSession?.stop();
+    } catch {
+      /* already down */
+    }
+    liveSession = null;
+    liveChannel = null;
+    liveGoBtn.hidden = false;
+    liveStopBtn.hidden = true;
+  }
+  function goLive() {
+    const relay = String(liveRelayInput.value || "").trim();
+    const room = String(liveRoomInput.value || "").trim() || defaultLiveRoom();
+    if (!relay) return liveSay("Paste your relay URL first (the same Cloudflare relay Scan Note uses).", "err");
+    if (!room) return liveSay("Need a room — connect 📓 Sync (your repo becomes the room), or type a shared code.", "err");
+    const url = pairRoomUrl(relay, room);
+    if (!url) return liveSay("That relay URL doesn't look right (expected wss://… or https://…).", "err");
+    stopLive(); // clean any prior session
+    const myId = newSessionId();
+    liveChannel = createPairChannel({
+      url,
+      onText: (t) => liveSession?.handle(t),
+      onStatus: (s) => {
+        if (s === "online") {
+          liveSay("Relay connected — waiting for your other device…");
+          liveSession?.start(); // announce once the room socket is open
+        } else if (s === "offline") {
+          liveSay("Relay offline — check the URL / that you're online.", "err");
+        } else if (s === "unavailable") {
+          liveSay("Live sync needs WebSocket support in this browser.", "err");
+        }
+      },
+    });
+    liveSession = createLiveSession({
+      myId,
+      relay: { send: (t) => liveChannel.sendText(t), close: () => liveChannel?.close() },
+      makePeer: () => startPeer(() => liveSay("🟢 Live — this device is syncing changes instantly with 1 other.", "ok")),
+      onStatus: (st) => {
+        if (st === "connecting") liveSay("Found your other device — connecting directly…");
+      },
+      onError: (e) => liveSay(`Handshake hiccup (${e?.message ?? e}) — Stop and Go live again.`, "err"),
+    });
+    liveGoBtn.hidden = true;
+    liveStopBtn.hidden = false;
+    liveSay("Opening the relay room…");
+  }
+  liveGoBtn.addEventListener("click", goLive);
+  liveStopBtn.addEventListener("click", () => {
+    stopLive();
+    liveSay("Live sync stopped. Your world is still backed up to the repo.");
+  });
+  document.getElementById("live-toggle").addEventListener("click", () => {
+    livePanel.hidden = !livePanel.hidden;
+    if (!livePanel.hidden) {
+      liveRelayInput.value = liveRelayInput.value || loadPairRelay(localStorage) || "";
+      if (!liveRoomInput.value) liveRoomInput.value = defaultLiveRoom();
+      if (!liveSession) liveStatus.hidden = true;
+    }
+  });
+  document.getElementById("live-close").addEventListener("click", () => (livePanel.hidden = true));
 
   document.getElementById("notesync-toggle").addEventListener("click", () => {
     nsPanel.hidden = !nsPanel.hidden;
