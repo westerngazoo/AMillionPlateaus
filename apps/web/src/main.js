@@ -5636,17 +5636,10 @@ async function main() {
       notepadStatus.textContent = "Write a note first — its first line becomes the new plateau's name.";
       return;
     }
-    const title = captureTitleFromNote(note);
-    // R-0093: search first — if a plateau with this exact name already exists,
-    // just open it (no duplicate); otherwise fall into the create-new flow.
-    const dupe = captureExactMatch(title, captureTopics());
-    const existing = dupe && plateauById(dupe.id);
-    if (existing) {
-      notepadStatus.textContent = `“${existing.name}” already exists — opened it.`;
-      flyTo(existing.position, () => openPlateau(existing));
-      return;
-    }
-    openCaptureWith(title, note);
+    // R-0093: search first, then create — open 🔎 Find a topic prefilled with
+    // the note's title so existing matches show (tap to LINK); if none fits, the
+    // search's ➕ Create makes the plateau, carrying this note as its body.
+    openSearchWith(captureTitleFromNote(note), note);
   });
   notepadPush.addEventListener("click", async () => {
     if (!studyPlateau || !notesSyncCfg) return;
@@ -6132,16 +6125,33 @@ async function main() {
   // R-0090: open ⚡ Capture prefilled with a name (from a "no match" search).
   // Closes the search panel, fills the name, runs neighbour suggestions so the
   // learner can wire it in one screen, and focuses the note for a first thought.
+  // R-0093: a note promoted via 🔎 Find-a-topic stashes its text here; whichever
+  // path lands in Capture (typing a new name, or the search's ➕ Create) carries
+  // it into the new plateau's body. Consumed on use so it never leaks to a later
+  // unrelated capture.
+  let pendingNoteForCapture = "";
   function openCaptureWith(name, note = "") {
+    const finalNote = note || pendingNoteForCapture;
+    pendingNoteForCapture = "";
     tsPanel.hidden = true;
     capturePanel.hidden = false;
     captureNameEl.value = String(name || "").trim();
     captureUrlEl.value = "";
-    captureNoteEl.value = String(note || ""); // R-0092: a note promoted to a plateau carries its text
+    captureNoteEl.value = String(finalNote || "");
     renderCaptureSuggest();
     // Focus the name if it needs a title, else the note; either way the learner
     // lands where the next edit belongs.
     (captureNameEl.value ? captureNoteEl : captureNameEl).focus();
+  }
+  // R-0093: open 🔎 Find a topic prefilled — so existing matches (tap to LINK)
+  // show first; if none fits, its ➕ Create makes the plateau (carrying `note`).
+  function openSearchWith(query, note = "") {
+    pendingNoteForCapture = note;
+    capturePanel.hidden = true;
+    tsPanel.hidden = false;
+    tsInput.value = String(query || "");
+    renderTopicSearch();
+    tsInput.focus();
   }
   document.getElementById("capture-close").addEventListener("click", () => (capturePanel.hidden = true));
 

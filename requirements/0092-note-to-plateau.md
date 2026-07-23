@@ -20,10 +20,11 @@ note also auto-backs-up (R-0088) and lands in Review (R-0078) like any capture.
 - **AC1** — pure `titleFromNote`: the first non-empty line, stripped of leading heading/bullet
   marks + inline emphasis/backticks/image syntax, collapsed, capped at 60 chars; "" for a
   blank/whitespace/image-only note. Unit-tested. `openCaptureWith(name, note)` prefills the note.
-- **AC2** — ➕ Plateau from note on the notepad: empty note → a hint (no-op); otherwise **search
-  first** — if a plateau with the derived title already exists (exact-name match), just OPEN it
-  (fly + open, no duplicate); otherwise open Capture prefilled with the title + note body +
-  neighbour suggestions (the create-new flow).
+- **AC2** — ➕ Plateau from note on the notepad: empty note → a hint (no-op); otherwise **open
+  🔎 Find a topic prefilled with the note's title** (search first, not create): existing matches
+  show for you to tap and LINK; if none fits, the search's **➕ Create** makes the plateau,
+  carrying this note as its body (a stashed `pendingNoteForCapture`, consumed on use). No
+  duplicate, and you're never dropped straight into create.
 - **AC3** — non-destructive (the source note remains) and repeatable without limit.
 - **AC4** — additive, no new dependency, `apps/web` only; suite stays green.
 
@@ -34,6 +35,6 @@ note also auto-backs-up (R-0088) and lands in Review (R-0078) like any capture.
   intuition", note carried) → created a plateau with the note in its body; the original topic's
   note stayed intact; a second note "Reciprocal frames" promoted into a second plateau —
   non-destructive and repeatable.
-- 2026-07-23 amended: **search-first-link** — a note whose first line names an EXISTING topic
-  ("Bivectors: Oriented Planes") opened it directly (no duplicate); a new name ("Zorn's lemma
-  detour") fell into the Capture create flow prefilled. Suite 579/579.
+- 2026-07-23 amended (owner: "on find topic not create"): ➕ Plateau from note now opens **🔎
+  Find a topic** prefilled with the title — existing matches show to LINK; its ➕ Create carries
+  the note into a new plateau if none fits. Built on R-0091's always-present search Create.
