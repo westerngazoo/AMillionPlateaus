@@ -939,6 +939,7 @@
           <p class="menu-group-label">World &amp; peers</p>
           <button id="import-world">Import a world</button>
           <button id="follow-toggle">👣 Follow a wizard</button>
+          <button id="lens-share-toggle">🔬 Publish / adopt a lens</button>
           <button id="live-toggle">🔴 Live sync (same network)</button>
           <button id="connect-peer-toggle">Connect a peer (P2P)</button>
           <button id="discover">Discover wizards</button>
@@ -1097,6 +1098,39 @@
       </div>
       <p id="follow-status" class="course-status" hidden></p>
       <div id="follow-list" class="follow-list"><!-- followed peers, by main.js --></div>
+    </div>
+
+    <!-- Publish / adopt a lens (R-0093): a lens is a PORTABLE subgraph — its
+         domain (a way of seeing) plus every plateau, bridge and resource under
+         it — serialized to one file (lenses/<id>.json) in a sync repo, separate
+         from the whole-world snapshot. Publish yours; adopt anyone's. Seeds
+         idempotently by id, so adopting twice is a no-op and your own topics are
+         never touched. Shown/hidden by main.js. -->
+    <div id="lens-share" class="draft-plateau course-builder" hidden>
+      <h3 class="course-title">🔬 Publish / adopt a lens</h3>
+      <p class="course-help">A <strong>lens</strong> is a way of seeing plus everything you've mapped under it. Publish one to share your whole world of a subject — say <em>University Physics</em> — as a single file anyone can pull in. Adopting merges it onto your map as new islands; nothing of yours is touched or overwritten.</p>
+
+      <div class="lens-share-sec">
+        <p class="course-label">Publish one of your lenses</p>
+        <p class="course-help">Writes <code>lenses/&lt;id&gt;.json</code> to your connected 📓 Sync repo — connect that first.</p>
+        <select id="lens-pub-select" aria-label="Lens to publish"></select>
+        <div class="course-actions">
+          <button id="lens-pub-go" type="button">Publish ↑</button>
+        </div>
+        <p id="lens-pub-status" class="course-status" hidden></p>
+      </div>
+
+      <div class="lens-share-sec">
+        <p class="course-label">Adopt lenses from a repo</p>
+        <input id="lens-adopt-repo" type="text" placeholder="owner/repo — or any repo URL (incl. a Gitea one)" autocomplete="off" />
+        <input id="lens-adopt-token" type="password" placeholder="private repo? paste a read token (optional — stays in THIS browser only)" autocomplete="off" />
+        <div class="course-actions">
+          <button id="lens-adopt-list" type="button">List lenses ↓</button>
+          <button id="lens-share-close" type="button">Close</button>
+        </div>
+        <p id="lens-adopt-status" class="course-status" hidden></p>
+        <div id="lens-adopt-results" class="follow-list"><!-- remote lenses, by main.js --></div>
+      </div>
     </div>
 
     <!-- Spaced review queue (R-0078): SM-2 retrieval practice over the topics
