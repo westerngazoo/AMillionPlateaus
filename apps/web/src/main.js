@@ -391,10 +391,19 @@ async function main() {
   // plateau scores reputation under its OWN domain, not a fallback (AC5).
   for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
 
+  // R-0088: every persist is a graph change → also queue a world auto-push (when
+  // 📓 Sync is connected), so authoring anything — a plateau, a bridge, a vote, a
+  // followed/imported world — backs itself up, not just captures. `autoPushOnPersist`
+  // is a deferred pointer (the real queueWorldAutoPush is defined far below, after
+  // the sync config exists); `suppressAutoPush` skips the one wasteful case —
+  // pulling YOUR OWN repo shouldn't immediately echo the same bytes back.
+  let autoPushOnPersist = () => {};
+  let suppressAutoPush = false;
   // Persist the whole converged doc to IndexedDB; debounced inside the store
   // (AC3). Called after every local edit and inbound sync.
   function persist() {
     snapshots.save(doc.save());
+    if (!suppressAutoPush) autoPushOnPersist();
   }
 
   // AC5 — the synced doc carries exactly the four data maps, no reputation key.
@@ -5145,12 +5154,19 @@ async function main() {
     const remote = await ghGetWorld();
     if (!remote) return 0;
     const before = doc.to_graph().plateaus().length;
-    doc.merge_bytes(remote.bytes); // Automerge union; throws only on a corrupt blob
-    for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id); // register imported domains
-    sync.pump();
-    pumpPeer();
-    persist();
-    draw();
+    // R-0088: pulling YOUR OWN repo must not echo an immediate push of the same
+    // bytes. Suppress only around the synchronous merge+persist (no await inside).
+    suppressAutoPush = true;
+    try {
+      doc.merge_bytes(remote.bytes); // Automerge union; throws only on a corrupt blob
+      for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id); // register imported domains
+      sync.pump();
+      pumpPeer();
+      persist();
+      draw();
+    } finally {
+      suppressAutoPush = false;
+    }
     return doc.to_graph().plateaus().length - before;
   }
   // Push the local world — but MERGE the remote first so a push can never clobber
@@ -5164,10 +5180,15 @@ async function main() {
     for (let attempt = 0; ; attempt++) {
       const remote = await ghGetWorld();
       if (remote) {
-        doc.merge_bytes(remote.bytes);
-        for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
-        persist();
-        draw();
+        suppressAutoPush = true; // R-0088: the pre-push merge must not re-queue a push
+        try {
+          doc.merge_bytes(remote.bytes);
+          for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+          persist();
+          draw();
+        } finally {
+          suppressAutoPush = false;
+        }
       }
       try {
         await ghPutWorld(doc.save(), remote?.sha);
@@ -5201,6 +5222,10 @@ async function main() {
       }
     }, 3000);
   }
+  // R-0088: now that queueWorldAutoPush exists, wire persist() to it — every
+  // authored graph change (plateau, bridge, vote, marker, imported/followed
+  // world) backs itself up, not just captures.
+  autoPushOnPersist = queueWorldAutoPush;
 
   // ── Follow a wizard's world (R-0082) ────────────────────────────────────────
   // The old "Connect a peer" was a live WebRTC handshake (copy-paste SDP, same
@@ -5466,6 +5491,25 @@ async function main() {
     notepadPull.hidden = !notesSyncCfg;
   }
   renderNotepadSync();
+
+  // R-0088: sync-on-connection — when 📓 Sync is configured, pull the world once
+  // at boot so opening the app on any device catches up with what the others
+  // pushed. Fire-and-forget (never blocks boot); quiet unless it actually merges
+  // something in; silent when offline. Combined with persist()'s auto-push, this
+  // makes the repo behave like a live shared database.
+  if (notesSyncCfg) {
+    (async () => {
+      try {
+        const gained = await pullWorld();
+        if (gained > 0) {
+          importNote(`🌍 synced ${gained} new topic${gained === 1 ? "" : "s"} from your repo`, true);
+          setTimeout(() => (importStatus.hidden = true), 6000);
+        }
+      } catch {
+        /* offline / unreachable forge — the local world is intact; manual Pull still works */
+      }
+    })();
+  }
   document.getElementById("notepad-save").addEventListener("click", () => {
     if (!studyPlateau) return;
     notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
@@ -5926,7 +5970,8 @@ async function main() {
     captureDupeEl.hidden = true;
     captureNeighborChoices = [];
     capturePanel.hidden = true;
-    queueWorldAutoPush(); // R-0084: a captured topic backs itself up — no strands
+    // R-0084/88: a captured topic backs itself up — now covered by persist()'s
+    // auto-push too, but kept explicit so capture is guaranteed to enqueue.
     const created = plateauById(newId);
     if (created) flyTo(created.position, () => openPlateau(created));
   });
