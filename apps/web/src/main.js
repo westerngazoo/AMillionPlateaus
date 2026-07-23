@@ -5033,8 +5033,16 @@ async function main() {
     if (!groups.length) {
       const none = document.createElement("p");
       none.className = "ts-none";
-      none.textContent = "No topic matches — try fewer words, or 🎓 Build a course for it.";
+      none.textContent = "No topic matches — capture it as a new plateau, or try fewer words.";
       tsResults.append(none);
+      // R-0090: didn't find it? make it. Hands the exact query to ⚡ Capture
+      // (prefilled + neighbour suggestions), the one create-a-topic flow.
+      const create = document.createElement("button");
+      create.type = "button";
+      create.className = "ts-create";
+      create.textContent = `➕ Create “${q.length > 40 ? `${q.slice(0, 40)}…` : q}”`;
+      create.addEventListener("click", () => openCaptureWith(q));
+      tsResults.append(create);
       return;
     }
     for (const [lens, rows] of groups) {
@@ -6087,6 +6095,18 @@ async function main() {
       captureNameEl.focus();
     }
   });
+  // R-0090: open ⚡ Capture prefilled with a name (from a "no match" search).
+  // Closes the search panel, fills the name, runs neighbour suggestions so the
+  // learner can wire it in one screen, and focuses the note for a first thought.
+  function openCaptureWith(name) {
+    tsPanel.hidden = true;
+    capturePanel.hidden = false;
+    captureNameEl.value = String(name || "").trim();
+    captureUrlEl.value = "";
+    captureNoteEl.value = "";
+    renderCaptureSuggest();
+    captureNoteEl.focus();
+  }
   document.getElementById("capture-close").addEventListener("click", () => (capturePanel.hidden = true));
 
   function renderUnwiredLabel() {
