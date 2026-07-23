@@ -46,7 +46,7 @@ export function pairRoomUrl(base, roomId) {
  * `{ send, close }`; both are inert no-ops when no url/WebSocket is available, so
  * the caller's fallback path is unaffected.
  */
-export function createPairChannel({ url, onImage, onStatus, WebSocketCtor } = {}) {
+export function createPairChannel({ url, onImage, onText, onStatus, WebSocketCtor } = {}) {
   const WS = WebSocketCtor || (typeof WebSocket !== "undefined" ? WebSocket : null);
   const status = (s) => onStatus && onStatus(s);
   if (!url || !WS) {
@@ -73,10 +73,17 @@ export function createPairChannel({ url, onImage, onStatus, WebSocketCtor } = {}
   ws.onopen = () => { open = true; status("online"); flush(); };
   ws.onmessage = (e) => {
     const d = e.data;
-    if (!onImage || d == null) return;
+    if (d == null) return;
+    // Text frames carry the R-0089 live-sync WebRTC handshake (JSON); binary
+    // frames carry a scanned-note image (R-0058). The same 2-peer room serves
+    // both — they never collide because live-sync uses its OWN room id.
+    if (typeof d === "string") {
+      onText?.(d);
+      return;
+    }
+    if (!onImage) return;
     if (d instanceof ArrayBuffer) onImage(new Uint8Array(d));
     else if (ArrayBuffer.isView(d)) onImage(new Uint8Array(d.buffer, d.byteOffset, d.byteLength));
-    // a text control frame ("ready"/JSON error) is ignored by the image handler
   };
   ws.onerror = () => status("offline");
   ws.onclose = () => { open = false; status("offline"); };
@@ -89,6 +96,15 @@ export function createPairChannel({ url, onImage, onStatus, WebSocketCtor } = {}
         try { ws.send(buf); } catch { queue.push(buf); }
       } else {
         queue.push(buf);
+      }
+    },
+    /** Send a text frame (R-0089 live-sync signaling JSON). Queued until open. */
+    sendText(str) {
+      const s = String(str);
+      if (open) {
+        try { ws.send(s); } catch { queue.push(s); }
+      } else {
+        queue.push(s);
       }
     },
     close() {

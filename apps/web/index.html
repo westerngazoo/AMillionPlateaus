@@ -775,6 +775,7 @@
       #course-build { background: #1c3a52; border-color: #2f5f83; color: #cfe6ff; font-weight: 600; }
       .course-status { margin: 0; font-size: 12px; color: #9fd0b4; }
       .course-status.err { color: #ffb4a8; }
+      .course-status.ok { color: #7ee0a0; font-weight: 600; }
       .draft-plateau summary {
         padding: 8px 14px; cursor: pointer; user-select: none;
         color: #9fd0b4; font-size: 13px; list-style: none;
@@ -937,6 +938,7 @@
           <p class="menu-group-label">World &amp; peers</p>
           <button id="import-world">Import a world</button>
           <button id="follow-toggle">👣 Follow a wizard</button>
+          <button id="live-toggle">🔴 Live sync (same network)</button>
           <button id="connect-peer-toggle">Connect a peer (P2P)</button>
           <button id="discover">Discover wizards</button>
           <button id="notesync-toggle">📓 Sync (GitHub)</button>
@@ -1060,6 +1062,23 @@
         <button id="ns-close" type="button">Close</button>
       </div>
       <p id="ns-status" class="course-status" hidden></p>
+    </div>
+
+    <!-- 🔴 Live sync (R-0089): two of your devices on the same network auto-pair
+         through the relay (handshake only) and open a DIRECT WebRTC data channel.
+         Graph bytes flow device-to-device; the relay never sees them. Shown/hidden
+         by main.js. -->
+    <div id="live-panel" class="draft-plateau course-builder" hidden>
+      <h3 class="course-title">🔴 Live sync — same network</h3>
+      <p class="course-help">For when two of your devices are on the same Wi-Fi: they find each other through your relay (which only carries the connection handshake) and then sync <strong>directly, device-to-device</strong> in real time — your graph never touches the relay. Open this on both devices and tap Go live. Great alongside 📓 Sync (which keeps them in step across time).</p>
+      <input id="live-relay" type="text" placeholder="Your relay URL (the same Cloudflare relay Scan Note uses) — wss://… or https://…" autocomplete="off" />
+      <input id="live-room" type="text" placeholder="Room code (auto-filled from your synced repo — leave as-is to pair your own devices)" autocomplete="off" />
+      <div class="course-actions">
+        <button id="live-go" type="button">🔴 Go live</button>
+        <button id="live-stop" type="button" hidden>Stop</button>
+        <button id="live-close" type="button">Close</button>
+      </div>
+      <p id="live-status" class="course-status" hidden></p>
     </div>
 
     <!-- Follow a wizard (R-0082): add another wizard's PUBLIC repo → pull their
