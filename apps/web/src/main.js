@@ -52,6 +52,7 @@ import {
   COMPUTATION_DOMAIN,
   GA_DOMAIN,
   SIA_DOMAIN,
+  UNIVERSITAM_DOMAIN,
 } from "./persona.js";
 import { SEED_PLATEAUS, SEED_BRIDGES, SEED_RESOURCES, P } from "./seeds.js";
 import { QC_PLATEAUS, QC_BRIDGES, QC_RESOURCES, SEED_PATHS } from "./curriculum.js";
@@ -68,6 +69,13 @@ import {
   PHYS_CORE_RESOURCES,
   PHYS_CORE_PATH,
 } from "./physics-core-curriculum.js"; // R-0066: the detailed intro→advanced physics-degree core
+import {
+  UNIVERSITAM_PLATEAUS,
+  UNIVERSITAM_TWINS,
+  UNIVERSITAM_BRIDGES,
+  UNIVERSITAM_PATH,
+  UNIVERSITAM_TWIN_PATH,
+} from "./universitam-curriculum.js"; // R-0096: the owner's actual degree + its GA/SIA twins
 import {
   MATH_PLATEAUS,
   MATH_BRIDGES,
@@ -350,6 +358,7 @@ const DOMAIN_PATH_OF = {
   [COMPUTATION_DOMAIN]: CS_PATHS[0]?.id,
   [GA_DOMAIN]: PHYS_LENS_PATHS[0]?.id,
   [SIA_DOMAIN]: PHYS_LENS_PATHS[0]?.id,
+  [UNIVERSITAM_DOMAIN]: UNIVERSITAM_PATH.id, // R-0096: the degree, in its official order
 };
 
 // Math on the upper-right (high e1), Music on the lower-left (high e3).
@@ -381,9 +390,9 @@ async function main() {
   // touched (AC4).
   // (`description` rides the same upsert since the QC curriculum — seeds.js rows
   // have none, curriculum.js rows ship their Markdown body.)
-  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS, ...PHYS_CORE_PLATEAUS, ...MATH_PLATEAUS, ...MUSIC_PLATEAUS])
+  for (const p of [...SEED_PLATEAUS, ...QC_PLATEAUS, ...CS_PLATEAUS, ...PHYS_LENS_PLATEAUS, ...PHYS_CORE_PLATEAUS, ...MATH_PLATEAUS, ...MUSIC_PLATEAUS, ...UNIVERSITAM_PLATEAUS, ...UNIVERSITAM_TWINS])
     doc.seed_plateau(p.id, p.name, p.domain, p.e1, p.e2, p.e3, p.description ?? "");
-  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES, ...PHYS_CORE_BRIDGES, ...MATH_BRIDGES, ...MUSIC_BRIDGES])
+  for (const b of [...SEED_BRIDGES, ...QC_BRIDGES, ...CS_BRIDGES, ...PHYS_LENS_BRIDGES, ...PHYS_CORE_BRIDGES, ...MATH_BRIDGES, ...MUSIC_BRIDGES, ...UNIVERSITAM_BRIDGES])
     doc.seed_bridge(b.id, b.from, b.to, b.concept);
   // Example resources (R-0027): fixed-id idempotent upsert, same as above — so a
   // fresh world has something to read; re-seeding never resets earned stones.
@@ -565,7 +574,7 @@ async function main() {
   // to follow the moment the world loads.
   (function seedPaths() {
     const all = loadPaths();
-    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS, PHYS_CORE_PATH, MATH_PATH, MUSIC_PATH]) all[p.id] = { ...p };
+    for (const p of [...SEED_PATHS, ...CS_PATHS, ...PHYS_LENS_PATHS, PHYS_CORE_PATH, MATH_PATH, MUSIC_PATH, UNIVERSITAM_PATH, UNIVERSITAM_TWIN_PATH]) all[p.id] = { ...p };
     savePaths(all);
   })();
   const FLAGSHIP_PATH_ID = SEED_PATHS[0]?.id ?? null;

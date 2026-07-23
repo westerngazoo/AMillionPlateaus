@@ -58,6 +58,12 @@ export const COMPUTATION_DOMAIN = "66666666-6666-6666-6666-666666666666";
 //    overlap only ever means the SIA companion counts those neighbours as in-reach.
 export const GA_DOMAIN = "77777777-7777-7777-7777-777777777777";
 export const SIA_DOMAIN = "88888888-8888-8888-8888-888888888888";
+// R-0096 — the owner's ACTUAL degree (Licenciatura en Física, plan FÍSICA-2019,
+// Universitam) as its own lens. Deliberately distinct from PHYSICS_DOMAIN: that
+// lens is "how the world works", this one is "what I must pass, and in what
+// order" — fixed sequence, seriación, créditos, an exam at the end of each. The
+// separation is what lets one topic be studied twice, once per lens.
+export const UNIVERSITAM_DOMAIN = "99999999-9999-9999-9999-999999999999";
 
 // grade-1 blade indices in [1, e1, e2, e12, e3, e13, e23, e123]
 const E1 = 1;
@@ -176,6 +182,9 @@ export const DOMAINS = [
   // The two alternate physics lenses (physics-lens-curriculum.js, R-0057).
   { id: GA_DOMAIN, label: "Geometric Algebra", canonical: { e1: 0.71, e2: 0.71, e3: 0 } },
   { id: SIA_DOMAIN, label: "Synthetic Infinitesimal Analysis", canonical: { e1: 0.9, e2: 0, e3: 0.44 } },
+  // The degree itself (R-0096): Formal+Empirical like physics, tilted Empirical —
+  // this is the examined, applied route rather than the pure theory.
+  { id: UNIVERSITAM_DOMAIN, label: "Licenciatura en Física — Universitam", canonical: { e1: 0.6, e2: 0.8, e3: 0.1 } },
 ];
 
 // The three GA axes under HUMAN labels — the UI renders these, never "e1/e2/e3"
