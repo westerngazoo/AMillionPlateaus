@@ -131,7 +131,7 @@ import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
-import { buildLensBundle, parseLensBundle, applyLensBundle, lensBundlePath, LENS_DIR } from "./lens-bundle.js"; // R-0093 lens as a portable, adoptable subgraph
+import { buildLensBundle, parseLensBundle, parseLensBundleResult, applyLensBundle, lensBundlePath, isSafeLensPath, canonicalJson, LENS_DIR } from "./lens-bundle.js"; // R-0093/R-0093a lens as a portable, adoptable subgraph
 import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
   PRESETS,
@@ -5432,12 +5432,25 @@ async function main() {
       lensPubSelect.append(opt);
     }
   }
-  // Seed a parsed bundle into the live doc, idempotently, and register its domain
-  // locally (custom domains live in localStorage, not the CRDT) so the adopted
-  // lens is faceable with its own canonical axis. Returns the applied counts.
+  // Seed a parsed bundle into the live doc and register its domain locally (custom
+  // domains live in localStorage, not the CRDT) so the adopted lens is faceable
+  // with its own canonical axis. Returns how many rows were newly seeded.
+  //
+  // R-0093a: `has` makes adoption purely ADDITIVE. doc.seed_* are last-writer-wins
+  // upserts and the built-in lenses use fixed plateau ids that every install
+  // shares, so without this, adopting someone's "Mathematics" would overwrite your
+  // own Arithmetic's name/description/position with theirs. Anything you already
+  // hold is skipped — which is what "nothing of yours is touched" has to mean.
   function seedLensBundle(bundle) {
-    const before = doc.to_graph().plateaus().length;
-    applyLensBundle(bundle, {
+    const g0 = doc.to_graph();
+    const havePlateau = new Set(g0.plateaus().map((p) => p.id));
+    const haveBridge = new Set(g0.bridges().map((b) => b.id));
+    const haveResource = new Set(g0.resources().map((r) => r.id));
+    const n = applyLensBundle(bundle, {
+      has: (kind, id) =>
+        kind === "plateau" ? havePlateau.has(id)
+        : kind === "bridge" ? haveBridge.has(id)
+        : haveResource.has(id),
       onDomain: (d) => {
         // Don't duplicate a built-in or already-known domain in mp.domains.
         if (!allDomains().some((x) => x.id === d.id))
@@ -5453,7 +5466,7 @@ async function main() {
     persist(); // also auto-backs-up the adopted lens into your own world (R-0088)
     draw();
     refreshDomainSelect(); // the adopted lens becomes pickable in Draft-a-plateau
-    return doc.to_graph().plateaus().length - before;
+    return n.plateaus;
   }
 
   document.getElementById("lens-pub-go").addEventListener("click", async () => {
@@ -5487,6 +5500,14 @@ async function main() {
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`${res.status}`);
     const j = await res.json();
+    // R-0093a: over 1 MB GitHub answers with an EMPTY content and encoding "none"
+    // rather than an error. Decoding that yields "" and the lens reads as corrupt
+    // — a silent, misleading failure exactly at the size a real degree-sized lens
+    // reaches. Say what actually happened instead.
+    if (j.encoding === "none" || (!j.content && j.size > 0)) {
+      const mb = Math.round((j.size / 1048576) * 10) / 10;
+      throw new Error(`too large for the contents API (${mb} MB)`);
+    }
     return b64DecodeUtf8(j.content || "");
   }
   // List the lenses/ directory of a repo — the contents API returns an array for
@@ -5499,7 +5520,14 @@ async function main() {
     if (!res.ok) throw new Error(`${res.status}`);
     const arr = await res.json();
     if (!Array.isArray(arr)) return [];
-    return arr.filter((e) => e && e.type === "file" && /\.json$/i.test(e.name)).map((e) => e.path);
+    return arr
+      .filter((e) => e && e.type === "file" && /\.json$/i.test(e.name))
+      .map((e) => e.path)
+      // R-0093a: the path is declared by the REMOTE side. It cannot escape today
+      // (git can't store a ".." component), but R-0094 reads paths out of an index
+      // file a stranger authored, and that string carries the reader's token to
+      // whatever URL it builds. Establish the guard at the first fetch site.
+      .filter((p) => isSafeLensPath(p));
   }
   function renderAdoptResults(source, bundles) {
     lensAdoptResults.replaceChildren();
@@ -5509,9 +5537,13 @@ async function main() {
       const name = document.createElement("span");
       name.className = "fr-name";
       const label = bundle.title || bundle.domain.label;
-      name.textContent = `${label} — ${bundle.plateaus.length} topic${bundle.plateaus.length === 1 ? "" : "s"}, ${bundle.bridges.length} bridge${bundle.bridges.length === 1 ? "" : "s"}`;
+      const n = bundle.plateaus.length;
+      const nb = bundle.bridges.length;
+      // Provenance: which repo this lens came from is the thing that makes an
+      // adopted lens trustworthy, so show it rather than just the label.
+      name.textContent = `${label} — ${n} topic${n === 1 ? "" : "s"}, ${nb} bridge${nb === 1 ? "" : "s"}${source ? ` · from ${source}` : ""}`;
       const actions = document.createElement("div");
-      actions.className = "follow-actions";
+      actions.className = "fr-actions";
       const adopt = document.createElement("button");
       adopt.type = "button";
       adopt.textContent = "Adopt ↓";
@@ -5537,28 +5569,50 @@ async function main() {
     const token = lensAdoptToken.value.trim();
     lensAdoptResults.replaceChildren();
     lensAdoptSay(`Looking for lenses in ${parsed.owner}/${parsed.repo}…`);
-    let paths;
     try {
-      paths = await ghListLensesFrom(parsed.owner, parsed.repo, "main", token, parsed.base);
-    } catch (e) {
-      return lensAdoptSay(`Couldn't read that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
-    }
-    if (!paths.length) return lensAdoptSay(`No lenses found there — that repo has no lenses/ folder yet. Ask them to Publish ↑ one.`, true);
-    const bundles = [];
-    for (const path of paths) {
+      let paths;
       try {
-        const text = await ghGetTextFrom(parsed.owner, parsed.repo, "main", token, parsed.base, path);
-        const b = parseLensBundle(text);
-        if (b) bundles.push(b);
-      } catch { /* skip an unreadable/oddly-shaped file, keep the rest */ }
+        paths = await ghListLensesFrom(parsed.owner, parsed.repo, "main", token, parsed.base);
+      } catch (e) {
+        return lensAdoptSay(`Couldn't read that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
+      }
+      if (!paths.length) return lensAdoptSay(`No lenses found there — that repo has no lenses/ folder yet. Ask them to Publish ↑ one.`, true);
+      // R-0093a: keep WHY each file was skipped. Folding a rate-limit, an
+      // oversized file and a corrupt file into one "none were valid" message
+      // sends the reader hunting for a problem that isn't theirs.
+      const bundles = [];
+      const unreadable = [];
+      let tooNew = 0;
+      for (const path of paths) {
+        try {
+          const text = await ghGetTextFrom(parsed.owner, parsed.repo, "main", token, parsed.base, path);
+          const res = parseLensBundleResult(text);
+          if (res.bundle) bundles.push(res.bundle);
+          else if (res.error === "too-new") tooNew++;
+        } catch (e) {
+          unreadable.push(`${path.replace(/^lenses\//, "")} (${e?.message ?? e})`);
+        }
+      }
+      if (!bundles.length) {
+        if (tooNew) return lensAdoptSay(`Found ${tooNew} lens${tooNew === 1 ? "" : "es"} written by a NEWER version of the app — update this app to adopt ${tooNew === 1 ? "it" : "them"}.`, true);
+        if (unreadable.length) return lensAdoptSay(`Couldn't read ${unreadable.length} of ${paths.length} file${paths.length === 1 ? "" : "s"}: ${unreadable.slice(0, 2).join("; ")}.`, true);
+        return lensAdoptSay(`Found ${paths.length} file${paths.length === 1 ? "" : "s"} in lenses/, but none were valid lens bundles.`, true);
+      }
+      const extra = [
+        tooNew ? `${tooNew} need${tooNew === 1 ? "s" : ""} a newer app` : "",
+        unreadable.length ? `${unreadable.length} unreadable` : "",
+      ].filter(Boolean).join(", ");
+      lensAdoptSay(`${bundles.length} lens${bundles.length === 1 ? "" : "es"} available — tap Adopt to merge one onto your map.${extra ? ` (${extra}.)` : ""}`);
+      renderAdoptResults(`${parsed.owner}/${parsed.repo}`, bundles);
+    } finally {
+      // Clear on EVERY path, not just success — after a failed list the token
+      // would otherwise sit in the DOM for the rest of the session.
+      lensAdoptToken.value = "";
     }
-    if (!bundles.length) return lensAdoptSay(`Found ${paths.length} file${paths.length === 1 ? "" : "s"} in lenses/, but none were valid lens bundles.`, true);
-    lensAdoptToken.value = ""; // never leave a token sitting in a visible field
-    lensAdoptSay(`${bundles.length} lens${bundles.length === 1 ? "" : "es"} available — tap Adopt to merge one onto your map.`);
-    renderAdoptResults(`${parsed.owner}/${parsed.repo}`, bundles);
   });
   document.getElementById("lens-share-toggle").addEventListener("click", () => {
     lensSharePanel.hidden = !lensSharePanel.hidden;
+    lensAdoptToken.value = ""; // a token never outlives the panel being toggled
     if (!lensSharePanel.hidden) {
       lensPubStatus.hidden = true;
       lensAdoptStatus.hidden = true;
@@ -5566,7 +5620,10 @@ async function main() {
       refreshLensPubSelect();
     }
   });
-  document.getElementById("lens-share-close").addEventListener("click", () => (lensSharePanel.hidden = true));
+  document.getElementById("lens-share-close").addEventListener("click", () => {
+    lensSharePanel.hidden = true;
+    lensAdoptToken.value = "";
+  });
 
   // ── 🔴 Live sync — same-network P2P (R-0089) ────────────────────────────────
   // Two of YOUR devices on the same network auto-pair through the R-0058 relay
