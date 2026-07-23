@@ -11,7 +11,19 @@ import {
   resourceKindFor,
   captureBody,
   unwiredIds,
+  titleFromNote,
 } from "./capture.js";
+
+test("titleFromNote (R-0092): first meaningful line, marks stripped, capped; blank → ''", () => {
+  assert.equal(titleFromNote("Law of cosines\n\nc² = a²+b²-2ab·cosθ"), "Law of cosines");
+  assert.equal(titleFromNote("\n\n  # **Rotors** are rotations  \nmore"), "Rotors are rotations");
+  assert.equal(titleFromNote("- a bullet thought"), "a bullet thought");
+  assert.equal(titleFromNote("![boox](data:image/png;base64,AAAA)\nActual title"), "Actual title");
+  assert.equal(titleFromNote(""), "");
+  assert.equal(titleFromNote("   \n\t\n"), "");
+  const long = "x".repeat(80);
+  assert.ok(titleFromNote(long).length <= 61 && titleFromNote(long).endsWith("…"));
+});
 
 const TOPICS = [
   { id: "t1", name: "Vectors", lens: "Geometric Algebra", domain: "ga", body: "A vector has magnitude and direction. The dot product measures alignment." },
