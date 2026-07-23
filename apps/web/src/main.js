@@ -131,6 +131,7 @@ import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
+import { buildLensBundle, parseLensBundle, applyLensBundle, lensBundlePath, LENS_DIR } from "./lens-bundle.js"; // R-0093 lens as a portable, adoptable subgraph
 import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
   PRESETS,
@@ -5397,6 +5398,175 @@ async function main() {
     }
   });
   document.getElementById("follow-close").addEventListener("click", () => (followPanel.hidden = true));
+
+  // ── 🔬 Publish / adopt a lens (R-0093) ──────────────────────────────────────
+  // The whole-world snapshot (R-0081) syncs YOUR devices. A LENS bundle is the
+  // shareable partition: one domain plus every plateau/bridge/resource under it,
+  // written to lenses/<id>.json. Publishing writes that file to your own sync
+  // repo; adopting pulls a bundle from ANY repo and seeds it idempotently (by id)
+  // — so your own topics are never touched and re-adopting is a no-op.
+  const lensSharePanel = document.getElementById("lens-share");
+  const lensPubSelect = document.getElementById("lens-pub-select");
+  const lensPubStatus = document.getElementById("lens-pub-status");
+  const lensAdoptRepo = document.getElementById("lens-adopt-repo");
+  const lensAdoptToken = document.getElementById("lens-adopt-token");
+  const lensAdoptStatus = document.getElementById("lens-adopt-status");
+  const lensAdoptResults = document.getElementById("lens-adopt-results");
+  const lensPubSay = (t, err) => { lensPubStatus.hidden = false; lensPubStatus.textContent = t; lensPubStatus.classList.toggle("err", !!err); };
+  const lensAdoptSay = (t, err) => { lensAdoptStatus.hidden = false; lensAdoptStatus.textContent = t; lensAdoptStatus.classList.toggle("err", !!err); };
+
+  // Count plateaus per domain so the publish picker shows what each lens holds.
+  function lensPlateauCounts() {
+    const counts = new Map();
+    for (const p of doc.to_graph().plateaus()) counts.set(p.domain_id, (counts.get(p.domain_id) || 0) + 1);
+    return counts;
+  }
+  function refreshLensPubSelect() {
+    const counts = lensPlateauCounts();
+    lensPubSelect.replaceChildren();
+    for (const d of allDomains()) {
+      const n = counts.get(d.id) || 0;
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = `${d.label} — ${n} topic${n === 1 ? "" : "s"}`;
+      lensPubSelect.append(opt);
+    }
+  }
+  // Seed a parsed bundle into the live doc, idempotently, and register its domain
+  // locally (custom domains live in localStorage, not the CRDT) so the adopted
+  // lens is faceable with its own canonical axis. Returns the applied counts.
+  function seedLensBundle(bundle) {
+    const before = doc.to_graph().plateaus().length;
+    applyLensBundle(bundle, {
+      onDomain: (d) => {
+        // Don't duplicate a built-in or already-known domain in mp.domains.
+        if (!allDomains().some((x) => x.id === d.id))
+          addCustomDomain({ id: d.id, label: d.label, canonical: d.canonical });
+      },
+      plateau: (id, name, domainId, e1, e2, e3, desc) => doc.seed_plateau(id, name, domainId, e1, e2, e3, desc),
+      bridge: (id, from, to, concept) => doc.seed_bridge(id, from, to, concept),
+      resource: (id, pid, title, kind, uri) => doc.seed_resource(id, pid, title, kind, uri),
+    });
+    for (const p of doc.to_graph().plateaus()) DOMAIN_OF.set(p.id, p.domain_id);
+    sync.pump();
+    pumpPeer();
+    persist(); // also auto-backs-up the adopted lens into your own world (R-0088)
+    draw();
+    refreshDomainSelect(); // the adopted lens becomes pickable in Draft-a-plateau
+    return doc.to_graph().plateaus().length - before;
+  }
+
+  document.getElementById("lens-pub-go").addEventListener("click", async () => {
+    if (!notesSyncCfg) return lensPubSay("Connect 📓 Sync (your repo + token) first — that's where the lens file is written.", true);
+    const domainId = lensPubSelect.value;
+    const domain = allDomains().find((d) => d.id === domainId);
+    if (!domain) return lensPubSay("Pick a lens to publish.", true);
+    const g = doc.to_graph();
+    const bundle = buildLensBundle(domain, g.plateaus(), g.bridges(), g.resources(), {
+      title: domain.label,
+      author: myPubkey, // stable public wizard id — provenance, never a secret
+    });
+    if (bundle.counts.plateaus === 0) return lensPubSay(`“${domain.label}” has no topics yet — map some under this lens, then publish.`, true);
+    const path = lensBundlePath(domainId);
+    lensPubSay(`Publishing “${domain.label}” (${bundle.counts.plateaus} topics, ${bundle.counts.bridges} bridges)…`);
+    try {
+      const existing = await ghGetNote(path); // its sha, if already published (update)
+      await ghPutNote(path, JSON.stringify(bundle, null, 2), existing?.sha);
+    } catch (e) {
+      return lensPubSay(`Couldn't publish (${e?.message ?? e}) — is 📓 Sync still connected with write access?`, true);
+    }
+    lensPubSay(`Published ✓ — “${domain.label}” is now at ${path} in your repo. Share your repo; others can adopt it below.`);
+  });
+
+  // Read one text file from ANY repo (public, or private with a read token) —
+  // mirrors ghGetWorldFrom but returns decoded text for a lens bundle.
+  async function ghGetTextFrom(owner, repo, branch, token, base, path) {
+    const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(contentsApiUrl(base || GITHUB_API, owner, repo, path, branch || "main"), { headers });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`${res.status}`);
+    const j = await res.json();
+    return b64DecodeUtf8(j.content || "");
+  }
+  // List the lenses/ directory of a repo — the contents API returns an array for
+  // a directory. Returns the .json entries' paths (each is one lens bundle).
+  async function ghListLensesFrom(owner, repo, branch, token, base) {
+    const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(contentsApiUrl(base || GITHUB_API, owner, repo, LENS_DIR, branch || "main"), { headers });
+    if (res.status === 404) return []; // no lenses/ dir → nothing published there
+    if (!res.ok) throw new Error(`${res.status}`);
+    const arr = await res.json();
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((e) => e && e.type === "file" && /\.json$/i.test(e.name)).map((e) => e.path);
+  }
+  function renderAdoptResults(source, bundles) {
+    lensAdoptResults.replaceChildren();
+    for (const bundle of bundles) {
+      const row = document.createElement("div");
+      row.className = "follow-row";
+      const name = document.createElement("span");
+      name.className = "fr-name";
+      const label = bundle.title || bundle.domain.label;
+      name.textContent = `${label} — ${bundle.plateaus.length} topic${bundle.plateaus.length === 1 ? "" : "s"}, ${bundle.bridges.length} bridge${bundle.bridges.length === 1 ? "" : "s"}`;
+      const actions = document.createElement("div");
+      actions.className = "follow-actions";
+      const adopt = document.createElement("button");
+      adopt.type = "button";
+      adopt.textContent = "Adopt ↓";
+      adopt.addEventListener("click", () => {
+        let gained;
+        try {
+          gained = seedLensBundle(bundle);
+        } catch (e) {
+          return lensAdoptSay(`Couldn't adopt “${label}” (${e?.message ?? e}).`, true);
+        }
+        adopt.textContent = "Adopted ✓";
+        adopt.disabled = true;
+        lensAdoptSay(gained > 0 ? `Adopted “${label}” ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged onto your map.` : `Adopted “${label}” ✓ — you already had these topics.`);
+      });
+      actions.append(adopt);
+      row.append(name, actions);
+      lensAdoptResults.append(row);
+    }
+  }
+  document.getElementById("lens-adopt-list").addEventListener("click", async () => {
+    const parsed = parseRepoUrl(lensAdoptRepo.value);
+    if (!parsed) return lensAdoptSay("That doesn't look like owner/repo (or a repo URL).", true);
+    const token = lensAdoptToken.value.trim();
+    lensAdoptResults.replaceChildren();
+    lensAdoptSay(`Looking for lenses in ${parsed.owner}/${parsed.repo}…`);
+    let paths;
+    try {
+      paths = await ghListLensesFrom(parsed.owner, parsed.repo, "main", token, parsed.base);
+    } catch (e) {
+      return lensAdoptSay(`Couldn't read that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
+    }
+    if (!paths.length) return lensAdoptSay(`No lenses found there — that repo has no lenses/ folder yet. Ask them to Publish ↑ one.`, true);
+    const bundles = [];
+    for (const path of paths) {
+      try {
+        const text = await ghGetTextFrom(parsed.owner, parsed.repo, "main", token, parsed.base, path);
+        const b = parseLensBundle(text);
+        if (b) bundles.push(b);
+      } catch { /* skip an unreadable/oddly-shaped file, keep the rest */ }
+    }
+    if (!bundles.length) return lensAdoptSay(`Found ${paths.length} file${paths.length === 1 ? "" : "s"} in lenses/, but none were valid lens bundles.`, true);
+    lensAdoptToken.value = ""; // never leave a token sitting in a visible field
+    lensAdoptSay(`${bundles.length} lens${bundles.length === 1 ? "" : "es"} available — tap Adopt to merge one onto your map.`);
+    renderAdoptResults(`${parsed.owner}/${parsed.repo}`, bundles);
+  });
+  document.getElementById("lens-share-toggle").addEventListener("click", () => {
+    lensSharePanel.hidden = !lensSharePanel.hidden;
+    if (!lensSharePanel.hidden) {
+      lensPubStatus.hidden = true;
+      lensAdoptStatus.hidden = true;
+      lensAdoptResults.replaceChildren();
+      refreshLensPubSelect();
+    }
+  });
+  document.getElementById("lens-share-close").addEventListener("click", () => (lensSharePanel.hidden = true));
 
   // ── 🔴 Live sync — same-network P2P (R-0089) ────────────────────────────────
   // Two of YOUR devices on the same network auto-pair through the R-0058 relay
