@@ -779,6 +779,245 @@ $$\\nabla F = J$$
 
 **Deliverable:** for each quantity in your first physics course, write down its grade, and flag the ones the course calls vectors that are really bivectors.`,
   },
+
+  // ── Cuatrimestres 4–6 (R-0098) ─────────────────────────────────────────────
+  // Where GA stops being elegant notation and starts doing work: vector calculus
+  // collapses to one theorem, Maxwell's four equations to one, boosts become
+  // rotors, and spinors turn out to be even-grade elements you already know.
+  {
+    id: SIA(4), name: "SIA view: Cálculo III — several variables, still no limits",
+    domain: SIA_DOMAIN, e1: 0.9, e2: 0.15, e3: 0.45,
+    description:
+`# SIA view: Cálculo III — several variables, still no limits
+
+${twinNote}
+
+Microaffineness generalizes to several variables with no new machinery. For nilsquare $\\varepsilon, \\delta \\in \\Delta$:
+
+$$f(x+\\varepsilon,\\; y+\\delta) = f(x,y) + \\varepsilon\\,\\partial_x f + \\delta\\,\\partial_y f$$
+
+again an **equality**. The partial derivatives are not defined by freezing one variable and taking a limit in the other — they are simply the two coefficients in the unique linear expansion. That is also the honest definition of the **gradient**: $\\nabla f$ is the vector whose components are those coefficients, so "the gradient is the direction of steepest ascent" stops being a fact to memorise and becomes a reading of the formula.
+
+**Where the course does extra work.** It must prove that partial derivatives existing does not imply differentiability (the standard counterexamples with a cusp at the origin). In SIA that pathology cannot arise: every function is smooth, so microaffineness holds everywhere and the linear expansion always exists. You lose the counterexamples; you gain never having to worry about them.
+
+**The chain rule in several variables** is one substitution, exactly as in one: expand the inner functions to first order, substitute, drop what has a repeated infinitesimal, read off the coefficients.
+
+**Deliverable:** derive the multivariable chain rule for $f(u(t), v(t))$ using only microaffineness, and say precisely which term you discarded and why it vanished.`,
+  },
+  {
+    id: GA(8), name: "GA view: Álgebra Lineal II — eigenplanes, not just eigenvectors",
+    domain: GA_DOMAIN, e1: 0.78, e2: 0.5, e3: 0.28,
+    description:
+`# GA view: Álgebra Lineal II — eigenplanes, not just eigenvectors
+
+${twinNote}
+
+The course diagonalizes a rotation matrix in $\\mathbb{R}^3$ and finds one real eigenvalue $(+1$, the axis$)$ and a complex conjugate pair. Students are told the complex pair "means a rotation" and to move on. GA says what it actually is.
+
+**A rotation's invariant object is a plane, not an axis.** In GA the rotation is $v \\mapsto RvR^{-1}$ with $R = e^{-B\\theta/2}$, and $B$ is the **bivector of the plane being rotated in**. The complex eigenvalue pair the course found is that bivector wearing coordinates: the $\\pm i$ is $B$ with $B^2 = -1$. The "axis" is only the dual of $B$ — an accident of three dimensions. In 4-D there is no axis at all, but there is still a plane, so the GA statement survives and the matrix statement does not.
+
+**Symmetric operators and principal axes.** The spectral theorem still does the heavy lifting, but its geometric content is cleaner in GA: a symmetric operator stretches along orthogonal directions, and the quadratic form's principal axes are those directions. GA gives you the **outermorphism** — a linear map extended to act on blades — so you can watch what the operator does to areas and volumes, which is exactly $\\det$ acting on the pseudoscalar.
+
+**Kept honest.** GA does **not** replace linear algebra here. Non-orthogonal maps, rank, nullity, Jordan form and general eigenproblems still want matrices. What GA replaces is the *geometric* half — which is the half physics keeps using.
+
+**Deliverable:** take a $3\\times3$ rotation matrix, extract its axis and angle the course way, then write the same rotation as a rotor $e^{-B\\theta/2}$ and confirm $B$ is dual to that axis.`,
+  },
+  {
+    id: GA(9), name: "GA view: Física II — orbits, waves and the conserved plane",
+    domain: GA_DOMAIN, e1: 0.62, e2: 0.78, e3: 0.25,
+    description:
+`# GA view: Física II — orbits, waves and the conserved plane
+
+${twinNote}
+
+**Kepler's second law is a one-line consequence.** Angular momentum is the bivector $L = r \\wedge p$. For a central force, $\\dot L = r \\wedge F = 0$ because $F \\parallel r$ and the wedge of parallel vectors vanishes. But $r \\wedge \\Delta r$ *is* twice the area the radius sweeps — the wedge is an area, that is what it means. So "$L$ is conserved" and "equal areas in equal times" are the **same sentence**, not a derivation. The course proves this with a cross product and a picture; GA makes it a definition.
+
+**The orbit is confined to a plane** for the same reason: $L$ is that plane, and it does not change. No argument about "the force has no component out of the plane" is needed.
+
+**Simple harmonic motion as a rotor.** Circular motion is $r(t) = R(t)\\, r_0 \\,\\tilde R(t)$ with $R(t) = e^{-B\\omega t/2}$. Projecting onto one axis gives SHM, so the "$\\cos\\omega t$ and $\\sin\\omega t$ are two views of a rotation" remark your course makes in passing becomes literal: they are the components of one rotor.
+
+**Waves.** A plane wave's phase is a rotor angle, and polarization is a rotor acting in the plane transverse to propagation — the same object as in the Óptica twin, so the two courses share machinery rather than each inventing its own.
+
+**Deliverable:** show $\\dot L = 0$ for any central force using only $r \\wedge r = 0$, then state Kepler's second law without using the word "cross product".`,
+  },
+  {
+    id: GA(10), name: "GA view: Electromagnetismo I — one equation for the static field",
+    domain: GA_DOMAIN, e1: 0.68, e2: 0.8, e3: 0.18,
+    description:
+`# GA view: Electromagnetismo I — one equation for the static field
+
+${twinNote}
+
+Electrostatics in the course is **two** equations:
+
+$$\\nabla \\cdot E = \\rho/\\varepsilon_0, \\qquad \\nabla \\times E = 0$$
+
+one about sources, one about circulation, and no stated reason why the same field obeys two unrelated-looking laws. GA supplies the reason: they are the **two grades of a single product**.
+
+The vector derivative $\\nabla$ multiplies geometrically like any vector, so it splits exactly the way $ab = a\\cdot b + a\\wedge b$ does:
+
+$$\\nabla E = \\nabla \\cdot E + \\nabla \\wedge E$$
+
+a scalar plus a bivector. Setting the scalar part to $\\rho/\\varepsilon_0$ and the bivector part to zero is *one* equation:
+
+$$\\nabla E = \\rho/\\varepsilon_0$$
+
+**Why this matters now, before Electromagnetismo II.** That single equation is the static case of $\\nabla F = J$ — the whole of Maxwell. If you learn electrostatics as "two laws that happen to hold", the unification next cuatrimestre looks like a magic trick. If you learn it as one product split by grade, next cuatrimestre is just adding the time and magnetic parts.
+
+**The potential.** $\\nabla \\wedge E = 0$ says $E$ has no bivector part, which is exactly the condition for $E = -\\nabla\\phi$ — curl-free means gradient-of-something, and in GA that is a statement about grade, not a vector identity to memorise.
+
+**Deliverable:** take a spherically symmetric charge distribution, compute $\\nabla E$ as a single geometric product, and read both of the course's equations off the grades of your answer.`,
+  },
+  {
+    id: GA(11), name: "GA view: Cálculo IV — Green, Stokes and divergence are ONE theorem",
+    domain: GA_DOMAIN, e1: 0.8, e2: 0.62, e3: 0.25,
+    description:
+`# GA view: Cálculo IV — Green, Stokes and divergence are ONE theorem
+
+${twinNote}
+
+This is the course where GA pays for itself. Vector calculus asks you to memorise a family of integral theorems that look related but are stated separately:
+
+- the gradient theorem, $\\int_a^b \\nabla\\phi \\cdot dr = \\phi(b)-\\phi(a)$
+- Green's theorem in the plane
+- Stokes' theorem for a surface
+- the divergence theorem for a volume
+
+**They are one theorem.** The fundamental theorem of geometric calculus says that for a region $M$ with boundary $\\partial M$,
+
+$$\\int_{\\partial M} dS\\, F = \\int_M dV\\, \\nabla F$$
+
+Every theorem above is this statement with $M$ of a particular dimension and $F$ of a particular grade. The reason they *looked* different is that the course had to pick out one grade at a time — $\\nabla \\cdot$ here, $\\nabla \\times$ there — because it lacked a product that keeps all grades at once.
+
+**A bonus the course never mentions:** the same theorem, in two dimensions with $F$ analytic, is **Cauchy's integral theorem**. Complex analysis and vector calculus are not neighbours; they are the same result read in different grades.
+
+**How to hold it.** "The integral of the derivative over a region equals the integral of the thing over the boundary" — dimension and grade are parameters, not new theorems.
+
+**Deliverable:** write the divergence theorem and Stokes' theorem side by side, then show both are $\\int_{\\partial M} dS\\,F = \\int_M dV\\,\\nabla F$ with different $\\dim M$ and different grade of $F$.`,
+  },
+  {
+    id: GA(12), name: "GA view: EDP — the Laplacian factors, which is why Maxwell is first-order",
+    domain: GA_DOMAIN, e1: 0.82, e2: 0.6, e3: 0.25,
+    description:
+`# GA view: EDP — the Laplacian factors, which is why Maxwell is first-order
+
+${twinNote}
+
+The course classifies second-order PDEs and solves the three archetypes. GA adds a structural fact the course cannot state: **the Laplacian is a square.**
+
+Because $\\nabla$ is a vector that multiplies geometrically, $\\nabla^2 = \\nabla\\nabla$ — the second-order operator is the *first-order* operator applied twice:
+
+$$\\nabla^2 = \\nabla \\cdot \\nabla$$
+
+So every second-order equation you meet has a first-order equation hiding underneath it, and the first-order one is usually the physical law. Two consequences you will meet by name:
+
+**Maxwell.** The wave equation $\\nabla^2 A = J$ is second-order, but the actual law is $\\nabla F = J$ — first-order, one equation. The wave equation is what you get by squaring, which is why it appears to have more solutions than physics allows (gauge freedom) — squaring lost information.
+
+**Dirac.** Dirac wanted a first-order equation whose square was the second-order Klein–Gordon operator. In GA that is not a stroke of genius to be astonished by, it is factoring: find the operator whose square is $\\nabla^2$. The $\\gamma$ matrices are the basis vectors of spacetime, and their famous anticommutation $\\gamma^\\mu\\gamma^\\nu + \\gamma^\\nu\\gamma^\\mu = 2\\eta^{\\mu\\nu}$ is just $ab + ba = 2a\\cdot b$.
+
+**Separation of variables**, meanwhile, is unchanged — GA does not replace the solution technique. It tells you *which* equation deserves to be solved.
+
+**Deliverable:** verify $\\nabla^2 = \\nabla\\nabla$ in Cartesian components, then write the vacuum wave equation and $\\nabla F = 0$ and say what the second-order form lost.`,
+  },
+  {
+    id: GA(13), name: "GA view: Electromagnetismo II — ∇F = J, all four equations at once",
+    domain: GA_DOMAIN, e1: 0.72, e2: 0.85, e3: 0.2,
+    description:
+`# GA view: Electromagnetismo II — ∇F = J, all four equations at once
+
+${twinNote}
+
+The flagship result of this whole parallel view.
+
+Your course ends with **four** Maxwell equations: Gauss for $E$, Gauss for $B$, Faraday, Ampère–Maxwell. Two are about divergence, two about curl; two have sources, two do not. They are drilled as a set to be memorised.
+
+**In spacetime algebra they are one equation.** Combine the fields into a single **bivector**
+
+$$F = E + IB$$
+
+($E$ grade 1, $B$ grade 2 via the pseudoscalar $I$ — this is why $B$ needed a right-hand rule: it was a bivector all along, as the very first GA twin said). Then all four laws are
+
+$$\\nabla F = J$$
+
+That is not shorthand. Expanding $\\nabla F$ by grade gives back exactly four components, and they are exactly the four equations — sources in the odd grades, the source-free pair in the even. The four "separate laws" were one product, split up by a formalism that had no way to keep grades together.
+
+**What falls out for free:**
+- **Vacuum:** $J = 0$ gives $\\nabla F = 0$; hit it with $\\nabla$ again and $\\nabla^2 F = 0$ — the wave equation, and $c$ from the constants.
+- **Lorentz covariance** is manifest: $F$ is one geometric object, so a boost acts on it by a rotor sandwich, $F' = LF\\tilde L$. No transformation table for how $E$ and $B$ mix — the mixing IS the rotor acting on one bivector.
+- **The Lorentz force** becomes $\\dot p = qF \\cdot v$, one expression instead of $q(E + v\\times B)$.
+
+**Deliverable:** expand $\\nabla F = J$ grade by grade and match each grade to one of the four equations you were examined on. This single exercise is the best argument for GA in the degree.`,
+  },
+  {
+    id: GA(14), name: "GA view: Física IV — a boost is a rotation through an imaginary angle",
+    domain: GA_DOMAIN, e1: 0.75, e2: 0.8, e3: 0.22,
+    description:
+`# GA view: Física IV — a boost is a rotation through an imaginary angle
+
+${twinNote}
+
+The course gives you the Lorentz transformation as a matrix of $\\gamma$'s and $\\beta$'s to substitute into. GA says what a boost **is**.
+
+In spacetime algebra the basis vectors satisfy $\\gamma_0^2 = +1$ and $\\gamma_i^2 = -1$. A **spatial rotation** is the rotor $R = e^{-B\\theta/2}$ where $B$ is a bivector of two spatial vectors, and $B^2 = -1$. A **boost** is the same expression with a bivector mixing time and space, e.g. $B = \\gamma_0\\gamma_1$, for which $B^2 = +1$. That single sign difference turns the circular functions into hyperbolic ones:
+
+$$L = e^{\\gamma_0\\gamma_1 \\alpha/2}, \\qquad v' = L\\,v\\,\\tilde L$$
+
+with $\\alpha$ the **rapidity**, $\\tanh\\alpha = \\beta$. A boost is a rotation in a time–space plane. Same operation, different plane signature.
+
+**Why rapidity is the natural variable.** Rotors compose by *multiplication*, so boosts along one direction add their rapidities: $\\alpha_1 + \\alpha_2$. The velocity-addition formula's awkward $\\frac{v_1+v_2}{1+v_1v_2/c^2}$ is just $\\tanh(\\alpha_1+\\alpha_2)$ expanded — it looks ugly only because velocity is the wrong coordinate for a rotation angle.
+
+**Thomas precession**, which the course may mention as a curiosity, is the statement that two boosts in different planes do not commute — their rotor product leaves a leftover spatial rotation. In matrices that is a computation; in rotors it is obvious.
+
+**Deliverable:** compose two collinear boosts as rotors, add the rapidities, and recover the velocity-addition formula from $\\tanh(\\alpha_1+\\alpha_2)$.`,
+  },
+  {
+    id: SIA(5), name: "SIA view: Termodinámica — the differentials were real all along",
+    domain: SIA_DOMAIN, e1: 0.85, e2: 0.35, e3: 0.42,
+    description:
+`# SIA view: Termodinámica — the differentials were real all along
+
+${twinNote}
+
+No course manipulates infinitesimals as freely as thermodynamics:
+
+$$dU = T\\,dS - P\\,dV$$
+
+then cheerfully divides by $dV$, holds $S$ fixed, cross-differentiates, and reads off a Maxwell relation. Standard analysis cannot justify any of that literally — $dU$ is not a number, and every step has to be re-explained as shorthand for a limit or a differential form. Students learn to do it anyway and quietly stop asking.
+
+**In SIA the manipulation is legitimate as written.** $dV$ *is* an infinitesimal increment, and microaffineness makes the first-order expansion an equality, so
+
+$$U(S+\\varepsilon,\\, V+\\delta) = U + \\varepsilon\\Big(\\tfrac{\\partial U}{\\partial S}\\Big) + \\delta\\Big(\\tfrac{\\partial U}{\\partial V}\\Big)$$
+
+is exact, and identifying $T = \\partial U/\\partial S$ and $-P = \\partial U/\\partial V$ is reading coefficients, not an abuse of notation.
+
+**Maxwell relations** then come from the symmetry of the second-order expansion — the mixed partials of $U$ agree, so
+
+$$\\Big(\\tfrac{\\partial T}{\\partial V}\\Big)_S = -\\Big(\\tfrac{\\partial P}{\\partial S}\\Big)_V$$
+
+The physical payoff is unchanged and worth restating: this lets you measure something hard (an entropy change) via something easy (a pressure change), purely because a potential's differential is exact.
+
+**Honest caveat.** Mixed second derivatives need more than a single nilsquare — SIA handles this with higher-order infinitesimals and microlinearity, which is machinery this note does not develop. The first-order reasoning your course actually uses is what becomes exact.
+
+**Deliverable:** derive one Maxwell relation from the exactness of $dU$, then name a laboratory measurement it lets you avoid doing directly.`,
+  },
+  {
+    id: GA(15), name: "GA view: Mecánica Cuántica I — a spinor is an even-grade element",
+    domain: GA_DOMAIN, e1: 0.8, e2: 0.72, e3: 0.25,
+    description:
+`# GA view: Mecánica Cuántica I — a spinor is an even-grade element
+
+${twinNote}
+
+The course introduces the Pauli matrices as a postulate: three $2\\times2$ complex matrices with peculiar commutation relations, and spinors as two-component complex column vectors that famously need $720°$ to come back to themselves. It is presented as a place where intuition must be abandoned.
+
+**None of it is new.** Take the three basis vectors $e_1, e_2, e_3$ of ordinary 3-D space in GA. Their products $e_1e_2,\\, e_2e_3,\\, e_3e_1$ are bivectors, each squaring to $-1$. Those are the Pauli matrices — $\\sigma_i$ corresponds to $e_i$, and $i\\sigma_i$ to a bivector. The "peculiar" commutation relation $\\sigma_i\\sigma_j = \\delta_{ij} + i\\epsilon_{ijk}\\sigma_k$ is just $ab = a\\cdot b + a\\wedge b$ written in a basis.
+
+**A spinor is an even-grade multivector** — scalar plus bivector — which is exactly a **rotor**. So a spin state is not a mysterious two-component object: it is an *orientation together with a phase*, the same thing that rotates vectors by $v \\mapsto \\psi v \\tilde\\psi$.
+
+**And the $720°$ stops being strange.** A rotor $R$ and $-R$ produce the *same* rotation, because the sandwich $RvR^{-1}$ is quadratic in $R$ — the sign cancels. So a full $360°$ turn returns the vector but flips the rotor's sign; you need $720°$ to bring the rotor itself home. Spin-½ is not a quantum mystery, it is the geometry of rotations in any dimension, visible in classical GA long before quantum mechanics is mentioned.
+
+**Deliverable:** map $\\sigma_x, \\sigma_y, \\sigma_z$ onto $e_1, e_2, e_3$, verify one commutation relation as a geometric product, then rotate a rotor by $360°$ and observe the sign flip.`,
+  },
 ];
 
 // ── Bridges ─────────────────────────────────────────────────────────────────
@@ -831,6 +1070,17 @@ export const UNIVERSITAM_BRIDGES = [
   { id: BR(47), from: GA(5), to: U(15), concept: "alternative formulation of" },
   { id: BR(48), from: GA(6), to: U(8), concept: "alternative formulation of" },
   { id: BR(49), from: GA(7), to: U(3), concept: "alternative formulation of" },
+  // cuatrimestres 4–6 (R-0098)
+  { id: BR(50), from: SIA(4), to: U(17), concept: "alternative formulation of" }, // Cálculo III
+  { id: BR(51), from: GA(8), to: U(18), concept: "alternative formulation of" },  // Álgebra Lineal II
+  { id: BR(52), from: GA(9), to: U(20), concept: "alternative formulation of" },  // Física II
+  { id: BR(53), from: GA(10), to: U(21), concept: "alternative formulation of" }, // Electromagnetismo I
+  { id: BR(54), from: GA(11), to: U(22), concept: "alternative formulation of" }, // Cálculo IV
+  { id: BR(55), from: GA(12), to: U(24), concept: "alternative formulation of" }, // EDP
+  { id: BR(56), from: GA(13), to: U(26), concept: "alternative formulation of" }, // Electromagnetismo II
+  { id: BR(57), from: GA(14), to: U(27), concept: "alternative formulation of" }, // Física IV
+  { id: BR(58), from: SIA(5), to: U(28), concept: "alternative formulation of" }, // Termodinámica
+  { id: BR(59), from: GA(15), to: U(30), concept: "alternative formulation of" }, // Mecánica Cuántica I
 ];
 
 // ── The followable path: the degree in its official order ────────────────────
@@ -847,7 +1097,7 @@ export const UNIVERSITAM_PATH = {
 export const UNIVERSITAM_TWIN_PATH = {
   id: "d0000000-0000-0000-0000-000000000004",
   title: "The parallel view — GA & SIA over the degree",
-  goal: "The same first-year topics rebuilt in Geometric Algebra and Synthetic Infinitesimal Analysis — read alongside each course, not instead of it.",
+  goal: "The same topics rebuilt in Geometric Algebra and Synthetic Infinitesimal Analysis — read alongside each course, not instead of it. Cuatrimestres 1–6.",
   steps: [
     GA(7), // Introducción a la Física
     SIA(1), // Introducción al cálculo
@@ -859,5 +1109,16 @@ export const UNIVERSITAM_TWIN_PATH = {
     SIA(3), // Cálculo II
     GA(4), // Álgebra Lineal I
     GA(5), // Física I
+    // ── cuatrimestres 4–6, in syllabus order (R-0098) ────────────────────────
+    SIA(4), // Cálculo III
+    GA(8), // Álgebra Lineal II
+    GA(9), // Física II
+    GA(10), // Electromagnetismo I
+    GA(11), // Cálculo IV — the integral theorems become one
+    GA(12), // Ecuaciones Diferenciales Parciales
+    GA(13), // Electromagnetismo II — ∇F = J
+    GA(14), // Física IV — boosts as rotors
+    SIA(5), // Termodinámica
+    GA(15), // Mecánica Cuántica I — spinors as even-grade
   ],
 };

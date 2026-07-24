@@ -80,13 +80,41 @@ test("the twins cover the cuatrimestre 1-3 spine the owner is studying now", () 
                    "Introducción al álgebra", "Álgebra Superior", "Geometría Analítica",
                    "Álgebra Lineal I", "Física I", "Óptica", "Introducción a la Física"])
     assert.ok(twinned.includes(n), `no alternative view for ${n}`);
-  // the calculus spine is SIA; the geometry/algebra/mechanics spine is GA
+  // Which lens twins which course is a DELIBERATE pedagogical choice, not a
+  // pattern on the title: the differential/integral spine is SIA (infinitesimals
+  // replace limits), while VECTOR calculus is GA — Cálculo IV is where Green,
+  // Stokes and divergence collapse into one theorem, which SIA has nothing to say
+  // about. Assert the intended mapping explicitly so a wrong pairing is caught.
   const twinById = new Map(UNIVERSITAM_TWINS.map((t) => [t.id, t]));
-  for (const b of UNIVERSITAM_BRIDGES.filter((x) => x.concept === "alternative formulation of")) {
-    const name = courseOf.get(b.to);
-    const dom = twinById.get(b.from).domain;
-    if (/Cálculo/.test(name)) assert.equal(dom, SIA_DOMAIN, `${name} twin should be SIA`);
-  }
+  const lensOfCourse = new Map(
+    UNIVERSITAM_BRIDGES.filter((x) => x.concept === "alternative formulation of")
+      .map((b) => [courseOf.get(b.to), twinById.get(b.from).domain]),
+  );
+  for (const n of ["Introducción al cálculo", "Cálculo I", "Cálculo II", "Cálculo III", "Termodinámica"])
+    assert.equal(lensOfCourse.get(n), SIA_DOMAIN, `${n} twin should be SIA`);
+  for (const n of ["Introducción al álgebra", "Álgebra Superior", "Geometría Analítica",
+                   "Álgebra Lineal I", "Álgebra Lineal II", "Óptica", "Física I", "Física II",
+                   "Cálculo IV", "Electromagnetismo I", "Electromagnetismo II",
+                   "Ecuaciones Diferenciales Parciales", "Física IV", "Mecánica Cuántica I"])
+    assert.equal(lensOfCourse.get(n), GA_DOMAIN, `${n} twin should be GA`);
+});
+
+// R-0098 extended the parallel route into cuatrimestres 4–6, where GA does real
+// work rather than just renaming things.
+test("cuatrimestres 4-6 are twinned, including the flagship results", () => {
+  const courseOf = new Map(UNIVERSITAM_PLATEAUS.map((p) => [p.id, p.name]));
+  const twinned = new Set(
+    UNIVERSITAM_BRIDGES.filter((b) => b.concept === "alternative formulation of")
+      .map((b) => courseOf.get(b.to)),
+  );
+  for (const n of ["Cálculo III", "Álgebra Lineal II", "Física II", "Electromagnetismo I",
+                   "Cálculo IV", "Ecuaciones Diferenciales Parciales", "Electromagnetismo II",
+                   "Física IV", "Termodinámica", "Mecánica Cuántica I"])
+    assert.ok(twinned.has(n), `cuatrimestre 4-6 course not twinned: ${n}`);
+  assert.equal(UNIVERSITAM_TWINS.length, 20, "10 from R-0096 + 10 from R-0098");
+  // the flagship: Maxwell's four equations as one
+  const em2 = UNIVERSITAM_TWINS.find((t) => /Electromagnetismo II/.test(t.name));
+  assert.match(em2.description, /\\nabla F = J/, "the EM II twin must state ∇F = J");
 });
 
 test("both paths reference only real plateaus, in order, without repeats", () => {
