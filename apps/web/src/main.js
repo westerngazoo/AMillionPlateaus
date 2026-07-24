@@ -157,6 +157,7 @@ import { assembleMessages, sendTurn, sendVisionTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
+import { twinMap, pairPath, stepPair, pairPosition } from "./parallel.js"; // R-0097 study a topic in two formalisms at once
 import {
   rankResources,
   buildPlateauStudyContext,
@@ -2022,6 +2023,7 @@ async function main() {
     renderPrereqs(p); // R-0070 surface the curriculum steps to study before this one
     renderConfusionMarks(p.id); // R-0071 re-apply this topic's "I don't get this" marks
     hideRhActions(); // R-0071 a fresh topic starts with no active rabbit hole
+    renderParallelEntry(p); // R-0097 offer ⇄, and keep an open parallel view in step
     renderDeliverableCoach(p); // R-0073 🎯 walk me through the deliverable
     detail.hidden = false;
   }
@@ -3908,6 +3910,7 @@ async function main() {
   const iframeClose = document.getElementById("iframe-close");
   const splitIframe = document.getElementById("split-iframe");
 
+  let parallelOpen = false; // R-0097 — declared before setLayout, which reads it
   function setLayout(layout) {
     document.body.dataset.layout = layout;
     layoutDefault.classList.toggle("active", layout === "default");
@@ -3916,12 +3919,126 @@ async function main() {
     if (layout !== "split") {
       iframeContainer.hidden = true;
       splitIframe.src = "";
+      // R-0097: leaving split closes the parallel view too — otherwise the twin
+      // pane would linger as a fixed overlay with no half to live in.
+      const tp = document.getElementById("twin-pane");
+      if (tp) tp.hidden = true;
+      parallelOpen = false;
     }
   }
 
   layoutDefault.addEventListener("click", () => setLayout("default"));
   layoutFull.addEventListener("click", () => setLayout("full"));
   layoutSplit.addEventListener("click", () => setLayout("split"));
+
+  // ── ⇄ Parallel view — the same topic in two formalisms (R-0097) ─────────────
+  // R-0096 wrote a GA/SIA twin for each cuatrimestre-1–3 course and joined it by
+  // an `alternative formulation of` bridge. This puts the pair on screen at once:
+  // the course you must pass on the left, your own view of it on the right, each
+  // scrolling independently. ‹ / › move BOTH — they step the syllabus to the next
+  // topic that HAS a twin, so the parallel route is continuous instead of hitting
+  // 39 dead ends among the 49 asignaturas.
+  const twinPane = document.getElementById("twin-pane");
+  const twinLensEl = document.getElementById("twin-lens");
+  const twinNameEl = document.getElementById("twin-name");
+  const twinBodyEl = document.getElementById("twin-body");
+  const twinPrevBtn = document.getElementById("twin-prev");
+  const twinNextBtn = document.getElementById("twin-next");
+  const twinPosEl = document.getElementById("twin-pos");
+  const parallelToggle = document.getElementById("parallel-toggle");
+
+  // The route to walk: prefer a stored path that lists this topic directly, else
+  // one that lists its twin; among candidates take the longest (the full
+  // syllabus, not a 10-step excerpt). Falls back to the topic alone.
+  function pairsFor(id, map, bridges) {
+    const stored = Object.values(loadPaths()).filter((p) => Array.isArray(p.steps));
+    const mate = map.get(id) ?? null;
+    const direct = stored.filter((p) => p.steps.includes(id));
+    const viaTwin = mate ? stored.filter((p) => p.steps.includes(mate)) : [];
+    const best = [...direct, ...viaTwin].sort((a, b) => b.steps.length - a.steps.length)[0];
+    return pairPath(best ? best.steps : [id], bridges, map);
+  }
+
+  // Show/hide the ⇄ affordance for the open topic, and keep an open parallel
+  // view pointing at whatever the left pane is now showing.
+  function renderParallelEntry(p) {
+    const bridges = doc.to_graph().bridges();
+    const map = twinMap(bridges);
+    const mate = p && map.get(p.id);
+    parallelToggle.hidden = !mate;
+    if (parallelOpen) renderParallel(p?.id);
+  }
+
+  function renderParallel(leftId) {
+    const g = doc.to_graph();
+    const bridges = g.bridges();
+    const map = twinMap(bridges);
+    const plateaus = g.plateaus();
+    const byId = new Map(plateaus.map((x) => [x.id, x]));
+    const pairs = pairsFor(leftId, map, bridges);
+    const pos = pairPosition(pairs, leftId);
+    const mateId = map.get(leftId) ?? null;
+    const mate = mateId ? byId.get(mateId) : null;
+
+    if (mate) {
+      twinLensEl.textContent = labelForDomain(mate.domain_id);
+      twinNameEl.textContent = mate.name;
+      twinBodyEl.replaceChildren();
+      const art = document.createElement("div");
+      art.className = "detail-body";
+      // Same renderer as the main pane, minus the study machinery — this side is
+      // for reading the other formalism, not for re-running the whole workflow.
+      const { main: bodyMain } = splitDerivation(stripChallenges(mate.description || ""));
+      art.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+      twinBodyEl.append(art);
+      typesetMath(art);
+    } else {
+      twinLensEl.textContent = "";
+      twinNameEl.textContent = "No parallel view yet";
+      const msg = document.createElement("p");
+      msg.id = "twin-empty";
+      msg.textContent =
+        "This topic has no alternative-formalism twin written yet. Use Next › to jump to the closest one that does.";
+      twinBodyEl.replaceChildren(msg);
+    }
+
+    // Position on BOTH routes: where you are in the parallel walk, and where that
+    // sits in the full syllabus.
+    const twinnedBefore = pairs.slice(0, Math.max(pos.index, 0)).filter((x) => x.hasTwin).length;
+    twinPosEl.textContent = pos.found
+      ? `${mate ? `Parallel ${twinnedBefore + 1} of ${pos.twinned} · ` : ""}step ${pos.index + 1} of ${pos.total}`
+      : "";
+    twinPrevBtn.disabled = !stepPair(pairs, leftId, -1, { onlyTwinned: true });
+    twinNextBtn.disabled = !stepPair(pairs, leftId, 1, { onlyTwinned: true });
+    twinPrevBtn.onclick = () => jumpPair(pairs, leftId, -1);
+    twinNextBtn.onclick = () => jumpPair(pairs, leftId, 1);
+  }
+
+  // "Jump across paths": one control moves the course pane AND the twin pane,
+  // because the two routes are the same syllabus read twice.
+  function jumpPair(pairs, fromId, dir) {
+    const next = stepPair(pairs, fromId, dir, { onlyTwinned: true });
+    if (!next) return;
+    const target = doc.to_graph().plateaus().find((x) => x.id === next.left);
+    if (target) openPlateau(target); // re-renders the left pane; renderParallelEntry follows the right
+  }
+
+  function openParallel() {
+    if (!studyPlateau) return;
+    parallelOpen = true;
+    iframeContainer.hidden = true; // the two right-pane occupants are exclusive
+    splitIframe.src = "";
+    twinPane.hidden = false;
+    setLayout("split");
+    renderParallel(studyPlateau.id);
+  }
+  function closeParallel() {
+    parallelOpen = false;
+    twinPane.hidden = true;
+    if (document.body.dataset.layout === "split") setLayout("default");
+  }
+  parallelToggle.addEventListener("click", () => (parallelOpen ? closeParallel() : openParallel()));
+  document.getElementById("twin-close").addEventListener("click", closeParallel);
 
   iframeClose.addEventListener("click", () => {
     iframeContainer.hidden = true;
