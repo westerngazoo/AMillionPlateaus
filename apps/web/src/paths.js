@@ -60,6 +60,56 @@ export function pathRows(stepIds, doneSet = new Set()) {
 }
 
 /**
+ * A group label for a step, read from its plateau body — "Cuatrimestre 5" for the
+ * degree lens (R-0096). Returns null when there is no such marker, which is every
+ * other lens, so those paths render flat. Pure; the caller supplies the text.
+ */
+export function pathGroupLabel(description) {
+  const m = /Cuatrimestre\s+(\d+)/i.exec(String(description == null ? "" : description));
+  return m ? `Cuatrimestre ${m[1]}` : null;
+}
+
+/**
+ * Fold numbered path rows into CONSECUTIVE labelled sections, so a 49-step degree
+ * shows as 10 cuatrimestre groups instead of one flat wall — "the whole career"
+ * fits because you scan 10 headers and open the one you're on. The global step
+ * number (row.n) is preserved, so numbering stays continuous across groups.
+ *
+ * `labelOf(id)` returns a group label or null; consecutive rows sharing a label
+ * (or both null) join one section. Order is never reordered — the path's own
+ * sequence is the truth. Returns [{ label, rows: [...] }].
+ */
+export function groupPathRows(rows, labelOf) {
+  const out = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const label = (typeof labelOf === "function" ? labelOf(row.id) : null) || null;
+    const last = out[out.length - 1];
+    if (last && last.label === label) last.rows.push(row);
+    else out.push({ label, rows: [row] });
+  }
+  return out;
+}
+
+/**
+ * Worth grouping only when the sections actually carve the path up: at least two
+ * DISTINCT non-null labels. A single group, or a path with no labels at all,
+ * falls back to the flat list — so this never fragments a short lens path that
+ * happens to have one labelled step.
+ */
+export function worthGrouping(sections) {
+  const labels = new Set(
+    (Array.isArray(sections) ? sections : []).map((s) => s.label).filter(Boolean),
+  );
+  return labels.size >= 2;
+}
+
+/** Per-section progress, for the group header: { done, total }. */
+export function sectionProgress(section) {
+  const rows = section?.rows ?? [];
+  return { done: rows.filter((r) => r.done).length, total: rows.length };
+}
+
+/**
  * Published paths from the verified event log. Latest per signer wins;
  * malformed events skipped; sorted by pubkey for determinism.
  */
