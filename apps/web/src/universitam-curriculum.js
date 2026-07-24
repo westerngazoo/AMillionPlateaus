@@ -279,14 +279,20 @@ export const UNIVERSITAM_PLATEAUS = [
 **Deliverable:** fit a line to real measured data and report the uncertainty on the slope, not just the slope.`,
   }),
   course({
-    n: 24, name: "Ecuaciones Diferenciales (II)", clave: "FIS-1924", cuatri: 5, creditos: 7,
+    n: 24, name: "Ecuaciones Diferenciales Parciales", clave: "FIS-1924", cuatri: 5, creditos: 7,
     e1: 0.85, e2: 0.5, e3: 0.1,
     body:
-`Second differential-equations course. **Note:** the curricular map prints this as "Ecuaciones Diferenciales Ordinarias" again, the same title as FIS-1913 in cuatrimestre 3 — almost certainly a typo for *Ecuaciones Diferenciales Parciales*, which is what a physics degree needs at this point and what Electromagnetismo II and Mecánica Cuántica assume. Verify with your coordinación.
+`Partial differential equations — the mathematical spine of everything that follows. Classification (elliptic, parabolic, hyperbolic), **separation of variables**, Fourier series and transforms, Sturm–Liouville problems and orthogonal eigenfunctions, series solutions and the special functions they produce (Legendre, Bessel, spherical harmonics), and boundary-value problems for the three archetypes: the **heat**, **wave** and **Laplace/Poisson** equations.
 
-Expected content either way: series solutions and special functions, Sturm–Liouville problems, Fourier series, and the separation of variables applied to the heat, wave and Laplace equations.
+**Why this course is load-bearing.** Nearly every equation in the rest of the degree is one of these three wearing different clothes: Laplace and Poisson are electrostatics with boundaries (Electromagnetismo I–II), the wave equation is what Maxwell's equations reduce to in vacuum, the heat equation governs diffusion and thermal transport, and the **Schrödinger equation is a parabolic PDE** — solving the hydrogen atom in Mecánica Cuántica II *is* separation of variables in spherical coordinates, producing exactly the Legendre and Bessel machinery you meet here.
 
-**Deliverable:** solve the 1-D wave equation on a finite string by separation of variables and interpret the normal modes physically.`,
+**A timing note worth planning around.** The map places this in cuatrimestre 5, the *same* cuatrimestre as Electromagnetismo II — so it arrives alongside the course that needs it, not before. Front-load separation of variables and boundary conditions early in the cuatrimestre rather than meeting them for the first time in an EM problem set.
+
+*(The curricular map prints the title as "Ecuaciones Diferenciales Ordinarias", repeating FIS-1913's title from cuatrimestre 3; confirmed as Parciales.)*
+
+**What the exam wants:** classify the equation, pick coordinates that match the boundary, separate, and apply the boundary conditions in the right order — the boundary conditions are where the marks are.
+
+**Deliverable:** solve the 1-D wave equation on a finite string by separation of variables, interpret the normal modes physically, then solve Laplace's equation on a disc and note that the *method* did not change — only the geometry did.`,
   }),
   course({
     n: 25, name: "Física III", clave: "FIS-1925", cuatri: 5, creditos: 7, seriacion: "FIS-1920 (Física II)",
@@ -793,10 +799,16 @@ export const UNIVERSITAM_BRIDGES = [
   { id: BR(18), from: U(9), to: U(12), concept: "geometry the linear algebra formalises" },
   { id: BR(19), from: U(11), to: U(13), concept: "integration needed to solve ODEs" },
   { id: BR(20), from: U(22), to: U(26), concept: "the integral theorems ARE Maxwell's equations" },
-  { id: BR(21), from: U(13), to: U(30), concept: "the Schrödinger equation is a PDE" },
   { id: BR(22), from: U(18), to: U(30), concept: "eigenvalue problems are quantum observables" },
   { id: BR(23), from: U(27), to: U(43), concept: "special relativity deepened" },
   { id: BR(24), from: U(4), to: U(41), concept: "sets and logic underpin topology" },
+  // PDEs (FIS-1924) are the prerequisite the map does not print but the material
+  // demands: they follow from ODEs, and they are what Electromagnetismo II and
+  // Mecánica Cuántica are built on. BR(21) is re-pointed to originate at the PDE
+  // topic (the Schrödinger equation is a PDE), not at ODEs.
+  { id: BR(25), from: U(13), to: U(24), concept: "ODEs generalize to PDEs" },
+  { id: BR(26), from: U(24), to: U(26), concept: "PDEs — boundary-value problems the fields obey (Laplace, wave)" },
+  { id: BR(21), from: U(24), to: U(30), concept: "the Schrödinger equation is a PDE" },
 
   // ── cross-lens twin edges (the domain meet) ──────────────────────────────
   // Concept string is uniform on purpose: "alternative formulation of" is how a

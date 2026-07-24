@@ -118,6 +118,23 @@ test("seriación bridges match the prerequisites printed on the map", () => {
     assert.ok(ser.includes(pair), `missing seriación: ${pair}`);
 });
 
+// FIS-1924 is PDEs (the map's title was a typo), and PDEs are the prerequisite
+// the material demands before Electromagnetismo II and Mecánica Cuántica.
+test("PDEs (FIS-1924) precede Electromagnetismo II and Mecánica Cuántica", () => {
+  const byName = (n) => UNIVERSITAM_PLATEAUS.find((p) => p.name === n);
+  const pde = byName("Ecuaciones Diferenciales Parciales");
+  const electroII = byName("Electromagnetismo II");
+  const cuanticaI = byName("Mecánica Cuántica I");
+  assert.ok(pde && electroII && cuanticaI);
+  assert.match(pde.description, /Schrödinger|Electromagnetismo/); // body explains why it is load-bearing
+  const edge = (from, to) =>
+    UNIVERSITAM_BRIDGES.some((b) => b.from === from && b.to === to);
+  assert.ok(edge(pde.id, electroII.id), "PDEs must bridge to Electromagnetismo II");
+  assert.ok(edge(pde.id, cuanticaI.id), "PDEs must bridge to Mecánica Cuántica I");
+  // and PDEs follow from ODEs, not the other way round
+  assert.ok(edge(byName("Ecuaciones Diferenciales Ordinarias").id, pde.id), "ODEs → PDEs");
+});
+
 test("positions are finite and in range (Grade-1 vector components)", () => {
   for (const p of all)
     for (const k of ["e1", "e2", "e3"]) {
