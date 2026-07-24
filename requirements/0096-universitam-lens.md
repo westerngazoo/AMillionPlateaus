@@ -79,3 +79,15 @@ the course plateau only, and their twins get written as the degree advances.
   Ordinarias" already used by FIS-1913 (almost certainly meant to be *Parciales*); Metrología is
   printed `FIS-1834` and Mecánica Relativista `FIS-1843` (1934/1943 by sequence); Astronomía and
   Teoría del Caos carry no clave on the map (FIS-1935/FIS-1945 inferred from position).
+
+## R-0096a — FIS-1924 confirmed as PDEs (2026-07-23)
+
+The owner confirmed with their coordinación: FIS-1924 is **Ecuaciones Diferenciales Parciales**, not a
+second ODE course (the map repeated FIS-1913's title). Renamed, its body rewritten to explain why
+PDEs are the load-bearing prerequisite (Laplace/Poisson = electrostatics with boundaries; the wave
+equation = Maxwell in vacuum; the Schrödinger equation = a parabolic PDE, and the hydrogen atom is
+separation of variables in spherical coordinates). Three bridges wire the real dependency chain that
+the map omitted: **ODEs (FIS-1913) → PDEs (FIS-1924) → Electromagnetismo II (FIS-1926)** and **PDEs
+→ Mecánica Cuántica I (FIS-1930)** (BR(21), the "Schrödinger equation is a PDE" edge, re-pointed to
+originate at the PDE topic rather than at ODEs). Suite 608/608 (1 new test asserting the chain);
+live: 170 topics · **175 bridges** (was 173).
