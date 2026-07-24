@@ -140,6 +140,7 @@ import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
 import { buildLensBundle, parseLensBundle, parseLensBundleResult, applyLensBundle, lensBundlePath, isSafeLensPath, canonicalJson, LENS_DIR } from "./lens-bundle.js"; // R-0093/R-0093a lens as a portable, adoptable subgraph
+import { REGISTRY_FILE, buildIndexEntry, upsertIndex, parseIndex, registryJson, indexFromPaths, describeEntry } from "./lens-registry.js"; // R-0094 an index so lenses can be discovered
 import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
   PRESETS,
@@ -5614,7 +5615,18 @@ async function main() {
     } catch (e) {
       return lensPubSay(`Couldn't publish (${e?.message ?? e}) — is 📓 Sync still connected with write access?`, true);
     }
-    lensPubSay(`Published ✓ — “${domain.label}” is now at ${path} in your repo. Share your repo; others can adopt it below.`);
+    // R-0094: keep lenses/index.json in step, so a reader can list this repo in
+    // ONE fetch and see what each lens holds before pulling it. Derived data — if
+    // this write fails the bundle is still published and still adoptable via the
+    // directory listing, so say so rather than implying the publish failed.
+    try {
+      const cur = await ghGetNote(REGISTRY_FILE);
+      const next = upsertIndex(cur ? parseIndex(cur.text) : null, buildIndexEntry(bundle));
+      await ghPutNote(REGISTRY_FILE, registryJson(next), cur?.sha);
+    } catch (e) {
+      return lensPubSay(`Published “${domain.label}” ✓ at ${path}, but couldn't update ${REGISTRY_FILE} (${e?.message ?? e}). It is still adoptable — readers will just see no preview.`, true);
+    }
+    lensPubSay(`Published ✓ — “${domain.label}” is at ${path} and listed in ${REGISTRY_FILE}. Share your repo; others can browse and adopt it.`);
   });
 
   // Read one text file from ANY repo (public, or private with a read token) —
@@ -5655,34 +5667,49 @@ async function main() {
       // whatever URL it builds. Establish the guard at the first fetch site.
       .filter((p) => isSafeLensPath(p));
   }
-  function renderAdoptResults(source, bundles) {
+  // R-0094: rows come from the INDEX, so listing costs one fetch and shows what a
+  // lens holds before you pull it. The bundle is fetched only when Adopt is
+  // tapped — which is also the fix for R-0093a's unbounded serial listing.
+  function renderAdoptRows(source, entries, ctx) {
     lensAdoptResults.replaceChildren();
-    for (const bundle of bundles) {
+    for (const entry of entries) {
       const row = document.createElement("div");
       row.className = "follow-row";
       const name = document.createElement("span");
       name.className = "fr-name";
-      const label = bundle.title || bundle.domain.label;
-      const n = bundle.plateaus.length;
-      const nb = bundle.bridges.length;
-      // Provenance: which repo this lens came from is the thing that makes an
-      // adopted lens trustworthy, so show it rather than just the label.
-      name.textContent = `${label} — ${n} topic${n === 1 ? "" : "s"}, ${nb} bridge${nb === 1 ? "" : "s"}${source ? ` · from ${source}` : ""}`;
+      name.textContent = `${describeEntry(entry)}${source ? ` · from ${source}` : ""}`;
       const actions = document.createElement("div");
       actions.className = "fr-actions";
       const adopt = document.createElement("button");
       adopt.type = "button";
       adopt.textContent = "Adopt ↓";
-      adopt.addEventListener("click", () => {
-        let gained;
-        try {
-          gained = seedLensBundle(bundle);
-        } catch (e) {
-          return lensAdoptSay(`Couldn't adopt “${label}” (${e?.message ?? e}).`, true);
-        }
-        adopt.textContent = "Adopted ✓";
+      adopt.addEventListener("click", async () => {
+        const label = entry.title || entry.label || entry.id;
         adopt.disabled = true;
-        lensAdoptSay(gained > 0 ? `Adopted “${label}” ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged onto your map.` : `Adopted “${label}” ✓ — you already had these topics.`);
+        adopt.textContent = "Adopting…";
+        try {
+          const text = await ghGetTextFrom(ctx.owner, ctx.repo, ctx.branch, ctx.token, ctx.base, entry.path);
+          const res = parseLensBundleResult(text);
+          if (!res.bundle) {
+            adopt.disabled = false;
+            adopt.textContent = "Adopt ↓";
+            return lensAdoptSay(
+              res.error === "too-new"
+                ? `“${label}” was written by a NEWER version of the app — update this app to adopt it.`
+                : `“${label}” isn't a valid lens bundle.`,
+              true,
+            );
+          }
+          const gained = seedLensBundle(res.bundle);
+          adopt.textContent = "Adopted ✓";
+          lensAdoptSay(gained > 0
+            ? `Adopted “${label}” ✓ — ${gained} new topic${gained === 1 ? "" : "s"} merged onto your map.`
+            : `Adopted “${label}” ✓ — you already had these topics.`);
+        } catch (e) {
+          adopt.disabled = false;
+          adopt.textContent = "Adopt ↓";
+          lensAdoptSay(`Couldn't adopt “${label}” (${e?.message ?? e}).`, true);
+        }
       });
       actions.append(adopt);
       row.append(name, actions);
@@ -5693,43 +5720,38 @@ async function main() {
     const parsed = parseRepoUrl(lensAdoptRepo.value);
     if (!parsed) return lensAdoptSay("That doesn't look like owner/repo (or a repo URL).", true);
     const token = lensAdoptToken.value.trim();
+    const ctx = { owner: parsed.owner, repo: parsed.repo, branch: "main", token, base: parsed.base };
+    const source = `${parsed.owner}/${parsed.repo}`;
     lensAdoptResults.replaceChildren();
-    lensAdoptSay(`Looking for lenses in ${parsed.owner}/${parsed.repo}…`);
+    lensAdoptSay(`Looking for lenses in ${source}…`);
     try {
-      let paths;
+      // R-0094: one fetch for the index. A repo published before the registry
+      // existed has none, so fall back to listing the folder — those rows just
+      // carry no preview until adopted.
+      let index = null;
+      let fromIndex = false;
       try {
-        paths = await ghListLensesFrom(parsed.owner, parsed.repo, "main", token, parsed.base);
-      } catch (e) {
-        return lensAdoptSay(`Couldn't read that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
-      }
-      if (!paths.length) return lensAdoptSay(`No lenses found there — that repo has no lenses/ folder yet. Ask them to Publish ↑ one.`, true);
-      // R-0093a: keep WHY each file was skipped. Folding a rate-limit, an
-      // oversized file and a corrupt file into one "none were valid" message
-      // sends the reader hunting for a problem that isn't theirs.
-      const bundles = [];
-      const unreadable = [];
-      let tooNew = 0;
-      for (const path of paths) {
-        try {
-          const text = await ghGetTextFrom(parsed.owner, parsed.repo, "main", token, parsed.base, path);
-          const res = parseLensBundleResult(text);
-          if (res.bundle) bundles.push(res.bundle);
-          else if (res.error === "too-new") tooNew++;
-        } catch (e) {
-          unreadable.push(`${path.replace(/^lenses\//, "")} (${e?.message ?? e})`);
+        const text = await ghGetTextFrom(ctx.owner, ctx.repo, ctx.branch, token, ctx.base, REGISTRY_FILE);
+        if (text) {
+          index = parseIndex(text);
+          fromIndex = !!index;
+          if (!index) lensAdoptSay(`That repo's ${REGISTRY_FILE} is unreadable or too new — falling back to the folder…`);
         }
+      } catch { /* no index, or unreadable — fall back below */ }
+      if (!index) {
+        let paths;
+        try {
+          paths = await ghListLensesFrom(ctx.owner, ctx.repo, ctx.branch, token, ctx.base);
+        } catch (e) {
+          return lensAdoptSay(`Couldn't read that repo (${e?.message ?? e}) — is it public, or does your token read it?`, true);
+        }
+        index = indexFromPaths(paths);
       }
-      if (!bundles.length) {
-        if (tooNew) return lensAdoptSay(`Found ${tooNew} lens${tooNew === 1 ? "" : "es"} written by a NEWER version of the app — update this app to adopt ${tooNew === 1 ? "it" : "them"}.`, true);
-        if (unreadable.length) return lensAdoptSay(`Couldn't read ${unreadable.length} of ${paths.length} file${paths.length === 1 ? "" : "s"}: ${unreadable.slice(0, 2).join("; ")}.`, true);
-        return lensAdoptSay(`Found ${paths.length} file${paths.length === 1 ? "" : "s"} in lenses/, but none were valid lens bundles.`, true);
-      }
-      const extra = [
-        tooNew ? `${tooNew} need${tooNew === 1 ? "s" : ""} a newer app` : "",
-        unreadable.length ? `${unreadable.length} unreadable` : "",
-      ].filter(Boolean).join(", ");
-      lensAdoptSay(`${bundles.length} lens${bundles.length === 1 ? "" : "es"} available — tap Adopt to merge one onto your map.${extra ? ` (${extra}.)` : ""}`);
-      renderAdoptResults(`${parsed.owner}/${parsed.repo}`, bundles);
+      if (!index.lenses.length)
+        return lensAdoptSay(`No lenses found there — that repo has no lenses/ folder yet. Ask them to Publish ↑ one.`, true);
+      const n = index.lenses.length;
+      lensAdoptSay(`${n} lens${n === 1 ? "" : "es"} in ${source}${fromIndex ? "" : " (no index — counts show after adopting)"} — tap Adopt to merge one onto your map.`);
+      renderAdoptRows(source, index.lenses, ctx);
     } finally {
       // Clear on EVERY path, not just success — after a failed list the token
       // would otherwise sit in the DOM for the rest of the session.
