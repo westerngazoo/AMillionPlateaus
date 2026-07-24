@@ -158,5 +158,8 @@ test("every body renders correctly in the app's markdown subset", async () => {
     assert.equal(/>&gt;\s|<p>&gt;/.test(html), false, `${p.name}: blockquote markers leak (unsupported)`);
     // a <br> join inside a paragraph glues words together — the "allits" bug
     assert.equal(/[a-záéíóúñ]<br>[a-záéíóúñ]/i.test(html), false, `${p.name}: <br> glues two words`);
+    // a list that lost its blank line collapses into the lead-in paragraph and
+    // renders its "- " markers as body text (R-0097 found two of these)
+    assert.equal(/<p>[^<]*[:.]\s-\s/.test(html), false, `${p.name}: a bullet list collapsed into a paragraph`);
   }
 });

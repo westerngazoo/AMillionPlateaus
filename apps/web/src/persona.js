@@ -157,6 +157,16 @@ export const ARCHETYPES = [
     blurb: "Re-sees physics via nilsquare infinitesimals — begins at ε² = 0.",
     orient: [{ domain: SIA_DOMAIN, dir: { e1: 0.9, e2: 0, e3: 0.44 } }],
   },
+  // R-0097 — the front door for the degree itself (R-0096). Without a card here
+  // the lens existed but could only be reached through Build-your-own, which is
+  // the wrong first step for the one route the owner walks every day.
+  {
+    id: "licenciatura-fisica",
+    name: "The Undergraduate",
+    domainLabel: "Licenciatura en Física — Universitam",
+    blurb: "Walks the real degree, cuatrimestre by cuatrimestre — begins at Introducción al cálculo.",
+    orient: [{ domain: UNIVERSITAM_DOMAIN, dir: { e1: 0.6, e2: 0.8, e3: 0.1 } }],
+  },
 ];
 
 // ── Visitor-authored personas (SPEC-0009 / R-0009) ─────────────────────────

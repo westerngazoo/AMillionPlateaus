@@ -824,7 +824,7 @@
         border-left: none;
         border-right: 1px solid #2a3543;
       }
-      #split-iframe-container {
+      #split-iframe-container, #twin-pane {
         position: fixed;
         top: 0; right: 0; bottom: 0; left: 50%;
         z-index: 25;
@@ -832,7 +832,33 @@
         display: flex;
         flex-direction: column;
       }
-      #split-iframe-container[hidden] { display: none; }
+      #split-iframe-container[hidden], #twin-pane[hidden] { display: none; }
+      /* Parallel view (R-0097): the right pane holds the ALTERNATIVE FORMULATION
+         of the topic on the left — same syllabus, other formalism. Scrolls on its
+         own so the two readings stay independent. */
+      #twin-pane .twin-head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 14px; background: #131b25; border-bottom: 1px solid #2a3543;
+      }
+      #twin-lens { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #ffd166; font-weight: 700; }
+      #twin-name { font-size: 13px; color: #e6eef6; font-weight: 600; flex: 1;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #twin-close { background: transparent; border: none; color: #9fb2c4; font-size: 18px; cursor: pointer; padding: 0 4px; }
+      #twin-close:hover { color: #e6eef6; }
+      #twin-body { flex: 1; overflow-y: auto; padding: 16px 18px 40px; }
+      #twin-empty { color: #8aa0b4; font-size: 13px; line-height: 1.6; }
+      /* The one control that moves BOTH routes at once. */
+      .twin-steps {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 14px; background: #101822; border-top: 1px solid #2a3543;
+      }
+      .twin-steps button {
+        background: #1c2836; border: 1px solid #2a3543; color: #cdd9e6;
+        border-radius: 6px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+      }
+      .twin-steps button:hover:not(:disabled) { background: #24344a; color: #fff; }
+      .twin-steps button:disabled { opacity: .4; cursor: default; }
+      #twin-pos { flex: 1; text-align: center; font-size: 12px; color: #8aa0b4; }
       /* Portrait / narrow screens (the Boox held upright, phones): side-by-side
          50/50 leaves two unusable slivers — STACK instead: topic on top,
          reader pane below. */
@@ -843,7 +869,8 @@
           border-right: none;
           border-bottom: 1px solid #2a3543;
         }
-        body[data-layout="split"] #split-iframe-container {
+        body[data-layout="split"] #split-iframe-container,
+        body[data-layout="split"] #twin-pane {
           left: 0;
           top: 50%;
         }
@@ -1543,6 +1570,8 @@
       <div class="detail-head">
         <h2 id="detail-name">Topic</h2>
         <div class="detail-layout-controls">
+          <!-- R-0097: shown only when this topic HAS an alternative-formalism twin. -->
+          <button id="parallel-toggle" type="button" aria-label="Parallel view" title="Parallel view — study both formalisms side by side" hidden>⇄</button>
           <button id="layout-default" type="button" aria-label="Default View" title="Default view" class="active">◧</button>
           <button id="layout-full" type="button" aria-label="Fullscreen" title="Fullscreen">□</button>
           <button id="layout-split" type="button" aria-label="Split Screen" title="Split Screen">◫</button>
@@ -1757,6 +1786,22 @@
         <button id="iframe-close" type="button" aria-label="Close browser">×</button>
       </div>
       <iframe id="split-iframe" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+    </div>
+    <!-- Parallel view (R-0097): the right half of the split, holding the SAME
+         topic in its other formalism — the GA or SIA twin (R-0096). Filled by
+         main.js; ‹ / › step BOTH routes at once. -->
+    <div id="twin-pane" hidden>
+      <div class="twin-head">
+        <span id="twin-lens"></span>
+        <span id="twin-name"></span>
+        <button id="twin-close" type="button" aria-label="Close parallel view">×</button>
+      </div>
+      <div id="twin-body"><p id="twin-empty"></p></div>
+      <div class="twin-steps">
+        <button id="twin-prev" type="button">‹ Prev</button>
+        <span id="twin-pos"></span>
+        <button id="twin-next" type="button">Next ›</button>
+      </div>
     </div>
     <p class="note">
       You hold a <strong>wizard key</strong> (Nostr/BIP340) minted in this browser:

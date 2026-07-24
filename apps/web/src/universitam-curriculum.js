@@ -650,7 +650,11 @@ ${twinNote}
 
 The course does geometry by *choosing axes and pushing coordinates*. The hardest exam problem — rotating axes to eliminate the $xy$ term of a conic — exists only because coordinates were chosen badly in the first place.
 
-**GA writes the objects directly:** - A **line** through points $P$ and $Q$: the set of $X$ with $(X - P)\\wedge(Q-P) = 0$. The wedge vanishing *is* collinearity — no slope, no special case for vertical lines, which is the one the coordinate treatment always has to except. - A **plane** through three points: $(X-P)\\wedge(Q-P)\\wedge(R-P) = 0$. - The **outer product's magnitude** $|a \\wedge b|$ is the area of the parallelogram they span, so areas need no determinant formula to memorise — the algebra *is* the determinant.
+**GA writes the objects directly:**
+
+- A **line** through points $P$ and $Q$: the set of $X$ with $(X - P)\\wedge(Q-P) = 0$. The wedge vanishing *is* collinearity — no slope, no special case for vertical lines, which is the one the coordinate treatment always has to except.
+- A **plane** through three points: $(X-P)\\wedge(Q-P)\\wedge(R-P) = 0$.
+- The **outer product's magnitude** $|a \\wedge b|$ is the area of the parallelogram they span, so areas need no determinant formula to memorise — the algebra *is* the determinant.
 
 **Rotation without rotating axes.** To rotate a vector $v$ by angle $\\theta$ in the plane $B$, sandwich it between rotors:
 
@@ -682,7 +686,11 @@ $$v' = (nm)\\,v\\,(mn) = R v \\tilde R, \\qquad R = nm$$
 
 $R$ is a **rotor**, an even-grade element. Rotors compose by *multiplication* — $R_2R_1$ — which is far cheaper and numerically better-behaved than multiplying rotation matrices, and it never suffers gimbal lock.
 
-**What this reframes in the course:** - **Orthogonal matrices** ($\\det = +1$) ↔ rotors. The determinant condition becomes "even grade, unit norm". - **Change of basis** becomes conjugation by a rotor, which is the same operation as the rotation itself — one idea, not two. - **Eigenvectors of a rotation**: the axis is the vector the rotor leaves fixed, visible directly as the dual of the rotation bivector.
+**What this reframes in the course:**
+
+- **Orthogonal matrices** ($\\det = +1$) ↔ rotors. The determinant condition becomes "even grade, unit norm".
+- **Change of basis** becomes conjugation by a rotor, which is the same operation as the rotation itself — one idea, not two.
+- **Eigenvectors of a rotation**: the axis is the vector the rotor leaves fixed, visible directly as the dual of the rotation bivector.
 
 **Honest limitation:** GA does not replace linear algebra. Non-orthogonal maps, rank, nullity and the general eigenvalue problem still want matrices. GA replaces the *geometric* part — which is most of what physics uses.
 
