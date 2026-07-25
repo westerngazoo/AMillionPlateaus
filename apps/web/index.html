@@ -799,6 +799,11 @@
       .unwired-row button { flex: 0 0 auto; }
       .unwired-empty { color: #8aa0b4; font-size: 13px; }
       .course-help { margin: 0; font-size: 12px; color: #8aa0b4; line-height: 1.5; }
+      /* Move-my-identity (R-0101): a fenced-off section — this handles the secret key. */
+      .ident-move { margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a3543; display: flex; flex-direction: column; gap: 6px; }
+      .ident-warn { margin: 0; font-size: 12px; line-height: 1.5; color: #f0b37a; background: #2a1c10; border: 1px solid #4a3320; border-radius: 6px; padding: 8px 10px; }
+      .ident-move textarea { width: 100%; box-sizing: border-box; background: #0f151d; border: 1px solid #2a3543; color: #cdd9e6; border-radius: 6px; padding: 6px 8px; font: 12px/1.4 ui-monospace, monospace; resize: vertical; word-break: break-all; }
+      #ident-secret { color: #ffd166; }
       .course-builder input, .course-builder textarea, .course-builder select {
         background: #0f151d; color: #e6eef6; border: 1px solid #2a3543; border-radius: 6px;
         padding: 8px 10px; font-size: 13px; width: 100%; box-sizing: border-box;
@@ -1133,6 +1138,35 @@
         <button id="ns-close" type="button">Close</button>
       </div>
       <p id="ns-status" class="course-status" hidden></p>
+
+      <!-- Move your identity to another device (R-0101). Your world + profile sync
+           to the repo, but your WIZARD KEY is your identity and is never written
+           to git — so to be the SAME you on another device, you move the key
+           yourself. It stays on your devices; the app never sends it anywhere. -->
+      <div class="ident-move">
+        <p class="course-label">🪪 Same you on every device</p>
+        <p class="course-help">Your world and profile sync under your identity, but your <strong>wizard key</strong> (which <em>is</em> your identity) is never put in git. To make another device the same you, move the key across yourself — then everything syncs under it.</p>
+        <div class="course-actions">
+          <button id="ident-reveal" type="button">Reveal my key to copy →</button>
+          <button id="ident-import-toggle" type="button">Import a key ↓</button>
+        </div>
+        <div id="ident-reveal-box" hidden>
+          <p class="ident-warn">⚠️ Anyone with this key <strong>is you</strong> — they can act as you and read your synced world. Only paste it into <em>your own</em> other device, then clear it. The app never sends or logs it.</p>
+          <textarea id="ident-secret" readonly rows="2"></textarea>
+          <div class="course-actions">
+            <button id="ident-copy" type="button">Copy</button>
+            <button id="ident-hide" type="button">Hide</button>
+          </div>
+        </div>
+        <div id="ident-import-box" hidden>
+          <p class="course-help">Paste your wizard key from your other device. This device becomes that identity; its progress will pull in from your repo.</p>
+          <textarea id="ident-import" rows="2" placeholder="paste your wizard key (hex)…"></textarea>
+          <div class="course-actions">
+            <button id="ident-import-go" type="button">Become this identity →</button>
+          </div>
+        </div>
+        <p id="ident-status" class="course-status" hidden></p>
+      </div>
     </div>
 
     <!-- 🔴 Live sync (R-0089): two of your devices on the same network auto-pair

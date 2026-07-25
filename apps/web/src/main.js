@@ -33,7 +33,7 @@ import { safeImageSrc } from "./rich-notes.js";
 // module, and a missing/broken OPTIONAL vendor file must degrade that one
 // button — never kill the app's whole module graph at boot (issue #73).
 import { createPeer } from "./webrtc.js";
-import { loadOrMintIdentity } from "./identity.js";
+import { loadOrMintIdentity, SECRET_KEY } from "./identity.js";
 import { makeLog } from "./events.js";
 import { createRelay, RELAY_KEY } from "./relay.js";
 import { createEventBus } from "./eventbus.js";
@@ -136,6 +136,7 @@ import {
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
 import { missingPrereqs, prereqPlanPrompt, combinePrereqs, prereqCandidates } from "./prereqs.js"; // R-0070 study what comes before · R-0100 add your own
+import { PROFILE_FILE, collectProfile, mergeProfile, applyProfile, profileFingerprint, parseProfile } from "./profile.js"; // R-0101 sync your whole self
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
@@ -5518,10 +5519,61 @@ async function main() {
       }
     }, 3000);
   }
-  // R-0088: now that queueWorldAutoPush exists, wire persist() to it — every
-  // authored graph change (plateau, bridge, vote, marker, imported/followed
-  // world) backs itself up, not just captures.
-  autoPushOnPersist = queueWorldAutoPush;
+  // ── R-0101: sync your whole profile ─────────────────────────────────────────
+  // The graph (R-0081) and notes (R-0075) sync; this carries the REST of you —
+  // progress (signed events), lesson state, review queue, confusions, added
+  // prerequisites, adopted lenses, persona, proofs — to profile/state.json in the
+  // same repo. Merged additively so two devices never clobber each other; pulled
+  // at boot; pushed whenever it changes. Secrets are excluded by construction
+  // (profile.js allow-list), so nothing here can leak your key or tokens.
+  let lastProfileFp = null;
+  let profilePushing = false;
+  async function pushProfile() {
+    if (!notesSyncCfg) return;
+    // Merge the remote first (R-0085 pattern) so a concurrent device's progress is
+    // never lost. We write the union to the repo but do NOT re-apply it to this
+    // running session (its in-memory caches are for the local key) — the next boot
+    // pulls and reloads to absorb anything new.
+    const local = collectProfile(localStorage);
+    const remote = await ghGetNote(PROFILE_FILE);
+    const merged = remote ? mergeProfile(local, parseProfile(remote.text) || { keys: {} }) : local;
+    await ghPutNote(PROFILE_FILE, JSON.stringify(merged, null, 2), remote?.sha);
+    lastProfileFp = profileFingerprint(local); // local unchanged → don't re-push until it changes
+  }
+  function queueProfilePush() {
+    if (!notesSyncCfg || profilePushing) return;
+    if (profileFingerprint(collectProfile(localStorage)) === lastProfileFp) return; // nothing new
+    profilePushing = true;
+    pushProfile()
+      .then(() => {
+        importNote("🧑 profile backed up ✓", true);
+        setTimeout(() => (importStatus.hidden = true), 5000);
+      })
+      .catch((e) => importNote(`🧑 profile backup failed (${e?.message ?? e})`, false))
+      .finally(() => {
+        profilePushing = false;
+      });
+  }
+  // Pull the repo's profile and MERGE it into this device's localStorage. Returns
+  // how many keys changed; the caller reloads if any did, so the running app picks
+  // up the merged progress/annotations from its module-init reads.
+  async function pullProfile() {
+    if (!notesSyncCfg) return 0;
+    const remote = await ghGetNote(PROFILE_FILE);
+    const parsed = remote && parseProfile(remote.text);
+    if (!parsed) return 0;
+    const merged = mergeProfile(collectProfile(localStorage), parsed);
+    return applyProfile(merged, localStorage).length;
+  }
+
+  // R-0088 + R-0101: every persist()-triggering change backs up BOTH the world and
+  // the profile. Profile-only changes (a confusion, an added prereq, lesson
+  // progress) don't call persist(), so they're also caught by the periodic +
+  // page-hide flush wired at boot below.
+  autoPushOnPersist = () => {
+    queueWorldAutoPush();
+    queueProfilePush();
+  };
 
   // ── Follow a wizard's world (R-0082) ────────────────────────────────────────
   // The old "Connect a peer" was a live WebRTC handshake (copy-paste SDP, same
@@ -6093,6 +6145,14 @@ async function main() {
     } catch (e) {
       nsSay(`World push failed (${e?.message ?? e}) — retrying notes anyway…`, true);
     }
+    // R-0101: your profile (progress, annotations, lenses, persona) too.
+    let profileOk = false;
+    try {
+      await pushProfile();
+      profileOk = true;
+    } catch {
+      /* reported in the summary below */
+    }
     privateNotes = loadNotes(localStorage);
     const entries = Object.entries(privateNotes).filter(([, v]) => String(v ?? "").trim());
     let ok = 0;
@@ -6109,8 +6169,9 @@ async function main() {
       }
     }
     const worldMsg = worldOk ? "World ✓" : "World ✗";
+    const profMsg = profileOk ? " · Profile ✓" : " · Profile ✗";
     const noteMsg = entries.length ? ` · ${ok}/${entries.length} note${entries.length === 1 ? "" : "s"} ✓` : " · no notes yet";
-    nsSay(`${worldMsg}${noteMsg}${failed ? ` (${failed} failed — retry)` : ""}`, !worldOk || !!failed);
+    nsSay(`${worldMsg}${profMsg}${noteMsg}${failed ? ` (${failed} failed — retry)` : ""}`, !worldOk || !profileOk || !!failed);
   });
   // The notepad's explicit save + per-topic Push/Pull (shown once connected).
   const notepadPush = document.getElementById("notepad-push");
@@ -6121,6 +6182,61 @@ async function main() {
   }
   renderNotepadSync();
 
+  // ── R-0101 Part B: move your identity to another device ─────────────────────
+  // Your world + profile sync under your identity, but the wizard SECRET KEY is
+  // never written to git (it IS your identity). To be the same you on another
+  // device you move the key across yourself: reveal + copy here, paste there. The
+  // app only ever reads it from / writes it to THIS browser's localStorage —
+  // never a network, never a log. This is the one place the secret is shown, and
+  // only on an explicit tap.
+  const identStatus = document.getElementById("ident-status");
+  const identSay = (t, err) => {
+    identStatus.hidden = false;
+    identStatus.textContent = t;
+    identStatus.classList.toggle("err", !!err);
+  };
+  const identRevealBox = document.getElementById("ident-reveal-box");
+  const identImportBox = document.getElementById("ident-import-box");
+  const identSecret = document.getElementById("ident-secret");
+  document.getElementById("ident-reveal").addEventListener("click", () => {
+    const hex = localStorage.getItem(SECRET_KEY) || "";
+    if (!hex) return identSay("No key found in this browser yet.", true);
+    identSecret.value = hex; // shown ONLY here, only now; never sent or logged
+    identRevealBox.hidden = false;
+    identImportBox.hidden = true;
+    identSecret.focus();
+    identSecret.select();
+  });
+  document.getElementById("ident-hide").addEventListener("click", () => {
+    identSecret.value = ""; // don't leave the secret sitting in the DOM
+    identRevealBox.hidden = true;
+  });
+  document.getElementById("ident-copy").addEventListener("click", async () => {
+    const ok = await copyToClipboard(identSecret.value);
+    identSay(ok ? "Copied ✓ — paste it into your other device, then Hide." : "Copy failed — select the text and copy manually.", !ok);
+  });
+  document.getElementById("ident-import-toggle").addEventListener("click", () => {
+    identImportBox.hidden = !identImportBox.hidden;
+    identRevealBox.hidden = true;
+    if (!identImportBox.hidden) document.getElementById("ident-import").focus();
+  });
+  document.getElementById("ident-import-go").addEventListener("click", () => {
+    const hex = document.getElementById("ident-import").value.trim();
+    if (!hex) return identSay("Paste your wizard key first.", true);
+    // Validate by actually constructing an identity from it — a bad key throws,
+    // so we never overwrite the current one with garbage.
+    try {
+      idWasm.WasmIdentity.from_secret(hex);
+    } catch {
+      return identSay("That doesn't look like a valid wizard key.", true);
+    }
+    if (hex === localStorage.getItem(SECRET_KEY)) return identSay("This device already IS that identity.", false);
+    if (!confirm("Make this device that identity? Progress you made here under a different key will hide until you switch back. Your other device is unaffected.")) return;
+    localStorage.setItem(SECRET_KEY, hex);
+    identSay("Identity set — reloading as you…");
+    setTimeout(() => location.reload(), 400); // re-mint from the new key; boot then pulls your profile
+  });
+
   // R-0088: sync-on-connection — when 📓 Sync is configured, pull the world once
   // at boot so opening the app on any device catches up with what the others
   // pushed. Fire-and-forget (never blocks boot); quiet unless it actually merges
@@ -6128,6 +6244,20 @@ async function main() {
   // makes the repo behave like a live shared database.
   if (notesSyncCfg) {
     (async () => {
+      try {
+        // R-0101: pull your PROFILE first. If it merged in progress/annotations
+        // from another device, reload so the app re-reads the new state (its
+        // caches are built at module init). Converges: after the reload, local
+        // already contains the merge, so applyProfile finds nothing new.
+        const changed = await pullProfile();
+        if (changed > 0) {
+          importNote("🧑 syncing your profile from your repo…", true);
+          location.reload();
+          return;
+        }
+      } catch {
+        /* offline / no profile yet — carry on with the world pull */
+      }
       try {
         const gained = await pullWorld();
         if (gained > 0) {
@@ -6138,6 +6268,14 @@ async function main() {
         /* offline / unreachable forge — the local world is intact; manual Pull still works */
       }
     })();
+    // R-0101: back the profile up on a gentle cadence and whenever you leave —
+    // so a confusion mark or a lesson step (which don't touch the graph) still
+    // reach your repo. queueProfilePush is a no-op when nothing changed.
+    setInterval(queueProfilePush, 45000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") queueProfilePush();
+    });
+    window.addEventListener("pagehide", queueProfilePush);
   }
   document.getElementById("notepad-save").addEventListener("click", () => {
     if (!studyPlateau) return;
