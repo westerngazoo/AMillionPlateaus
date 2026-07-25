@@ -183,6 +183,10 @@ import {
   buildPath,
   pathDomains,
   pathRows,
+  pathGroupLabel,
+  groupPathRows,
+  worthGrouping,
+  sectionProgress,
   nextPathStep,
   pathProgress,
   publishedPaths,
@@ -993,20 +997,57 @@ async function main() {
     );
     document.getElementById("lens-path-goal").textContent = path.goal || "";
     document.getElementById("lens-path-progress").textContent = `${done.size} of ${rows.length} studied`;
-    list.replaceChildren(
-      ...rows.map((r) => {
-        const li = document.createElement("li");
-        li.className = "lens-path-row" + (r.done ? " is-done" : "");
-        const b = document.createElement("button");
-        b.type = "button";
-        b.textContent = (r.done ? "✓ " : "") + (plateauById(r.id)?.name ?? "…"); // number from the <ol>
-        b.addEventListener("click", () => openFromPath(r.id));
-        li.append(b);
-        return li;
-      }),
-    );
-    const allDone = done.size >= rows.length;
+
+    // One numbered <li> — the step's global number rides in `value` so numbering
+    // stays continuous even inside a group (an <ol start> per group would reset it).
+    const rowLi = (r) => {
+      const li = document.createElement("li");
+      li.className = "lens-path-row" + (r.done ? " is-done" : "");
+      li.value = r.n; // continuous numbering across cuatrimestre groups
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = (r.done ? "✓ " : "") + (plateauById(r.id)?.name ?? "…");
+      b.addEventListener("click", () => openFromPath(r.id));
+      li.append(b);
+      return li;
+    };
+
+    // R-0099: a long career (the 49-step degree) is unreadable as one flat wall on
+    // a phone/Boox — 18 of 49 in a cramped nested scroll. Fold it into collapsible
+    // cuatrimestre sections so "the whole career" is 10 headers you can scan, with
+    // the one you're on opened. Any lens without a Cuatrimestre marker stays flat.
     const nextId = nextPathStep(path.steps, done) ?? path.steps[0];
+    const sections = groupPathRows(rows, (id) => pathGroupLabel(plateauById(id)?.description));
+    if (worthGrouping(sections)) {
+      list.classList.add("is-grouped");
+      list.replaceChildren(
+        ...sections.map((sec) => {
+          const box = document.createElement("details");
+          box.className = "lens-path-group";
+          const onHere = sec.rows.some((r) => r.id === nextId);
+          box.open = onHere; // open the cuatrimestre you're in; the rest stay tidy
+          const sum = document.createElement("summary");
+          const p = sectionProgress(sec);
+          const tag = document.createElement("span");
+          tag.className = "lpg-label";
+          tag.textContent = sec.label || "Other";
+          const prog = document.createElement("span");
+          prog.className = "lpg-prog" + (p.done >= p.total ? " is-done" : "");
+          prog.textContent = p.done >= p.total ? `✓ ${p.total}` : `${p.done}/${p.total}`;
+          sum.append(tag, prog);
+          const ol = document.createElement("ol");
+          ol.className = "lens-path-sublist";
+          ol.append(...sec.rows.map(rowLi));
+          box.append(sum, ol);
+          return box;
+        }),
+      );
+    } else {
+      list.classList.remove("is-grouped");
+      list.replaceChildren(...rows.map(rowLi));
+    }
+    const allDone = done.size >= rows.length;
+    // nextId already computed above (the grouping block opens the section you're on)
     startBtn.hidden = false;
     startBtn.textContent = allDone
       ? "✓ Course complete — revisit ↺"

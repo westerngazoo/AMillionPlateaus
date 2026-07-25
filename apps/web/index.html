@@ -755,6 +755,27 @@
         padding: 3px 4px; font-size: 13px; cursor: pointer; border-radius: 4px;
       }
       .lens-path-row button:hover { background: #1a2734; color: #cfe6ff; }
+      /* R-0099: grouped by cuatrimestre. Collapsed groups are compact, so the
+         nested 46vh scroll (a cramped scroller inside a scrolling page) is
+         dropped — the panel flows and the page scrolls once. Ten headers make
+         "the whole career" scannable at a glance. */
+      .lens-path-list.is-grouped { max-height: none; overflow: visible; padding-left: 0; gap: 4px; }
+      .lens-path-group { border: 1px solid #22303f; border-radius: 6px; background: #101822; overflow: hidden; }
+      .lens-path-group > summary {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 9px 12px; cursor: pointer; list-style: none; user-select: none;
+        font-size: 13px; color: #cfe6ff;
+      }
+      .lens-path-group > summary::-webkit-details-marker { display: none; }
+      .lens-path-group > summary::before {
+        content: "▸"; color: #6b8299; font-size: 11px; margin-right: 2px; transition: transform .12s;
+      }
+      .lens-path-group[open] > summary::before { transform: rotate(90deg); }
+      .lens-path-group > summary:hover { background: #16202c; }
+      .lpg-label { flex: 1; font-weight: 600; }
+      .lpg-prog { font-size: 11px; color: #7f97ab; font-variant-numeric: tabular-nums; }
+      .lpg-prog.is-done { color: #7fcf9f; }
+      .lens-path-sublist { margin: 0; padding: 2px 0 8px 34px; display: flex; flex-direction: column; gap: 3px; }
 
       /* Build a course (R-0061) */
       .course-builder { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
