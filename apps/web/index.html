@@ -389,8 +389,24 @@
       .detail-prereqs[hidden] { display: none; }
       .prereq-label { margin: 0; font-size: 12px; color: #e0b483; }
       .prereq-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-      .prereq-chip { font-size: 12px; background: #2c2113; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+      .prereq-chip { font-size: 12px; background: #2c2113; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; overflow: hidden; }
       .prereq-chip:hover { background: #3a2c18; }
+      /* R-0100: chips are now span wrappers; the name is a button, plus an optional
+         ✕ for a prerequisite you added yourself. */
+      .prereq-chip .prereq-open { background: none; border: none; color: inherit; font: inherit; padding: 3px 8px; cursor: pointer; }
+      .prereq-chip.is-user { border-style: dashed; }
+      .prereq-chip .prereq-remove { background: none; border: none; color: #b98a5a; cursor: pointer; padding: 3px 6px 3px 2px; font-size: 11px; }
+      .prereq-chip .prereq-remove:hover { color: #ffb37a; }
+      .prereq-add { margin-top: 2px; }
+      .prereq-add-trigger { background: none; border: 1px dashed #4a3a2a; color: #c9a878; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+      .prereq-add-trigger:hover { background: #2c2113; color: #f0d5b0; }
+      .prereq-picker { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+      .prereq-picker[hidden] { display: none; }
+      .prereq-picker input { width: 100%; box-sizing: border-box; background: #1a130b; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .prereq-results { display: flex; flex-direction: column; gap: 2px; max-height: 30vh; overflow-y: auto; }
+      .prereq-result { text-align: left; background: none; border: none; color: #e0c9a8; padding: 5px 8px; font-size: 13px; cursor: pointer; border-radius: 4px; }
+      .prereq-result:hover { background: #2c2113; color: #fff; }
+      .prereq-none { margin: 2px 0; font-size: 12px; color: #9a866e; }
       .prereq-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
       /* R-0071: tappable sentences + the rabbit-hole actions row. Marked = the same
          amber "gap" language as the prereq block — a confusion IS a gap. */

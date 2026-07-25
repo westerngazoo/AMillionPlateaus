@@ -135,7 +135,7 @@ import {
 } from "./lesson-progress.js"; // R-0063 remember your place in the lesson · R-0064 continue
 import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-builder.js"; // R-0061
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
-import { missingPrereqs, prereqPlanPrompt } from "./prereqs.js"; // R-0070 study what comes before
+import { missingPrereqs, prereqPlanPrompt, combinePrereqs, prereqCandidates } from "./prereqs.js"; // R-0070 study what comes before · R-0100 add your own
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
@@ -2376,73 +2376,176 @@ async function main() {
   // path you haven't studied yet (path ORDER is the prereq truth; bridge direction
   // is unreliable). Each is tappable; a "Guide me →" hand-off builds a plan from the
   // resources pinned on each prereq (R-0069/R-0023). Hoisted; called by openPlateau.
+  // R-0100: prerequisites the reader adds themselves — per topic, in localStorage
+  // (this browser only, like R-0071 confusions), never seeded into the shared
+  // graph. { [topicId]: [prereqId, …] }.
+  const PREREQS_KEY = "mp.prereqs";
+  function loadUserPrereqs() {
+    try {
+      const v = JSON.parse(localStorage.getItem(PREREQS_KEY));
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch {
+      return {};
+    }
+  }
+  let userPrereqs = loadUserPrereqs();
+  function saveUserPrereqs() {
+    try {
+      localStorage.setItem(PREREQS_KEY, JSON.stringify(userPrereqs));
+    } catch {
+      /* private mode / quota — the addition still holds this session */
+    }
+  }
+  const userPrereqIds = (topicId) => (Array.isArray(userPrereqs[topicId]) ? userPrereqs[topicId] : []);
+  function addUserPrereq(topicId, prereqId) {
+    if (!topicId || !prereqId || prereqId === topicId || userPrereqIds(topicId).includes(prereqId)) return;
+    userPrereqs = { ...userPrereqs, [topicId]: [...userPrereqIds(topicId), prereqId] };
+    saveUserPrereqs();
+  }
+  function removeUserPrereq(topicId, prereqId) {
+    userPrereqs = { ...userPrereqs, [topicId]: userPrereqIds(topicId).filter((x) => x !== prereqId) };
+    saveUserPrereqs();
+  }
+
   function renderPrereqs(p) {
     const box = document.getElementById("detail-prereqs");
     box.replaceChildren();
+    const isDone = (id) => mastered.has(id) || lessonEntryOf(lessonProgMap, id).done;
     const course = Object.values(loadPaths()).find(
       (pt) => Array.isArray(pt.steps) && pt.steps.includes(p.id),
     );
-    if (!course) {
-      box.hidden = true;
-      return;
-    }
-    const doneSet = new Set(
-      course.steps.filter((id) => mastered.has(id) || lessonEntryOf(lessonProgMap, id).done),
-    );
-    const missing = missingPrereqs(course.steps, p.id, doneSet);
-    if (!missing.length) {
-      box.hidden = true;
-      return;
-    }
+    const doneSet = new Set((course?.steps ?? []).filter(isDone));
+    const pathMissing = course ? missingPrereqs(course.steps, p.id, doneSet) : [];
+
     const g = doc.to_graph();
     const platById = new Map(g.plateaus().map((q) => [q.id, q]));
     const resAll = g.resources();
-    const rows = missing.map((m) => ({
-      n: m.n,
-      id: m.id,
-      name: platById.get(m.id)?.name || "…",
-      resources: resAll.filter((r) => r.plateau === m.id).map((r) => ({ title: r.title, uri: r.uri })),
+    // user-added prereqs that still exist as topics (drop a dangling one), unstudied
+    const userIds = userPrereqIds(p.id).filter((id) => platById.has(id));
+    const rows = combinePrereqs({
+      pathMissing,
+      userIds,
+      doneSet: new Set([...doneSet, ...userIds.filter(isDone)]),
+      nameOf: (id) => platById.get(id)?.name,
+    });
+    // enrich for the hand-off prompt (resources pinned on each prereq, R-0069)
+    const promptRows = rows.map((r, i) => ({
+      n: r.n ?? i + 1,
+      name: r.name,
+      resources: resAll.filter((x) => x.plateau === r.id).map((x) => ({ title: x.title, uri: x.uri })),
     }));
-    const pathTitle = String(course.title || "").replace(/^course:\s*/i, "");
+    const pathTitle = String(course?.title || "").replace(/^course:\s*/i, "");
 
-    box.hidden = false;
-    const label = document.createElement("p");
-    label.className = "prereq-label";
-    label.textContent = `Before this, study ${rows.length} prerequisite${rows.length > 1 ? "s" : ""}:`;
-    box.append(label);
+    box.hidden = false; // always shown now — the ➕ add affordance lives here
 
-    const chips = document.createElement("div");
-    chips.className = "prereq-chips";
-    for (const r of rows) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "prereq-chip";
-      b.textContent = `${r.n} · ${r.name}`; // textContent — never trust the name as HTML
-      const target = platById.get(r.id);
-      if (target) b.addEventListener("click", () => flyTo(target.position, () => openPlateau(target)));
-      chips.append(b);
+    if (rows.length) {
+      const label = document.createElement("p");
+      label.className = "prereq-label";
+      label.textContent = `Before this, study ${rows.length} prerequisite${rows.length > 1 ? "s" : ""}:`;
+      box.append(label);
+
+      const chips = document.createElement("div");
+      chips.className = "prereq-chips";
+      for (const r of rows) {
+        const chip = document.createElement("span");
+        chip.className = "prereq-chip" + (r.user ? " is-user" : "");
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "prereq-open";
+        open.textContent = r.user ? `＋ ${r.name}` : `${r.n} · ${r.name}`; // textContent — never HTML
+        open.title = r.user ? "You added this prerequisite" : "";
+        const target = platById.get(r.id);
+        if (target) open.addEventListener("click", () => flyTo(target.position, () => openPlateau(target)));
+        chip.append(open);
+        if (r.user) {
+          const x = document.createElement("button");
+          x.type = "button";
+          x.className = "prereq-remove";
+          x.textContent = "✕";
+          x.title = "Remove this prerequisite";
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            removeUserPrereq(p.id, r.id);
+            renderPrereqs(p);
+          });
+          chip.append(x);
+        }
+        chips.append(chip);
+      }
+      box.append(chips);
+
+      const guide = document.createElement("div");
+      guide.className = "prereq-guide";
+      const lbl = document.createElement("span");
+      lbl.className = "course-label";
+      lbl.textContent = "Guide me through them →";
+      guide.append(lbl);
+      for (const t of HANDOFF_TARGETS) {
+        const gb = document.createElement("button");
+        gb.type = "button";
+        gb.textContent = `${t.label} ↗`;
+        gb.title = t.note;
+        gb.addEventListener("click", async () => {
+          const prompt = prereqPlanPrompt({ target: p.name, pathTitle, prereqs: promptRows });
+          window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 · open BEFORE await
+          await copyToClipboard(prompt);
+        });
+        guide.append(gb);
+      }
+      box.append(guide);
     }
-    box.append(chips);
 
-    const guide = document.createElement("div");
-    guide.className = "prereq-guide";
-    const lbl = document.createElement("span");
-    lbl.className = "course-label";
-    lbl.textContent = "Guide me through them →";
-    guide.append(lbl);
-    for (const t of HANDOFF_TARGETS) {
-      const gb = document.createElement("button");
-      gb.type = "button";
-      gb.textContent = `${t.label} ↗`;
-      gb.title = t.note;
-      gb.addEventListener("click", async () => {
-        const prompt = prereqPlanPrompt({ target: p.name, pathTitle, prereqs: rows });
-        window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // R-0073 · open BEFORE await (R-0074)
-        await copyToClipboard(prompt);
-      });
-      guide.append(gb);
-    }
-    box.append(guide);
+    // ── ➕ Add a prerequisite the plan missed (R-0100) ─────────────────────────
+    // A missing dependency won't be sequenced by path order — e.g. Geometría
+    // Analítica underpins Óptica but the plan lists both in the same cuatrimestre.
+    // Type to find a topic and add it; it joins the list above (marked, removable).
+    const add = document.createElement("div");
+    add.className = "prereq-add";
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "prereq-add-trigger";
+    trigger.textContent = "➕ Add a prerequisite";
+    const picker = document.createElement("div");
+    picker.className = "prereq-picker";
+    picker.hidden = true;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Find a topic to require before this…";
+    input.autocomplete = "off";
+    const results = document.createElement("div");
+    results.className = "prereq-results";
+    picker.append(input, results);
+
+    const already = new Set([p.id, ...rows.map((r) => r.id)]);
+    const allTopics = g.plateaus().map((q) => ({ id: q.id, name: q.name }));
+    const renderResults = () => {
+      results.replaceChildren();
+      const hits = prereqCandidates(input.value, allTopics, already);
+      for (const h of hits) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "prereq-result";
+        b.textContent = h.name; // textContent — never HTML
+        b.addEventListener("click", () => {
+          addUserPrereq(p.id, h.id);
+          renderPrereqs(p); // re-render: the new prereq shows in the list above
+        });
+        results.append(b);
+      }
+      if (input.value.trim() && !hits.length) {
+        const none = document.createElement("p");
+        none.className = "prereq-none";
+        none.textContent = "No matching topic (it may already be listed).";
+        results.append(none);
+      }
+    };
+    input.addEventListener("input", renderResults);
+    trigger.addEventListener("click", () => {
+      picker.hidden = !picker.hidden;
+      if (!picker.hidden) input.focus();
+    });
+    add.append(trigger, picker);
+    box.append(add);
   }
   // ── Mark the sentence that lost you (R-0071) ─────────────────────────────────
   // The body reads like a lecture at full speed; the fix is sentence-level. The
