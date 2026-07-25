@@ -54,3 +54,57 @@ test("prereqPlanPrompt is safe with defaults / empty", () => {
   assert.match(p, /this topic/);
   assert.doesNotMatch(p, /\(in ""\)/); // no dangling empty path title
 });
+
+// ── R-0100: add your own prerequisite ────────────────────────────────────────
+import { combinePrereqs, prereqCandidates } from "./prereqs.js";
+
+test("combinePrereqs lists path prereqs first (numbered), then user prereqs", () => {
+  const nameOf = (id) => ({ a: "Álgebra", g: "Geometría", o: "Óptica" }[id] || "");
+  const rows = combinePrereqs({
+    pathMissing: [{ id: "a", n: 2 }],
+    userIds: ["g"],
+    doneSet: new Set(),
+    nameOf,
+  });
+  assert.deepEqual(rows, [
+    { id: "a", n: 2, name: "Álgebra", user: false },
+    { id: "g", n: null, name: "Geometría", user: true },
+  ]);
+});
+
+test("combinePrereqs dedupes (path wins) and drops studied user prereqs", () => {
+  const rows = combinePrereqs({
+    pathMissing: [{ id: "a", n: 1 }],
+    userIds: ["a", "g", "done"],       // 'a' duplicates the path step; 'done' is studied
+    doneSet: new Set(["done"]),
+    nameOf: (id) => id,
+  });
+  assert.deepEqual(rows.map((r) => [r.id, r.user]), [["a", false], ["g", true]]);
+  assert.deepEqual(combinePrereqs(), []); // defensive on no args
+});
+
+test("prereqCandidates matches by name substring, diacritic-insensitive", () => {
+  const topics = [
+    { id: "g", name: "Geometría Analítica" },
+    { id: "o", name: "Óptica" },
+    { id: "c", name: "Cálculo I" },
+  ];
+  assert.deepEqual(prereqCandidates("optica", topics).map((t) => t.id), ["o"]);
+  assert.deepEqual(prereqCandidates("geometr", topics).map((t) => t.id), ["g"]);
+  assert.deepEqual(prereqCandidates("cálculo", topics).map((t) => t.id), ["c"]);
+});
+
+test("prereqCandidates excludes already-listed ids and the topic itself, ranks prefix-first", () => {
+  const topics = [
+    { id: "a", name: "Analytic Geometry" },
+    { id: "b", name: "Pre-Geometry" },
+    { id: "self", name: "Geometry Advanced" },
+  ];
+  // exclude 'self'; "geom" is a prefix of none here but a substring of all → all except excluded
+  const got = prereqCandidates("geometry", topics, ["self"]);
+  assert.equal(got.some((t) => t.id === "self"), false);
+  // prefix match ranks first: query "analytic" → 'a' (prefix) before others
+  assert.equal(prereqCandidates("analytic", topics)[0].id, "a");
+  assert.deepEqual(prereqCandidates("", topics), []); // empty query → nothing
+  assert.deepEqual(prereqCandidates("zzz", topics), []); // no match
+});
