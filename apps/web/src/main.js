@@ -118,6 +118,9 @@ import { GRADES, graded, dueEntries, enrollDue, freshIds, interleave, nextDue } 
 import {
   exactMatch as captureExactMatch,
   suggestNeighbors as captureSuggest,
+  rankLenses as captureRankLenses,
+  fitVerdict as captureFitVerdict,
+  lensFitPrompt as captureLensFitPrompt,
   placeNear as capturePlaceNear,
   dominantDomain as captureDominantDomain,
   resourceKindFor as captureKindFor,
@@ -6623,6 +6626,10 @@ async function main() {
   const captureNeighborsEl = document.getElementById("capture-neighbors");
   const captureReassessBtn = document.getElementById("capture-reassess");
   const captureStatusEl = document.getElementById("capture-status");
+  const captureFitEl = document.getElementById("capture-fit");
+  const captureFitVerdictEl = document.getElementById("capture-fit-verdict");
+  const captureFitLensesEl = document.getElementById("capture-fit-lenses");
+  const captureFitTargetsEl = document.getElementById("capture-fit-targets");
   const unwiredPanel = document.getElementById("unwired-panel");
   const unwiredListEl = document.getElementById("unwired-list");
   const unwiredToggleBtn = document.getElementById("unwired-toggle");
@@ -6660,6 +6667,53 @@ async function main() {
   }
 
   let captureNeighborChoices = []; // the suggested neighbours currently rendered
+
+  // 🧭 R-0103: rank the lenses a captured topic touches (from the keyword
+  // neighbours) with the matching topics as evidence, plus a model hand-off for
+  // the conceptual call — so "reflections" can honestly say "spans Geometric
+  // Algebra, Euclidean, and vector geometry" instead of silently picking one.
+  function renderCaptureFit(name, note) {
+    const ranked = captureRankLenses(captureNeighborChoices);
+    const verdict = captureFitVerdict(ranked);
+    captureFitVerdictEl.textContent = verdict.text;
+
+    captureFitLensesEl.replaceChildren();
+    for (const r of ranked.slice(0, 4)) {
+      const row = document.createElement("div");
+      row.className = "cf-lens";
+      const lens = document.createElement("strong");
+      lens.textContent = r.lens; // textContent — a lens label is never trusted HTML
+      const why = document.createElement("span");
+      why.className = "cf-why";
+      why.textContent = r.matches.length ? ` — ${r.matches.slice(0, 4).join(", ")}` : "";
+      row.append(lens, why);
+      captureFitLensesEl.append(row);
+    }
+
+    // Ask-my-model hand-off: builds the lens-fit prompt from YOUR lenses + the
+    // nearby topics, and opens each target with it prefilled (R-0073 pattern).
+    const lensNames = allDomains().map((d) => d.label).filter(Boolean);
+    const nearby = ranked.map((r) => ({ lens: r.lens, topics: r.matches }));
+    const buildPrompt = () => captureLensFitPrompt({ name, note }, lensNames, nearby);
+    captureFitTargetsEl.replaceChildren();
+    const ask = document.createElement("span");
+    ask.className = "cf-why";
+    ask.textContent = "Which lens? Ask ";
+    captureFitTargetsEl.append(ask);
+    for (const t of HANDOFF_TARGETS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = `${t.label} ↗`;
+      b.addEventListener("click", async () => {
+        const prompt = buildPrompt();
+        window.open(handoffOpenUrl(t, prompt), "_blank", "noopener"); // open BEFORE await (popup activation)
+        await copyToClipboard(prompt);
+      });
+      captureFitTargetsEl.append(b);
+    }
+    captureFitEl.hidden = false;
+  }
+
   function renderCaptureSuggest() {
     const name = captureNameEl.value.trim();
     const note = captureNoteEl.value;
@@ -6667,6 +6721,7 @@ async function main() {
     if (name.length < 3) {
       captureDupeEl.hidden = true;
       captureSuggestEl.hidden = true;
+      captureFitEl.hidden = true;
       captureNeighborChoices = [];
       return;
     }
@@ -6683,6 +6738,9 @@ async function main() {
     // Neighbours (proposals, not auto-wired).
     captureNeighborChoices = captureSuggest({ name, note }, topics, { max: 6 });
     captureNeighborsEl.replaceChildren();
+    // 🧭 Which lens does it fit? (R-0103) — always shown once the name is real,
+    // even with zero keyword matches (the 'none' verdict points you at the model).
+    renderCaptureFit(name, note);
     if (!captureNeighborChoices.length) {
       captureSuggestEl.hidden = true;
       captureReassessBtn.hidden = true;

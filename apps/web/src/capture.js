@@ -82,6 +82,119 @@ export function suggestNeighbors(capture, topics, { max = 6 } = {}) {
 }
 
 /**
+ * Aggregate scored neighbour suggestions into candidate LENSES (R-0103). Given the
+ * output of suggestNeighbors (each { name, lens, domain, score }), sum the score
+ * per lens/domain and collect the matching topic names as the EVIDENCE. Returns
+ * [{ domain, lens, score, matches: [names] }] best first. Pure.
+ *
+ * This is what answers "does 'reflections' relate to GA, Euclidean, or vector
+ * geometry?" — instead of silently filing under the single busiest island, it
+ * shows every lens the topic touches, and why.
+ */
+export function rankLenses(neighbors) {
+  const by = new Map();
+  for (const n of neighbors || []) {
+    if (!n) continue;
+    const key = n.domain != null ? `d:${n.domain}` : `l:${n.lens || "Uncharted"}`;
+    const cur = by.get(key) || {
+      domain: n.domain ?? null,
+      lens: n.lens || "Uncharted",
+      score: 0,
+      matches: [],
+    };
+    cur.score += Number.isFinite(n.score) ? n.score : 1;
+    if (n.name) cur.matches.push(n.name);
+    by.set(key, cur);
+  }
+  return [...by.values()].sort(
+    (a, b) => b.score - a.score || String(a.lens).localeCompare(String(b.lens)),
+  );
+}
+
+/**
+ * A plain-language verdict on where a topic fits, from ranked lenses. When the
+ * leading lenses are within `spanRatio` of the top one, it is called a CROSS-LENS
+ * idea — the honest answer for something like "reflections", which is genuinely a
+ * first-class idea in several lenses (a versor sandwich in GA, an isometry in
+ * Euclidean geometry, a projection in vector geometry) rather than living in one.
+ * Returns `{ kind, text, lenses }`:
+ *   'none'    — nothing in your graph matched (lean on the model hand-off)
+ *   'single'  — one lens, nothing else of note
+ *   'span'    — several comparable lenses; a genuine cross-lens idea
+ *   'primary' — a clear leader, but other lenses have real evidence too
+ */
+export function fitVerdict(ranked, { spanRatio = 0.6, touchRatio = 0.25, maxSpan = 3 } = {}) {
+  const r = (ranked || []).filter((x) => x && x.score > 0);
+  if (!r.length) {
+    return {
+      kind: "none",
+      text: "Nothing in your graph matches yet — ask your model where it fits, or pick a lens below.",
+      lenses: [],
+    };
+  }
+  const top = r[0];
+  if (r.length === 1) {
+    return { kind: "single", text: `Looks like ${top.lens}.`, lenses: [top.lens] };
+  }
+  // Genuine cross-lens: two or three lenses within spanRatio of the leader.
+  const near = r.filter((x) => x.score >= top.score * spanRatio).slice(0, maxSpan);
+  if (near.length >= 2) {
+    const names = near.map((x) => x.lens);
+    const list =
+      names.length === 2
+        ? `${names[0]} and ${names[1]}`
+        : `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+    return {
+      kind: "span",
+      text: `Spans ${list} — a cross-lens idea. Home it in one lens; you can bridge it into the others.`,
+      lenses: names,
+    };
+  }
+  // A clear leader, but name the other lenses with non-trivial evidence so you
+  // still learn it touches Euclidean & vector geometry even when GA leads.
+  const touches = r
+    .slice(1)
+    .filter((x) => x.score >= top.score * touchRatio)
+    .map((x) => x.lens)
+    .slice(0, maxSpan);
+  if (touches.length) {
+    return {
+      kind: "primary",
+      text: `Mostly ${top.lens} — also touches ${touches.join(", ")}.`,
+      lenses: [top.lens, ...touches],
+    };
+  }
+  return { kind: "single", text: `Looks like ${top.lens}.`, lenses: [top.lens] };
+}
+
+/**
+ * A copy-paste prompt asking a model which of YOUR lenses a new topic belongs to,
+ * and which existing topics it should connect to. Offline heuristics only see
+ * shared words; this is the conceptual call (e.g. it knows a reflection is a GA
+ * versor even when no GA topic spells the word). `lenses` = your lens labels;
+ * `nearby` = [{ lens, topics: [names] }] your graph already has near it. Pure text.
+ */
+export function lensFitPrompt({ name = "this topic", note = "" } = {}, lenses = [], nearby = []) {
+  const topic = String(name).trim() || "this topic";
+  const L = (lenses || []).filter(Boolean);
+  const lines = [`I'm adding a new topic to my personal knowledge map: "${topic}".`];
+  const n = String(note || "").trim();
+  if (n) lines.push(`My note on it: ${n}`);
+  if (L.length) {
+    lines.push(`\nMy lenses (the perspectives my map is organised by):\n${L.map((x) => `- ${x}`).join("\n")}`);
+  }
+  const nb = (nearby || []).filter((x) => x && Array.isArray(x.topics) && x.topics.length);
+  if (nb.length) {
+    lines.push(`\nTopics already near it in my map, by lens:`);
+    for (const g of nb) lines.push(`- ${g.lens}: ${g.topics.slice(0, 6).join(", ")}`);
+  }
+  lines.push(
+    `\nWhich of my lenses does "${topic}" genuinely belong to? It may belong to several — if so, say how it appears through each (the same idea seen differently). Then list the 3–6 existing topics it should connect to, and for each say whether it is a prerequisite of "${topic}", a consequence of it, or a sibling. Keep it a short list I can act on.`,
+  );
+  return lines.join("\n");
+}
+
+/**
  * Place a new plateau near confirmed neighbours: the centroid of their Grade-1
  * positions, plus a small DETERMINISTIC nudge (a hash of the name, never
  * Math.random — keeps the module pure and resumable) so it never lands exactly
