@@ -1167,6 +1167,35 @@
         </div>
         <p id="ident-status" class="course-status" hidden></p>
       </div>
+
+      <!-- 📦 Move your whole setup (R-0102): one paste carries the things that can
+           NEVER live in git — key + sync repo + token + model API keys + relays —
+           device-to-device, so a new Boox is configured in one shot. Complement of
+           profile.js (which syncs your DATA with secrets excluded). -->
+      <div class="ident-move">
+        <p class="course-label">📦 Move your whole setup in one paste</p>
+        <p class="course-help">A new device (a Boox) otherwise means re-entering your key, repo, token, model and relays by hand. Instead, copy your <strong>whole setup</strong> as one blob and paste it into the other device — everything at once. It moves device-to-device only; it is never put in git or sent to a server.</p>
+        <div class="course-actions">
+          <button id="setup-export" type="button">Copy my whole setup →</button>
+          <button id="setup-import-toggle" type="button">Paste a setup ↓</button>
+        </div>
+        <div id="setup-export-box" hidden>
+          <p class="ident-warn">⚠️ This blob holds your <strong>secret key AND your sync token</strong> — a password to your identity and your repo. Only paste it into <em>your own</em> device, then clear it. Never share it or store it anywhere public.</p>
+          <textarea id="setup-blob" readonly rows="3"></textarea>
+          <div class="course-actions">
+            <button id="setup-copy" type="button">Copy</button>
+            <button id="setup-hide" type="button">Hide</button>
+          </div>
+        </div>
+        <div id="setup-import-box" hidden>
+          <p class="course-help">Paste the setup blob from your other device. This device takes on that identity, sync repo, token, model and relays, then reloads fully configured.</p>
+          <textarea id="setup-import" rows="3" placeholder="paste your setup blob (MPSETUP1.…)…"></textarea>
+          <div class="course-actions">
+            <button id="setup-import-go" type="button">Set up this device →</button>
+          </div>
+        </div>
+        <p id="setup-status" class="course-status" hidden></p>
+      </div>
     </div>
 
     <!-- 🔴 Live sync (R-0089): two of your devices on the same network auto-pair

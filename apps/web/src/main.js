@@ -137,6 +137,7 @@ import { courseOutlinePrompt, parseCourseOutline, linkPrereqs } from "./course-b
 import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route a resource to its topics
 import { missingPrereqs, prereqPlanPrompt, combinePrereqs, prereqCandidates } from "./prereqs.js"; // R-0070 study what comes before · R-0100 add your own
 import { PROFILE_FILE, collectProfile, mergeProfile, applyProfile, profileFingerprint, parseProfile } from "./profile.js"; // R-0101 sync your whole self
+import { buildSetup, encodeSetup, decodeSetup, applySetup, setupSecret, describeSetup } from "./setup-transfer.js"; // R-0102 move your whole setup
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
@@ -6235,6 +6236,63 @@ async function main() {
     localStorage.setItem(SECRET_KEY, hex);
     identSay("Identity set — reloading as you…");
     setTimeout(() => location.reload(), 400); // re-mint from the new key; boot then pulls your profile
+  });
+
+  // ── R-0102: move your WHOLE setup in one paste ──────────────────────────────
+  // The identity move above carries only the key. This carries everything that
+  // can never live in git — key + sync repo + token + model API keys + relays —
+  // as one opaque blob, so a fresh device (a Boox) is fully configured by a single
+  // paste instead of re-typing each field. The blob is shown only for copy, never
+  // sent or logged; import validates the embedded key before overwriting anything.
+  const setupBlob = document.getElementById("setup-blob");
+  const setupExportBox = document.getElementById("setup-export-box");
+  const setupImportBox = document.getElementById("setup-import-box");
+  const setupStatus = document.getElementById("setup-status");
+  const setupSay = (t, err) => {
+    setupStatus.hidden = false;
+    setupStatus.textContent = t;
+    setupStatus.classList.toggle("err", !!err);
+  };
+  document.getElementById("setup-export").addEventListener("click", () => {
+    const setup = buildSetup(localStorage);
+    if (!setup.keys[SECRET_KEY]) return setupSay("No identity on this device yet — nothing to move.", true);
+    setupBlob.value = encodeSetup(setup); // shown ONLY here; never sent or logged
+    setupExportBox.hidden = false;
+    setupImportBox.hidden = true;
+    setupSay(`Carries: ${describeSetup(setup)}. Copy it, paste into your other device, then Hide.`, false);
+    setupBlob.focus();
+    setupBlob.select();
+  });
+  document.getElementById("setup-hide").addEventListener("click", () => {
+    setupBlob.value = ""; // don't leave the secret-bearing blob in the DOM
+    setupExportBox.hidden = true;
+  });
+  document.getElementById("setup-copy").addEventListener("click", async () => {
+    const ok = await copyToClipboard(setupBlob.value);
+    setupSay(ok ? "Copied ✓ — paste it into your other device, then Hide." : "Copy failed — select the text and copy manually.", !ok);
+  });
+  document.getElementById("setup-import-toggle").addEventListener("click", () => {
+    setupImportBox.hidden = !setupImportBox.hidden;
+    setupExportBox.hidden = true;
+    if (!setupImportBox.hidden) document.getElementById("setup-import").focus();
+  });
+  document.getElementById("setup-import-go").addEventListener("click", () => {
+    const setup = decodeSetup(document.getElementById("setup-import").value);
+    if (!setup) return setupSay("That doesn't look like a setup blob (should start with MPSETUP1.).", true);
+    // Validate the embedded identity by actually constructing it — a junk key
+    // throws, so we never half-apply a broken setup onto this device.
+    const hex = setupSecret(setup);
+    if (hex) {
+      try {
+        idWasm.WasmIdentity.from_secret(hex);
+      } catch {
+        return setupSay("The setup's wizard key is invalid — nothing was changed.", true);
+      }
+    }
+    if (!confirm(`Set up this device from the blob? It will bring over: ${describeSetup(setup)} — replacing this device's current identity and sync settings. Your other device is unaffected.`)) return;
+    applySetup(setup, localStorage);
+    setupSay("Setup applied — reloading fully configured…");
+    setTimeout(() => location.reload(), 400); // boot re-reads config, pulls world + profile under the new identity
   });
 
   // R-0088: sync-on-connection — when 📓 Sync is configured, pull the world once
