@@ -795,6 +795,15 @@
       .capture-neighbor input[type="checkbox"] { margin: 0; width: auto; flex: 0 0 auto; }
       .capture-neighbor .cn-lens { color: #8aa0b4; font-size: 12px; }
       .capture-reassess { margin-top: 6px; }
+      /* R-0103 which lens does it fit? */
+      .capture-fit[hidden] { display: none; }
+      .capture-fit { margin: 4px 0 8px; padding: 8px 10px; background: #14202c; border: 1px solid #24384a; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; }
+      .capture-fit-verdict { margin: 0; font-size: 13px; color: #cfe0ef; }
+      .capture-fit-lenses { display: flex; flex-direction: column; gap: 3px; }
+      .cf-lens { font-size: 12px; color: #9fd0b4; }
+      .cf-lens .cf-why { color: #8aa0b4; }
+      .capture-fit-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+      .capture-fit-targets button { font-size: 12px; }
       .unwired-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #223; }
       .unwired-row button { flex: 0 0 auto; }
       .unwired-empty { color: #8aa0b4; font-size: 13px; }
@@ -1304,6 +1313,14 @@
       <input id="capture-url" type="text" placeholder="Reference you're studying (optional) — a YouTube link, an article…" autocomplete="off" />
       <textarea id="capture-note" rows="3" placeholder="First note (optional, Markdown) — the more you say, the better we can place it. e.g. derive from the dot product of two vectors"></textarea>
       <p id="capture-dupe" class="course-status" hidden></p>
+      <!-- 🧭 Which lens does it fit? (R-0103): rank the lenses the topic touches,
+           with the matching topics as evidence, plus a model hand-off for the
+           conceptual call keyword-matching can't make. -->
+      <div id="capture-fit" class="capture-fit" hidden>
+        <p id="capture-fit-verdict" class="capture-fit-verdict"></p>
+        <div id="capture-fit-lenses" class="capture-fit-lenses"></div>
+        <div id="capture-fit-targets" class="capture-fit-targets"></div>
+      </div>
       <div id="capture-suggest" class="capture-suggest" hidden>
         <p class="course-label">Looks related to — tick to wire in (each becomes a bridge, and places it near them):</p>
         <div id="capture-neighbors"></div>

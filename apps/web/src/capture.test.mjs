@@ -6,6 +6,9 @@ import assert from "node:assert/strict";
 import {
   exactMatch,
   suggestNeighbors,
+  rankLenses,
+  fitVerdict,
+  lensFitPrompt,
   placeNear,
   dominantDomain,
   resourceKindFor,
@@ -126,4 +129,81 @@ test("unwiredIds: captured ids with zero bridges; auto-clears once wired", () =>
   assert.deepEqual(unwiredIds(stored, []), ["a", "b", "c"]);
   assert.deepEqual(unwiredIds([], bridges), []);
   assert.deepEqual(unwiredIds(null, null), []);
+});
+
+// ── R-0103: which lens does this fit? ────────────────────────────────────────
+// A capture-time set of scored neighbours spanning three geometry lenses, as
+// suggestNeighbors would emit them.
+const GA = "d-ga", EUC = "d-euclid", VEC = "d-vector";
+const reflectionNeighbors = [
+  { id: "1", name: "Reflections as versors", lens: "Geometric Algebra", domain: GA, score: 6 },
+  { id: "2", name: "Rotors", lens: "Geometric Algebra", domain: GA, score: 3 },
+  { id: "3", name: "Isometries", lens: "Euclidean Geometry", domain: EUC, score: 5 },
+  { id: "4", name: "Vector projection", lens: "Vector Geometry", domain: VEC, score: 3 },
+];
+
+test("rankLenses aggregates score per lens and keeps the evidence", () => {
+  const r = rankLenses(reflectionNeighbors);
+  assert.equal(r[0].lens, "Geometric Algebra");
+  assert.equal(r[0].score, 9); // 6 + 3
+  assert.deepEqual(r[0].matches, ["Reflections as versors", "Rotors"]);
+  assert.equal(r[1].lens, "Euclidean Geometry");
+  assert.equal(r[1].score, 5);
+  assert.equal(r.length, 3, "three distinct lenses");
+});
+
+test("fitVerdict → primary names the other lenses even when one leads", () => {
+  // GA(9) leads; Euclidean(5) & Vector(2) are below spanRatio·9 but above the
+  // touchRatio, so they're still surfaced — you learn it touches all three.
+  const v = fitVerdict(rankLenses(reflectionNeighbors));
+  assert.equal(v.kind, "primary");
+  assert.match(v.text, /Mostly Geometric Algebra/);
+  assert.match(v.text, /Euclidean Geometry/);
+  assert.match(v.text, /Vector Geometry/);
+});
+
+test("fitVerdict → span when lenses are genuinely comparable", () => {
+  const near = [
+    { lens: "Geometric Algebra", domain: GA, score: 6, matches: ["Reflections as versors"] },
+    { lens: "Euclidean Geometry", domain: EUC, score: 5, matches: ["Isometries"] },
+    { lens: "Vector Geometry", domain: VEC, score: 4, matches: ["Projection"] },
+  ];
+  const v = fitVerdict(near);
+  assert.equal(v.kind, "span");
+  assert.deepEqual(v.lenses, ["Geometric Algebra", "Euclidean Geometry", "Vector Geometry"]);
+  assert.match(v.text, /cross-lens/);
+});
+
+test("fitVerdict → single when one lens dominates", () => {
+  const v = fitVerdict([
+    { lens: "Geometric Algebra", domain: GA, score: 9, matches: ["Rotors"] },
+    { lens: "Music", domain: "d-music", score: 1, matches: ["Timbre"] },
+  ]);
+  assert.equal(v.kind, "single");
+  assert.deepEqual(v.lenses, ["Geometric Algebra"]);
+});
+
+test("fitVerdict → none points you at the model when the graph is silent", () => {
+  const v = fitVerdict([]);
+  assert.equal(v.kind, "none");
+  assert.match(v.text, /ask your model/i);
+});
+
+test("lensFitPrompt lists your lenses, the nearby topics, and asks the real question", () => {
+  const p = lensFitPrompt(
+    { name: "Reflections", note: "how a mirror flips a vector" },
+    ["Geometric Algebra", "Euclidean Geometry", "Vector Geometry"],
+    [{ lens: "Geometric Algebra", topics: ["Rotors", "Versors"] }],
+  );
+  assert.match(p, /"Reflections"/);
+  assert.match(p, /how a mirror flips a vector/);
+  assert.match(p, /- Geometric Algebra/);
+  assert.match(p, /Rotors, Versors/);
+  assert.match(p, /prerequisite of|consequence|sibling/);
+});
+
+test("lensFitPrompt is robust to empty inputs", () => {
+  const p = lensFitPrompt({}, [], []);
+  assert.match(p, /this topic/);
+  assert.ok(p.length > 20);
 });
