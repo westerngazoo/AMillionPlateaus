@@ -34,6 +34,7 @@ export const PROFILE_KEYS = [
   "mp.privateShelf", // per-plateau private resources
   "mp.proofs", // saved proofs / solutions
   "mp.unwired", // capture inbox
+  "mp.baton", // R-0105 "I'm on this topic" pointer, so another device can open its notes
 ];
 
 // Keys that MUST NEVER be written into the synced profile. The test asserts these

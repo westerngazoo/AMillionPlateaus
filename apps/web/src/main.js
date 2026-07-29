@@ -142,6 +142,7 @@ import { whereFitsPrompt, matchTopics } from "./where-fits.js"; // R-0069 route 
 import { missingPrereqs, prereqPlanPrompt, combinePrereqs, prereqCandidates } from "./prereqs.js"; // R-0070 study what comes before · R-0100 add your own
 import { PROFILE_FILE, collectProfile, mergeProfile, applyProfile, profileFingerprint, parseProfile } from "./profile.js"; // R-0101 sync your whole self
 import { buildSetup, encodeSetup, decodeSetup, applySetup, setupSecret, describeSetup } from "./setup-transfer.js"; // R-0102 move your whole setup
+import { BATON_KEY, deviceLabel, makeBaton, parseBatons, pushBaton, latestFrom, describeBaton, clearBatonFrom } from "./baton.js"; // R-0105 hand a topic to your other device
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
@@ -5571,6 +5572,98 @@ async function main() {
     return applyProfile(merged, localStorage).length;
   }
 
+  // ── ✍️ R-0105: hand the topic you're on to your OTHER device ────────────────
+  // Scan Note (R-0058) needs a camera on the receiving device, which a Boox e-ink
+  // tablet doesn't have — and it points the wrong way anyway: the Boox is the best
+  // device to WRITE on. So the laptop drops a baton (a tiny "I'm on this topic"
+  // pointer) into the profile it already syncs; the Boox picks it up and opens that
+  // topic's notepad. No camera, no typing. The notes themselves keep flowing over
+  // the existing markdown channel (R-0075) — this only carries the pointer.
+  const DEVICE_NAME_KEY = "mp.deviceName"; // deliberately LOCAL: each device is itself
+  function myDeviceName() {
+    let n = "";
+    try {
+      n = localStorage.getItem(DEVICE_NAME_KEY) || "";
+    } catch {
+      n = "";
+    }
+    if (!n) {
+      n = deviceLabel(navigator.userAgent || "");
+      try {
+        localStorage.setItem(DEVICE_NAME_KEY, n);
+      } catch {
+        /* private mode — the in-memory name still works for this session */
+      }
+    }
+    return n;
+  }
+  const loadBatons = () => {
+    try {
+      return parseBatons(JSON.parse(localStorage.getItem(BATON_KEY) || "[]"));
+    } catch {
+      return [];
+    }
+  };
+  const saveBatons = (list) => {
+    try {
+      localStorage.setItem(BATON_KEY, JSON.stringify(list));
+    } catch {
+      /* quota — the banner just won't survive a reload */
+    }
+  };
+
+  const batonBanner = document.getElementById("baton-banner");
+  const batonTextEl = document.getElementById("baton-text");
+  let batonOffer = null; // the foreign baton currently being offered
+
+  // Show the banner when the OTHER device left a fresh pointer. Quiet otherwise —
+  // a stale baton (you moved on hours ago) never nags.
+  function renderBatonBanner() {
+    batonOffer = latestFrom(loadBatons(), myDeviceName(), Date.now());
+    if (!batonOffer || !plateauById(batonOffer.topicId)) {
+      batonBanner.hidden = true;
+      return;
+    }
+    batonTextEl.textContent = `✍️ ${describeBaton(batonOffer)} — write your notes here?`;
+    batonBanner.hidden = false;
+  }
+
+  // Laptop side: hand the open topic over, and push it right away so the Boox can
+  // pick it up on its next pull instead of waiting for the 45s cadence.
+  function handOffCurrentTopic() {
+    if (!studyPlateau) return false;
+    const b = makeBaton({
+      device: myDeviceName(),
+      topicId: studyPlateau.id,
+      name: studyPlateau.name,
+      at: Date.now(),
+    });
+    if (!b) return false;
+    saveBatons(pushBaton(loadBatons(), b));
+    queueProfilePush();
+    return true;
+  }
+
+  document.getElementById("baton-open").addEventListener("click", () => {
+    const target = batonOffer && plateauById(batonOffer.topicId);
+    batonBanner.hidden = true;
+    if (!target) return;
+    // Clear the pointer so opening it doesn't bounce back and re-prompt.
+    saveBatons(clearBatonFrom(loadBatons(), batonOffer.device));
+    queueProfilePush();
+    flyTo(target.position, () => {
+      openPlateau(target);
+      // Land the learner in the notepad — that's the whole point of the hand-off.
+      setTimeout(() => {
+        notepadInput.scrollIntoView({ block: "center" });
+        notepadInput.focus();
+      }, 120);
+    });
+  });
+  document.getElementById("baton-dismiss").addEventListener("click", () => {
+    batonBanner.hidden = true;
+  });
+
   // R-0088 + R-0101: every persist()-triggering change backs up BOTH the world and
   // the profile. Profile-only changes (a confusion, an added prereq, lesson
   // progress) don't call persist(), so they're also caught by the periodic +
@@ -6329,7 +6422,21 @@ async function main() {
       } catch {
         /* offline / unreachable forge — the local world is intact; manual Pull still works */
       }
+      // R-0105: the graph is now loaded, so a handed-off topic can be resolved.
+      renderBatonBanner();
     })();
+    // R-0105: a hand-off is worth noticing promptly, so poll the profile for a
+    // fresh baton while the app is visible. Cheap (one small file) and silent on
+    // failure; the banner only appears when the OTHER device left a fresh pointer.
+    setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        await pullProfile();
+        renderBatonBanner();
+      } catch {
+        /* offline — try again next tick */
+      }
+    }, 30000);
     // R-0101: back the profile up on a gentle cadence and whenever you leave —
     // so a confusion mark or a lesson step (which don't touch the graph) still
     // reach your repo. queueProfilePush is a no-op when nothing changed.
@@ -6339,6 +6446,18 @@ async function main() {
     });
     window.addEventListener("pagehide", queueProfilePush);
   }
+  // R-0105: hand this topic to the Boox (or whichever device you write on).
+  document.getElementById("notepad-baton").addEventListener("click", () => {
+    if (!studyPlateau) return;
+    if (!notesSyncCfg) {
+      notepadStatus.textContent = "Connect 📓 Sync first — the hand-off travels through your repo.";
+      return;
+    }
+    if (handOffCurrentTopic()) {
+      notepadStatus.textContent = `✍️ Handed to your other device — open the app there and tap “Open its notes”.`;
+    }
+  });
+
   document.getElementById("notepad-save").addEventListener("click", () => {
     if (!studyPlateau) return;
     notepadDirty = { id: studyPlateau.id, val: notepadInput.value };
@@ -7149,6 +7268,11 @@ async function main() {
   // the (fogged) world behind the creator overlay.
   sync.pump();
   draw();
+
+  // R-0105: the graph is drawn, so a handed-off topic resolves to a real plateau.
+  // Checked unconditionally (a pure local read) — not only when sync is on, so a
+  // baton already sitting in this browser is still offered.
+  renderBatonBanner();
 
   // First entry only (no "seen" flag): welcome the visitor BEFORE the lens
   // picker — the overlay covers it and dismiss reveals it. Returning visitors
