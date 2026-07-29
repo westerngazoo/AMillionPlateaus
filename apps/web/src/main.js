@@ -121,6 +121,7 @@ import {
   rankLenses as captureRankLenses,
   fitVerdict as captureFitVerdict,
   lensFitPrompt as captureLensFitPrompt,
+  twinPlan as captureTwinPlan,
   placeNear as capturePlaceNear,
   dominantDomain as captureDominantDomain,
   resourceKindFor as captureKindFor,
@@ -163,7 +164,7 @@ import { assembleMessages, sendTurn, sendVisionTurn } from "./companion.js";
 import { buildPlateau } from "./plateau.js";
 import { renderMarkdown, safeHref } from "./markdown.js";
 import { typesetMath } from "./katex.js";
-import { twinMap, pairPath, stepPair, pairPosition } from "./parallel.js"; // R-0097 study a topic in two formalisms at once
+import { twinMap, pairPath, stepPair, pairPosition, TWIN_CONCEPT } from "./parallel.js"; // R-0097 study a topic in two formalisms at once · R-0104 mint twins
 import {
   rankResources,
   buildPlateauStudyContext,
@@ -6630,6 +6631,8 @@ async function main() {
   const captureFitVerdictEl = document.getElementById("capture-fit-verdict");
   const captureFitLensesEl = document.getElementById("capture-fit-lenses");
   const captureFitTargetsEl = document.getElementById("capture-fit-targets");
+  const captureTwinsEl = document.getElementById("capture-twins");
+  const captureTwinRowsEl = document.getElementById("capture-twin-rows");
   const unwiredPanel = document.getElementById("unwired-panel");
   const unwiredListEl = document.getElementById("unwired-list");
   const unwiredToggleBtn = document.getElementById("unwired-toggle");
@@ -6667,6 +6670,8 @@ async function main() {
   }
 
   let captureNeighborChoices = []; // the suggested neighbours currently rendered
+  let captureTwinPlanned = []; // R-0104 the cross-lens twins currently offered
+  let captureFitPrimary = null; // R-0104 { domain, lens } the verdict's home lens
 
   // 🧭 R-0103: rank the lenses a captured topic touches (from the keyword
   // neighbours) with the matching topics as evidence, plus a model hand-off for
@@ -6689,6 +6694,39 @@ async function main() {
       row.append(lens, why);
       captureFitLensesEl.append(row);
     }
+
+    // 🧬 R-0104: when the idea genuinely spans lenses, offer to stand it up in
+    // each as a TWIN — the primary keeps the plain name, every other lens gets a
+    // "<Lens> view: <name>" sibling bridged "alternative formulation of", the same
+    // relation the seeded GA/SIA pairs use, so parallel view walks across them.
+    captureTwinPlanned = [];
+    captureTwinRowsEl.replaceChildren();
+    const primary = ranked[0];
+    captureFitPrimary = primary && primary.domain != null ? { domain: primary.domain, lens: primary.lens } : null;
+    const others = (verdict.lenses || [])
+      .slice(1)
+      .map((label) => ranked.find((r) => r.lens === label))
+      .filter((r) => r && r.domain != null && r.domain !== primary?.domain);
+    if (others.length && primary) {
+      captureTwinPlanned = captureTwinPlan(
+        { name, primaryDomain: primary.domain, primaryLens: primary.lens },
+        others,
+      );
+      for (const t of captureTwinPlanned) {
+        const row = document.createElement("label");
+        row.className = "capture-twin";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.dataset.domain = t.domain;
+        cb.dataset.lens = t.lens;
+        const nm = document.createElement("span");
+        nm.className = "ct-name";
+        nm.textContent = t.name; // textContent — a lens label is never trusted HTML
+        row.append(cb, nm);
+        captureTwinRowsEl.append(row);
+      }
+    }
+    captureTwinsEl.hidden = captureTwinPlanned.length === 0;
 
     // Ask-my-model hand-off: builds the lens-fit prompt from YOUR lenses + the
     // nearby topics, and opens each target with it prefilled (R-0073 pattern).
@@ -6722,7 +6760,10 @@ async function main() {
       captureDupeEl.hidden = true;
       captureSuggestEl.hidden = true;
       captureFitEl.hidden = true;
+      captureTwinsEl.hidden = true;
       captureNeighborChoices = [];
+      captureTwinPlanned = [];
+      captureFitPrimary = null;
       return;
     }
     const topics = captureTopics();
@@ -6794,9 +6835,18 @@ async function main() {
     }
     const tickedIds = new Set(captureTicked());
     const ticked = captureNeighborChoices.filter((n) => tickedIds.has(n.id));
+    // R-0104: the twins you ticked are defined RELATIVE to a home lens, so if you
+    // acted on the cross-lens verdict, home the primary in the lens the verdict
+    // named. Otherwise the primary could land elsewhere (the persona fallback) and
+    // we'd mint a "<that lens> view:" twin sitting in the primary's own domain.
+    const tickedTwins = [...captureTwinRowsEl.querySelectorAll("input:checked")].map((cb) => ({
+      domain: cb.dataset.domain,
+      lens: cb.dataset.lens,
+    }));
     // Domain: the busiest ticked island, else the active persona's first faced
     // domain, else the first domain that exists — a plateau must have a domain.
     const domain =
+      (tickedTwins.length ? captureFitPrimary?.domain : null) ??
       captureDominantDomain(ticked) ??
       activePersona?.orient?.[0]?.domain ??
       allDomains()[0]?.id;
@@ -6834,6 +6884,35 @@ async function main() {
         console.error("[mp] capture bridge:", err);
       }
     }
+    // 🧬 R-0104: mint the ticked cross-lens twins. Each lands on ITS OWN lens
+    // anchor (so it sits on that island, not on top of the primary) and is
+    // bridged to the primary with TWIN_CONCEPT — the same "alternative
+    // formulation of" relation the seeded GA/SIA pairs use, which is what lets
+    // parallel view (R-0097) step across them side by side.
+    // Re-plan against the domain the primary ACTUALLY got: twinPlan skips the
+    // primary's own domain, so a lens that ended up being the home is dropped
+    // rather than minted as a twin of itself.
+    const twinsToMint = captureTwinPlan(
+      { name, primaryDomain: String(domain), primaryLens: domainLabelOf(domain) ?? "its home lens" },
+      tickedTwins,
+    );
+    let twinsMade = 0;
+    for (const t of twinsToMint) {
+      try {
+        const anchor = allDomains().find((d) => d.id === t.domain)?.canonical ?? { e1: 0, e2: 0, e3: 0 };
+        // Seed the jitter from the twin's own name so two twins on one island
+        // never stack, and the placement stays deterministic (resumable).
+        const tp = capturePlaceNear([anchor], t.name, anchor);
+        const twinId = doc.add_plateau(t.name, t.domain, tp.e1, tp.e2, tp.e3, t.body);
+        DOMAIN_OF.set(twinId, t.domain);
+        doc.add_bridge(newId, twinId, TWIN_CONCEPT);
+        twinsMade++;
+        bridged++; // the primary is now wired — keep it out of the Unwired inbox
+      } catch (err) {
+        console.error("[mp] capture twin:", err);
+      }
+    }
+
     // Pin the reference as this topic's first resource (R-0023), if it's a link.
     const url = captureUrlEl.value.trim();
     const kind = captureKindFor(url);
@@ -6866,7 +6945,10 @@ async function main() {
     captureNoteEl.value = "";
     captureSuggestEl.hidden = true;
     captureDupeEl.hidden = true;
+    captureFitEl.hidden = true;
+    captureTwinsEl.hidden = true;
     captureNeighborChoices = [];
+    captureTwinPlanned = [];
     capturePanel.hidden = true;
     // R-0084/88: a captured topic backs itself up — now covered by persist()'s
     // auto-push too, but kept explicit so capture is guaranteed to enqueue.

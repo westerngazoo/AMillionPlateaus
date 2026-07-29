@@ -9,6 +9,10 @@ import {
   rankLenses,
   fitVerdict,
   lensFitPrompt,
+  lensShort,
+  twinName,
+  twinBody,
+  twinPlan,
   placeNear,
   dominantDomain,
   resourceKindFor,
@@ -206,4 +210,70 @@ test("lensFitPrompt is robust to empty inputs", () => {
   const p = lensFitPrompt({}, [], []);
   assert.match(p, /this topic/);
   assert.ok(p.length > 20);
+});
+
+// ── R-0104: a cross-lens topic becomes linked twins ──────────────────────────
+test("lensShort keeps the seeded acronyms, else the first word", () => {
+  assert.equal(lensShort("Geometric Algebra"), "GA");
+  assert.equal(lensShort("Synthetic Infinitesimal Analysis"), "SIA");
+  assert.equal(lensShort("Euclidean Geometry"), "Euclidean");
+  assert.equal(lensShort("Vector Geometry"), "Vector");
+  assert.equal(lensShort(""), "Other");
+});
+
+test("twinName follows the seeded 'GA view: …' convention", () => {
+  assert.equal(twinName("Reflections", "Geometric Algebra"), "GA view: Reflections");
+  assert.equal(twinName("Reflections", "Euclidean Geometry"), "Euclidean view: Reflections");
+});
+
+test("twinBody names the sibling, the lens, and obeys the markdown subset", () => {
+  const b = twinBody("Reflections", "Euclidean Geometry", "Geometric Algebra");
+  const lines = b.split("\n");
+  assert.match(lines[0], /^# Euclidean view: Reflections$/);
+  assert.equal(lines[1], "", "heading must be its own block");
+  assert.match(b, /same idea as \*\*Reflections\*\*/);
+  assert.match(b, /Geometric Algebra/, "says what the primary lens was");
+  assert.ok(!/^>/m.test(b), "no blockquote — markdown.js renders it literally");
+});
+
+test("twinPlan: one twin per other lens, primary and dupes skipped", () => {
+  const plan = twinPlan(
+    { name: "Reflections", primaryDomain: "ga", primaryLens: "Geometric Algebra" },
+    [
+      { lens: "Geometric Algebra", domain: "ga" }, // the primary — skipped
+      { lens: "Euclidean Geometry", domain: "euc" },
+      { lens: "Vector Geometry", domain: "vec" },
+      { lens: "Euclidean Geometry", domain: "euc" }, // dupe — skipped
+      { lens: "Nameless", domain: null }, // no domain — skipped
+    ],
+  );
+  assert.equal(plan.length, 2);
+  assert.deepEqual(plan.map((t) => t.name), [
+    "Euclidean view: Reflections",
+    "Vector view: Reflections",
+  ]);
+  assert.deepEqual(plan.map((t) => t.domain), ["euc", "vec"]);
+  assert.match(plan[0].body, /^# Euclidean view: Reflections/);
+});
+
+test("twinPlan: no name or no other lenses → nothing to mint", () => {
+  assert.deepEqual(twinPlan({ name: "", primaryDomain: "ga" }, [{ lens: "X", domain: "x" }]), []);
+  assert.deepEqual(twinPlan({ name: "Reflections", primaryDomain: "ga" }, []), []);
+  assert.deepEqual(twinPlan({}, null), []);
+});
+
+test("twinPlan never mints a twin in the primary's OWN domain (regression)", () => {
+  // The bug this guards: the fit verdict led with Physics, so twins were planned
+  // for Mathematics + SIA — but the plateau actually landed in Mathematics (the
+  // persona fallback). Re-planning against the RESOLVED home must drop the
+  // Mathematics twin instead of minting "Mathematics view: X" inside Mathematics.
+  const plan = twinPlan(
+    { name: "Integration", primaryDomain: "math", primaryLens: "Mathematics" },
+    [
+      { lens: "Synthetic Infinitesimal Analysis", domain: "sia" },
+      { lens: "Mathematics", domain: "math" }, // === the resolved home → dropped
+    ],
+  );
+  assert.deepEqual(plan.map((t) => t.name), ["SIA view: Integration"]);
+  assert.ok(!plan.some((t) => t.domain === "math"), "no twin may share the primary's domain");
 });
