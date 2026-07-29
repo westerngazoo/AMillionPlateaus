@@ -804,6 +804,16 @@
       .cf-lens .cf-why { color: #8aa0b4; }
       .capture-fit-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
       .capture-fit-targets button { font-size: 12px; }
+      /* R-0105 hand the topic to your other device */
+      .baton-banner[hidden] { display: none; }
+      .baton-banner {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        margin: 0 14px 8px; padding: 8px 12px;
+        background: #16283a; border: 1px solid #2f5f83; border-radius: 8px;
+        color: #cfe6ff; font-size: 13px;
+      }
+      .baton-banner button { flex: 0 0 auto; font-size: 12px; }
+      #baton-open { background: #1c3a52; border-color: #2f5f83; color: #cfe6ff; font-weight: 600; }
       /* R-0104 cross-lens twins */
       .capture-twins[hidden] { display: none; }
       .capture-twins { border-top: 1px solid #24384a; padding-top: 6px; margin-top: 2px; }
@@ -982,6 +992,14 @@
   </head>
   <body>
     <h1>A Million Plateaus — fog world</h1>
+    <!-- ✍️ R-0105: your other device handed you a topic. No camera, no typing —
+         the pointer rides the synced profile, so a Boox (which has no camera and
+         can't use the QR Scan Note flow) can open the laptop's topic and write. -->
+    <div id="baton-banner" class="baton-banner" hidden>
+      <span id="baton-text"></span>
+      <button id="baton-open" type="button">Open its notes →</button>
+      <button id="baton-dismiss" type="button" title="Hide this">×</button>
+    </div>
     <!-- Top bar (R-0059): one compact row — a hamburger that opens the grouped
          action menu, the world HUD, and the identity/relay status. Every action
          button keeps its id, so main.js wiring is unchanged; the buttons just live
@@ -1857,6 +1875,7 @@
           <button type="button" id="notepad-pdf" title="Export this note as PDF (opens print → Save as PDF)">PDF ⬇</button>
           <button type="button" id="notepad-img" title="Attach an image (e.g. a Boox page export) into the note">📷 Image</button>
           <input type="file" id="notepad-img-file" accept="image/*" hidden />
+          <button type="button" id="notepad-baton" title="Hand this topic to your Boox/other device — it opens these notes there. No camera, no typing.">✍️ Write on my other device</button>
           <button type="button" id="notepad-plateau" title="Turn this note into a new plateau (its own topic on the map)">➕ Plateau from note</button>
           <button type="button" id="notepad-push" hidden title="Push this note to your GitHub notes repo">Push ↑</button>
           <button type="button" id="notepad-pull" hidden title="Pull this note from your GitHub notes repo (replaces local)">Pull ↓</button>
