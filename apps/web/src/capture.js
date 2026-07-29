@@ -194,6 +194,71 @@ export function lensFitPrompt({ name = "this topic", note = "" } = {}, lenses = 
   return lines.join("\n");
 }
 
+// Lens labels that have an established short form in this world; anything else
+// falls back to its first word ("Euclidean Geometry" → "Euclidean view: …").
+const LENS_SHORT = {
+  "Geometric Algebra": "GA",
+  "Synthetic Infinitesimal Analysis": "SIA",
+};
+
+/** Short prefix for a lens label, matching the seeded "GA view: …" convention. */
+export function lensShort(label) {
+  const l = String(label || "").trim();
+  if (!l) return "Other";
+  return LENS_SHORT[l] || l.split(/\s+/)[0];
+}
+
+/** A twin's name: the seeded convention, e.g. "GA view: Reflections". */
+export function twinName(name, lensLabel) {
+  return `${lensShort(lensLabel)} view: ${String(name || "").trim()}`;
+}
+
+/**
+ * Starter body for a twin: says plainly that it is the SAME idea seen through
+ * another lens, and asks the question that makes the twin worth having. Follows
+ * the markdown subset (heading in its own block, one line per paragraph).
+ */
+export function twinBody(name, lensLabel, primaryLens = "the other lens") {
+  const n = String(name || "").trim() || "this topic";
+  return [
+    `# ${twinName(n, lensLabel)}`,
+    "",
+    `The same idea as **${n}**, seen through ${lensLabel}.`,
+    "",
+    `How does ${lensLabel} express it? Write the formulation here — the object it uses, the operation that acts, and what becomes obvious in this view that stayed hidden in ${primaryLens}.`,
+    "",
+  ].join("\n");
+}
+
+/**
+ * Plan the twin plateaus for a cross-lens capture (R-0104). Given the primary
+ * lens the topic is homed in and the OTHER lenses it spans, return one entry per
+ * twin: `{ domain, lens, name, body }`. Skips the primary lens, anything without
+ * a domain, and duplicates. Pure — the caller mints the plateaus and bridges.
+ *
+ * This is the "reflections" case made concrete: home it in Geometric Algebra,
+ * and also stand up "Euclidean view: Reflections" and "Vector view: Reflections",
+ * each bridged to the primary as an alternative formulation — the same twin
+ * relation the seeded GA/SIA pairs use, so parallel view can walk across them.
+ */
+export function twinPlan({ name, primaryDomain, primaryLens } = {}, lenses = []) {
+  const n = String(name || "").trim();
+  if (!n) return [];
+  const seen = new Set([primaryDomain]);
+  const out = [];
+  for (const l of lenses || []) {
+    if (!l || l.domain == null || seen.has(l.domain)) continue;
+    seen.add(l.domain);
+    out.push({
+      domain: l.domain,
+      lens: l.lens,
+      name: twinName(n, l.lens),
+      body: twinBody(n, l.lens, primaryLens || "the primary lens"),
+    });
+  }
+  return out;
+}
+
 /**
  * Place a new plateau near confirmed neighbours: the centroid of their Grade-1
  * positions, plus a small DETERMINISTIC nudge (a hash of the name, never

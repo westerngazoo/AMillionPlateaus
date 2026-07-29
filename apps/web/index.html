@@ -804,6 +804,12 @@
       .cf-lens .cf-why { color: #8aa0b4; }
       .capture-fit-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
       .capture-fit-targets button { font-size: 12px; }
+      /* R-0104 cross-lens twins */
+      .capture-twins[hidden] { display: none; }
+      .capture-twins { border-top: 1px solid #24384a; padding-top: 6px; margin-top: 2px; }
+      .capture-twin { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 13px; color: #cfe0ef; }
+      .capture-twin input[type="checkbox"] { margin: 0; width: auto; flex: 0 0 auto; }
+      .capture-twin .ct-name { color: #9fd0b4; }
       .unwired-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #223; }
       .unwired-row button { flex: 0 0 auto; }
       .unwired-empty { color: #8aa0b4; font-size: 13px; }
@@ -1319,6 +1325,13 @@
       <div id="capture-fit" class="capture-fit" hidden>
         <p id="capture-fit-verdict" class="capture-fit-verdict"></p>
         <div id="capture-fit-lenses" class="capture-fit-lenses"></div>
+        <!-- R-0104: a cross-lens idea can be minted as linked twins — one plateau
+             per lens, bridged "alternative formulation of" like the seeded GA/SIA
+             pairs, so parallel view walks across them. -->
+        <div id="capture-twins" class="capture-twins" hidden>
+          <p class="course-label">Also stand it up in — each becomes a twin, bridged as the same idea seen differently:</p>
+          <div id="capture-twin-rows"></div>
+        </div>
         <div id="capture-fit-targets" class="capture-fit-targets"></div>
       </div>
       <div id="capture-suggest" class="capture-suggest" hidden>
