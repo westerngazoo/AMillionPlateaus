@@ -143,6 +143,7 @@ import { missingPrereqs, prereqPlanPrompt, combinePrereqs, prereqCandidates } fr
 import { PROFILE_FILE, collectProfile, mergeProfile, applyProfile, profileFingerprint, parseProfile } from "./profile.js"; // R-0101 sync your whole self
 import { buildSetup, encodeSetup, decodeSetup, applySetup, setupSecret, describeSetup } from "./setup-transfer.js"; // R-0102 move your whole setup
 import { BATON_KEY, deviceLabel, makeBaton, parseBatons, pushBaton, latestFrom, describeBaton, clearBatonFrom } from "./baton.js"; // R-0105 hand a topic to your other device
+import { NOTE_BASE_KEY, normalizeNote, mergeNote, parseBaselines, setBaseline, baselineFor, describeMerge } from "./note-merge.js"; // R-0106 auto-sync notepads without losing writing
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
@@ -2747,6 +2748,24 @@ async function main() {
   const notepadPreviewBtn = document.getElementById("notepad-preview-btn");
   let notepadTimer = null;
   let notepadDirty = null; // { id, val } captured at edit time, awaiting the debounce
+  // R-0106: what this device last agreed with the repo on, per note — declared
+  // here with the rest of the notepad state so it is initialised before any code
+  // path can open a plateau and reconcile (no temporal-dead-zone trap).
+  let noteBaselines = (() => {
+    try {
+      return parseBaselines(JSON.parse(localStorage.getItem(NOTE_BASE_KEY) || "{}"));
+    } catch {
+      return {};
+    }
+  })();
+  function rememberBaseline(plateauId, text) {
+    noteBaselines = setBaseline(noteBaselines, plateauId, text);
+    try {
+      localStorage.setItem(NOTE_BASE_KEY, JSON.stringify(noteBaselines));
+    } catch {
+      /* quota — we'll just re-derive on the next sync */
+    }
+  }
   // Persist any pending edit to ITS OWN topic (captured id+val — never the current
   // textarea), then clear the timer. Called by the debounce AND before switching
   // topics, so a trailing edit is neither lost nor written into the wrong note.
@@ -2765,6 +2784,7 @@ async function main() {
     notepadPreview.replaceChildren();
     notepadPreviewBtn.textContent = "Preview";
     notepadStatus.textContent = "";
+    autoPullNote(p); // R-0106: reconcile this note with the repo in the background
   }
   notepadInput.addEventListener("input", () => {
     if (!studyPlateau) return;
@@ -2776,6 +2796,7 @@ async function main() {
       flushNotepad();
       if (studyPlateau && studyPlateau.id === savedId) notepadStatus.textContent = "saved · this browser only";
     }, 400);
+    queueNotePush(); // R-0106: back this note up ~4s after you stop typing
   });
   notepadPreviewBtn.addEventListener("click", () => {
     if (notepadPreview.hidden) {
@@ -6279,6 +6300,95 @@ async function main() {
     notepadPull.hidden = !notesSyncCfg;
   }
   renderNotepadSync();
+
+  // ── R-0106: notepads sync themselves, without ever losing writing ───────────
+  // R-0105 lands you in the notepad on the Boox; then the writing was stranded —
+  // the world and profile auto-push, but a notepad only moved on an explicit
+  // Push ↑ / Pull ↓. Miss a tap and the note isn't on the other device.
+  //
+  // Auto-pulling is NOT like auto-merging the graph: the graph is a CRDT (always
+  // safe), a notepad is free-form text, and the manual Pull says honestly that it
+  // "replaced the local note" — a choice a human made. In the background we must
+  // never make that choice, so every sync goes through a THREE-WAY merge against
+  // a per-device baseline (note-merge.js): fast-forward when only the repo moved,
+  // push when only we moved, and on a genuine conflict keep BOTH versions.
+  let notePushTimer = null;
+  let notePushing = false;
+
+  // One reconciliation for one topic. `interactive` lets the caller stay silent for
+  // background work but speak up for an explicit action.
+  async function syncNote(plateau, { interactive = false } = {}) {
+    if (!plateau || !notesSyncCfg) return null;
+    const path = noteFilePath(plateau.name, plateau.id);
+    const remote = await ghGetNote(path); // null when the repo has no note yet
+    // Read the local text from the store, not the textarea — this can run while a
+    // different topic is open.
+    const localText =
+      studyPlateau?.id === plateau.id ? notepadInput.value : noteFor(privateNotes, plateau.id);
+    const fromDevice =
+      latestFrom(loadBatons(), myDeviceName(), Date.now())?.device || "your other device";
+    const result = mergeNote({
+      local: localText,
+      remote: remote?.text ?? "",
+      base: baselineFor(noteBaselines, plateau.id),
+      fromDevice,
+    });
+
+    // Adopt merged text locally when the merge says to (fast-forward or conflict).
+    if (result.changed) {
+      privateNotes = setNote(privateNotes, plateau.id, result.text);
+      saveNotes(localStorage, privateNotes);
+      if (studyPlateau?.id === plateau.id) {
+        notepadDirty = null; // the merge supersedes any pending debounce for this note
+        notepadInput.value = result.text;
+      }
+    }
+    // Push when we're ahead, or after a conflict (so both versions reach the repo
+    // and the other device stops thinking it is ahead).
+    if (result.action === "push" || result.action === "conflict") {
+      await ghPutNote(path, result.text, remote?.sha);
+    }
+    rememberBaseline(plateau.id, result.text);
+    if (studyPlateau?.id === plateau.id) {
+      const msg = describeMerge(result.action, fromDevice);
+      if (result.action === "conflict") notepadStatus.textContent = describeMerge("conflict");
+      else if (result.action === "pull") notepadStatus.textContent = msg;
+      else if (interactive) notepadStatus.textContent = msg || "In sync ✓";
+    }
+    return result;
+  }
+
+  // Debounced backup of the open note — the write-on-Boox half of the loop.
+  function queueNotePush() {
+    if (!notesSyncCfg || !studyPlateau) return;
+    const p = studyPlateau;
+    clearTimeout(notePushTimer);
+    notePushTimer = setTimeout(async () => {
+      if (notePushing) return queueNotePush(); // wait out the in-flight sync
+      // Nothing to do when this device hasn't moved since its last agreement.
+      if (normalizeNote(notepadInput.value) === baselineFor(noteBaselines, p.id)) return;
+      notePushing = true;
+      try {
+        flushNotepad(); // persist locally first — the repo is a backup, not the store
+        await syncNote(p);
+      } catch (e) {
+        if (studyPlateau?.id === p.id) {
+          notepadStatus.textContent = `Note backup failed (${e?.message ?? e}) — Push ↑ still works.`;
+        }
+      } finally {
+        notePushing = false;
+      }
+    }, 4000);
+  }
+
+  // Opening a topic reconciles its note in the background: silent on a clean
+  // fast-forward, loud only when it kept both versions.
+  function autoPullNote(plateau) {
+    if (!notesSyncCfg || !plateau) return;
+    syncNote(plateau).catch(() => {
+      /* offline / unreachable — the local note is intact and Pull ↓ still works */
+    });
+  }
 
   // ── R-0101 Part B: move your identity to another device ─────────────────────
   // Your world + profile sync under your identity, but the wizard SECRET KEY is
