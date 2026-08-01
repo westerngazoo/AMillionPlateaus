@@ -147,7 +147,7 @@ import { NOTE_BASE_KEY, normalizeNote, mergeNote, parseBaselines, setBaseline, b
 import { sentenceChunks, explainSlowlyPrompt, missingForPrompt } from "./rabbit-hole.js"; // R-0071 mark the sentence that lost you
 import { searchTopics, groupByLens } from "./topic-search.js"; // R-0072 find a topic across every lens
 import { parseRepo, parseRepoUrl, noteFilePath, b64EncodeUtf8, b64DecodeUtf8, b64FromBytes, bytesFromB64, WORLD_FILE, ghHeaders, GITHUB_API, normalizeForgeBase, repoApiUrl, contentsApiUrl } from "./notes-sync.js"; // R-0075 notes · R-0081 graph · R-0086 any forge
-import { buildLensBundle, parseLensBundle, parseLensBundleResult, applyLensBundle, lensBundlePath, isSafeLensPath, canonicalJson, LENS_DIR } from "./lens-bundle.js"; // R-0093/R-0093a lens as a portable, adoptable subgraph
+import { buildLensBundle, parseLensBundle, parseLensBundleResult, applyLensBundle, lensBundlePath, isSafeLensPath, canonicalJson, LENS_DIR, contentUuid } from "./lens-bundle.js"; // R-0093 lens bundles · R-0107 deterministic prereq bridge ids
 import { REGISTRY_FILE, buildIndexEntry, upsertIndex, parseIndex, registryJson, indexFromPaths, describeEntry } from "./lens-registry.js"; // R-0094 an index so lenses can be discovered
 import { peerKey, addPeer, removePeer } from "./peers.js"; // R-0082 follow a wizard's world
 import {
@@ -2385,10 +2385,25 @@ async function main() {
   // path you haven't studied yet (path ORDER is the prereq truth; bridge direction
   // is unreliable). Each is tappable; a "Guide me →" hand-off builds a plan from the
   // resources pinned on each prereq (R-0069/R-0023). Hoisted; called by openPlateau.
-  // R-0100: prerequisites the reader adds themselves — per topic, in localStorage
-  // (this browser only, like R-0071 confusions), never seeded into the shared
-  // graph. { [topicId]: [prereqId, …] }.
+  // R-0100 → R-0107: prerequisites the reader adds themselves. These used to be
+  // localStorage-only ({ topicId: [prereqId…] }), which meant the single most
+  // useful correction you can make to a curriculum — "actually, Analytical
+  // Geometry comes before Optics" — was stranded on one device and invisible on
+  // the map. They are now REAL BRIDGES in the graph, so they sync with the world
+  // snapshot like everything else and draw as edges.
+  //
+  // The bridge id is DERIVED from (from, to, concept) with the same content-hash
+  // used for lens bundles (R-0093). That buys idempotency and removability:
+  // adding the same prerequisite on two devices mints one bridge (the maps merge
+  // to a single entry), and either device can retract it by recomputing the id
+  // and calling the new remove_bridge binding.
+  const PREREQ_CONCEPT = "prerequisite of";
+  const prereqBridgeId = (prereqId, topicId) =>
+    contentUuid("mp:bridge:1", prereqId, topicId, PREREQ_CONCEPT);
+
+  // Old device-local store: still read ONCE to migrate, never written again.
   const PREREQS_KEY = "mp.prereqs";
+  const PREREQS_MIGRATED_KEY = "mp.prereqsMigrated";
   function loadUserPrereqs() {
     try {
       const v = JSON.parse(localStorage.getItem(PREREQS_KEY));
@@ -2397,23 +2412,79 @@ async function main() {
       return {};
     }
   }
-  let userPrereqs = loadUserPrereqs();
-  function saveUserPrereqs() {
+
+  /// The prerequisites you added for a topic, read from the GRAPH (the bridges
+  /// carrying PREREQ_CONCEPT that point at it).
+  function userPrereqIds(topicId) {
+    if (!topicId) return [];
     try {
-      localStorage.setItem(PREREQS_KEY, JSON.stringify(userPrereqs));
+      return doc
+        .to_graph()
+        .bridges()
+        .filter((b) => b && b.concept === PREREQ_CONCEPT && b.to === topicId)
+        .map((b) => b.from);
     } catch {
-      /* private mode / quota — the addition still holds this session */
+      return [];
     }
   }
-  const userPrereqIds = (topicId) => (Array.isArray(userPrereqs[topicId]) ? userPrereqs[topicId] : []);
+
   function addUserPrereq(topicId, prereqId) {
-    if (!topicId || !prereqId || prereqId === topicId || userPrereqIds(topicId).includes(prereqId)) return;
-    userPrereqs = { ...userPrereqs, [topicId]: [...userPrereqIds(topicId), prereqId] };
-    saveUserPrereqs();
+    if (!topicId || !prereqId || prereqId === topicId) return;
+    if (userPrereqIds(topicId).includes(prereqId)) return;
+    try {
+      doc.seed_bridge(prereqBridgeId(prereqId, topicId), prereqId, topicId, PREREQ_CONCEPT);
+      persist(); // R-0088: any graph change backs itself up
+      draw();
+    } catch (err) {
+      console.error("[mp] add prerequisite:", err);
+    }
   }
+
   function removeUserPrereq(topicId, prereqId) {
-    userPrereqs = { ...userPrereqs, [topicId]: userPrereqIds(topicId).filter((x) => x !== prereqId) };
-    saveUserPrereqs();
+    try {
+      // Guard the binding: a browser running new JS against an older cached wasm
+      // would otherwise throw. Retracting simply waits for the wasm to update.
+      if (typeof doc.remove_bridge !== "function") {
+        console.warn("[mp] remove_bridge unavailable — reload to update the engine");
+        return;
+      }
+      doc.remove_bridge(prereqBridgeId(prereqId, topicId));
+      persist();
+      draw();
+    } catch (err) {
+      console.error("[mp] remove prerequisite:", err);
+    }
+  }
+
+  // One-time migration: fold any prerequisites added before R-0107 into real
+  // bridges, so nothing you already recorded is lost. Runs once per device; the
+  // old key is left untouched as a backup rather than deleted.
+  function migrateUserPrereqs() {
+    if (localStorage.getItem(PREREQS_MIGRATED_KEY)) return;
+    const legacy = loadUserPrereqs();
+    let moved = 0;
+    for (const [topicId, ids] of Object.entries(legacy)) {
+      for (const prereqId of Array.isArray(ids) ? ids : []) {
+        if (!prereqId || prereqId === topicId) continue;
+        try {
+          doc.seed_bridge(prereqBridgeId(prereqId, topicId), prereqId, topicId, PREREQ_CONCEPT);
+          moved++;
+        } catch {
+          /* an endpoint that no longer exists — skip it, keep the rest */
+        }
+      }
+    }
+    try {
+      localStorage.setItem(PREREQS_MIGRATED_KEY, "1");
+    } catch {
+      /* quota — worst case we retry next boot; seed_bridge is idempotent */
+    }
+    if (moved > 0) {
+      persist();
+      draw();
+      importNote(`\u2795 moved ${moved} added prerequisite${moved === 1 ? "" : "s"} into your synced graph`, true);
+      setTimeout(() => (importStatus.hidden = true), 6000);
+    }
   }
 
   function renderPrereqs(p) {
@@ -6501,6 +6572,13 @@ async function main() {
     setupSay("Setup applied — reloading fully configured…");
     setTimeout(() => location.reload(), 400); // boot re-reads config, pulls world + profile under the new identity
   });
+
+  // R-0107: fold any pre-R-0107 device-local prerequisites into real bridges, so
+  // corrections you already made (e.g. Analytical Geometry before Óptica) become
+  // part of the synced graph instead of staying stranded on this browser. Runs
+  // once per device, before the boot pull so the migrated bridges are part of the
+  // world this device pushes.
+  migrateUserPrereqs();
 
   // R-0088: sync-on-connection — when 📓 Sync is configured, pull the world once
   // at boot so opening the app on any device catches up with what the others

@@ -152,6 +152,34 @@ impl CrdtDoc {
         self.put_entry(RESOURCES, &r.id, &serde_json::to_string(r)?)
     }
 
+    /// Remove a bridge from the replica (R-0107).
+    ///
+    /// The first *deletion* in this doc: plateaus and resources stay write-once,
+    /// because unmaking a topic or a citation loses authored content. A bridge is
+    /// different — it is a claim that two topics are related, and a claim you make
+    /// you must be able to retract. Without this a user-added prerequisite could
+    /// only ever live in device-local storage, so it never synced (R-0100).
+    ///
+    /// Deleting a map key is a first-class Automerge op, so the removal *merges*:
+    /// it propagates to peers like any other change instead of being silently
+    /// re-added by the next sync. The one case to understand is a delete
+    /// concurrent with an edit of the same bridge — Automerge resolves that in
+    /// favour of the surviving write, so the bridge comes back rather than
+    /// vanishing. For a relation you can simply remove again, resurrection is the
+    /// safe direction to fail: it never destroys a peer's concurrent work.
+    ///
+    /// Removing a bridge that isn't there is a no-op, not an error: two devices
+    /// retracting the same prerequisite must both succeed.
+    pub fn remove_bridge(&mut self, id: &Uuid) -> Result<(), CrdtError> {
+        let map = self.map_id(BRIDGES)?;
+        // `delete` on an absent key is already a no-op in Automerge; the explicit
+        // get keeps that guarantee ours rather than the library's.
+        if self.doc.get(&map, id.to_string())?.is_some() {
+            self.doc.delete(&map, id.to_string())?;
+        }
+        Ok(())
+    }
+
     /// Record `wizard`'s vote on `resource` at `weight`, monotonically.
     ///
     /// Each vote is one cell `"<resource>/<wizard>/<actor>" -> f64` in the
@@ -380,6 +408,99 @@ mod tests {
         back.validate().expect("grade-1 invariant survives");
 
         assert!(doc.plateau(&Uuid::new_v4()).expect("read").is_none());
+    }
+
+    // ── R-0107: retracting a bridge ─────────────────────────────────────
+    // The first deletion in this doc. A bridge is a CLAIM that two topics are
+    // related; a claim you make you must be able to retract, or a user-added
+    // prerequisite can never leave device-local storage.
+
+    #[test]
+    fn remove_bridge_drops_it_from_the_replica_and_the_graph() {
+        let mut doc = CrdtDoc::from_graph(&seed()).expect("from_graph");
+        let id = doc
+            .to_graph()
+            .expect("to_graph")
+            .bridges()
+            .next()
+            .expect("seeded bridge")
+            .id;
+
+        assert!(doc.bridge(&id).expect("read").is_some());
+        doc.remove_bridge(&id).expect("remove");
+
+        assert!(doc.bridge(&id).expect("read").is_none());
+        let g = doc.to_graph().expect("to_graph");
+        assert_eq!(g.bridge_count(), 0, "rebuilt graph has lost the bridge");
+        assert_eq!(g.plateau_count(), 2, "its endpoints are untouched");
+    }
+
+    #[test]
+    fn removing_an_absent_bridge_is_a_no_op_not_an_error() {
+        // Two devices retracting the same prerequisite must both succeed.
+        let mut doc = CrdtDoc::from_graph(&seed()).expect("from_graph");
+        let before = doc.to_graph().expect("to_graph").bridge_count();
+        doc.remove_bridge(&Uuid::new_v4())
+            .expect("absent id is fine");
+        let id = doc
+            .to_graph()
+            .expect("to_graph")
+            .bridges()
+            .next()
+            .expect("bridge")
+            .id;
+        doc.remove_bridge(&id).expect("first remove");
+        doc.remove_bridge(&id).expect("second remove is idempotent");
+        assert_eq!(before, 1);
+        assert_eq!(doc.to_graph().expect("to_graph").bridge_count(), 0);
+    }
+
+    #[test]
+    fn a_removal_merges_to_a_peer_instead_of_being_resurrected() {
+        // The property that makes this worth having: sync must carry the DELETE,
+        // otherwise the peer's copy would push the bridge straight back.
+        let mut a = CrdtDoc::from_graph(&seed()).expect("from_graph");
+        let mut b = CrdtDoc::load(&a.save()).expect("peer loads the same world");
+        let id = a
+            .to_graph()
+            .expect("to_graph")
+            .bridges()
+            .next()
+            .expect("bridge")
+            .id;
+
+        a.remove_bridge(&id).expect("remove on A");
+        b.merge(&mut a).expect("B merges A");
+
+        assert!(b.bridge(&id).expect("read").is_none(), "delete propagated");
+        assert_eq!(b.to_graph().expect("to_graph").bridge_count(), 0);
+
+        // …and merging back the other way does not resurrect it.
+        a.merge(&mut b).expect("A merges B");
+        assert_eq!(a.to_graph().expect("to_graph").bridge_count(), 0);
+    }
+
+    #[test]
+    fn removing_one_bridge_leaves_the_others() {
+        let mut g = seed();
+        let domain = Uuid::new_v4();
+        let c = PlateauNode::new("Optics", domain, 0.2, 0.8, 0.1);
+        let a_node = g.plateaus().next().expect("a plateau").clone();
+        let extra = Bridge::between(&a_node, &c, "prerequisite of", Uuid::nil());
+        let extra_id = extra.id;
+        g.add_plateau(c);
+        g.add_bridge(extra).expect("endpoints exist");
+
+        let mut doc = CrdtDoc::from_graph(&g).expect("from_graph");
+        assert_eq!(doc.to_graph().expect("to_graph").bridge_count(), 2);
+        doc.remove_bridge(&extra_id).expect("remove the added one");
+
+        let back = doc.to_graph().expect("to_graph");
+        assert_eq!(back.bridge_count(), 1);
+        assert!(
+            back.bridges().all(|b| b.id != extra_id),
+            "only the retracted bridge is gone"
+        );
     }
 
     #[test]
