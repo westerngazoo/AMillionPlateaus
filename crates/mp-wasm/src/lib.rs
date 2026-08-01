@@ -304,6 +304,24 @@ impl WasmCrdtDoc {
         Ok(())
     }
 
+    /// Retract a bridge by id (R-0107).
+    ///
+    /// The counterpart to [`WasmCrdtDoc::seed_bridge`]: a relation you asserted
+    /// with a deterministic id you can also take back, and the removal SYNCS
+    /// (Automerge carries the delete) rather than being resurrected by the next
+    /// merge. This is what lets a user-added prerequisite live in the graph
+    /// instead of device-local storage — you can add it on the laptop, see it on
+    /// the Boox, and remove it from either.
+    ///
+    /// Removing an id that isn't in the doc succeeds silently: two devices
+    /// retracting the same prerequisite must both work. A malformed UUID is
+    /// still a thrown `JsError`.
+    pub fn remove_bridge(&mut self, id: &str) -> Result<(), JsError> {
+        let bridge_id = Uuid::parse_str(id)?;
+        self.inner.remove_bridge(&bridge_id)?;
+        Ok(())
+    }
+
     /// Seed a bridge with a **caller-supplied** id (deterministic seed twin of
     /// [`WasmCrdtDoc::seed_plateau`]): both tabs seed the same bridge id so the
     /// `bridges` map merges to one entry instead of doubling. The rotor/grade are
