@@ -197,3 +197,72 @@ test("images (R-0077): https + base64 raster data URIs render; everything else i
   // an image does NOT half-match as a link with a stray "!"
   assert.doesNotMatch(renderMarkdown("![n](https://e.com/i.png)"), /<a /);
 });
+
+// ── R-0108: link a topic from inside prose ───────────────────────────────────
+// Two spellings resolved against YOUR graph. The resolver is injected, so this
+// module stays pure — and with no resolver a link degrades to its plain name.
+const TOPICS = [
+  { id: "t-calc", name: "Introducción al cálculo" },
+  { id: "t-opt", name: "Óptica" },
+  { id: "t-ga", name: "Rotors" },
+];
+const resolveTopic = (name) => {
+  const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return TOPICS.find((t) => fold(t.name) === fold(name)) || null;
+};
+
+test("[[Name]] becomes a topic link carrying the id", () => {
+  const html = renderMarkdown("See [[Óptica]] for this.", { resolveTopic });
+  assert.match(html, /<a class="mp-topic" data-topic-id="t-opt"/);
+  assert.match(html, />Óptica</);
+});
+
+test(":plateau:Name carries SPACES via longest-match — the whole point", () => {
+  const html = renderMarkdown("Revisit :plateau:Introducción al cálculo before optics.", { resolveTopic });
+  assert.match(html, /data-topic-id="t-calc"/);
+  assert.match(html, />Introducción al cálculo</);
+  assert.match(html, /before optics\./, "the rest of the sentence stays prose");
+  assert.ok(!/:plateau:/.test(html), "the marker itself is consumed");
+});
+
+test("longest match wins, and trailing punctuation stays out of the link", () => {
+  const html = renderMarkdown("Do :plateau:Introducción al cálculo, then rest.", { resolveTopic });
+  assert.match(html, /data-topic-id="t-calc"/);
+  assert.match(html, />Introducción al cálculo</);
+  assert.match(html, /, then rest\./);
+});
+
+test("an unknown name becomes a create-it affordance, never a dead end", () => {
+  const html = renderMarkdown("[[Cuaterniones]] someday", { resolveTopic });
+  assert.match(html, /class="mp-topic mp-topic-new"/);
+  assert.match(html, /data-topic-new="Cuaterniones"/);
+  assert.match(html, />Cuaterniones</);
+});
+
+test("diacritics and case are forgiving (matches how you actually type)", () => {
+  assert.match(renderMarkdown("[[optica]]", { resolveTopic }), /data-topic-id="t-opt"/);
+  assert.match(renderMarkdown("[[ROTORS]]", { resolveTopic }), /data-topic-id="t-ga"/);
+});
+
+test("with NO resolver a link degrades to plain text, not markup", () => {
+  const html = renderMarkdown("See [[Óptica]] and :plateau:Rotors here.");
+  assert.ok(!/mp-topic/.test(html), "no anchor without a resolver");
+  assert.match(html, /Óptica/);
+  assert.match(html, /Rotors/);
+  assert.ok(!/\[\[/.test(html), "brackets are consumed either way");
+});
+
+test("topic links never break normal markdown links or images", () => {
+  const html = renderMarkdown("[text](https://example.com) and ![a](https://x/y.png)", { resolveTopic });
+  assert.match(html, /<a href="https:\/\/example\.com"/);
+  assert.match(html, /<img src="https:\/\/x\/y\.png"/);
+  assert.ok(!/mp-topic/.test(html));
+});
+
+test("a topic name is escaped — a hostile name cannot inject markup", () => {
+  const evil = [{ id: "x", name: '<img src=x onerror=alert(1)>' }];
+  const r = (n) => evil.find((t) => t.name.toLowerCase() === String(n).toLowerCase()) || null;
+  const html = renderMarkdown("[[<img src=x onerror=alert(1)>]]", { resolveTopic: r });
+  assert.ok(!/<img src=x/.test(html), "the name is escaped, not rendered as HTML");
+  assert.match(html, /&lt;img/);
+});

@@ -58,7 +58,7 @@ const CLOSE = "\uE001";
 const TOKEN_RE = /\uE000(\d+)\uE001/g;
 
 /** Render a Markdown body to SAFE HTML (see module contract). Pure + deterministic. */
-export function renderMarkdown(src) {
+export function renderMarkdown(src, { resolveTopic = null } = {}) {
   const tokens = [];
   const hold = (html, block = false) => {
     const t = `${OPEN}${tokens.push(html) - 1}${CLOSE}`;
@@ -82,6 +82,30 @@ export function renderMarkdown(src) {
   // half-match the link rule.
   s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => hold(mathSpan(tex, true), true));
   s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, tex) => hold(mathSpan(tex, false)));
+  // R-0108 — topic links. Two spellings, both resolved against YOUR graph:
+  //   [[Name]]          wiki-style, unambiguous, and what an Obsidian vault
+  //                     already contains (so an imported note links itself up)
+  //   :plateau:Name     the terse form — no closing delimiter, so the name is
+  //                     resolved by LONGEST MATCH against real topic names,
+  //                     which is what lets it carry spaces ("Introducción al
+  //                     cálculo") without the writer escaping anything.
+  // Extracted here, before images/links, so `[[…]]` can never half-match the
+  // `[text](url)` rule. Resolution is injected (`resolveTopic`) — this module
+  // stays pure and knows nothing about the graph. With no resolver, a link
+  // degrades to its plain name rather than disappearing.
+  if (typeof resolveTopic === "function") {
+    s = s.replace(/\[\[([^\]\n]+)\]\]/g, (_, raw) => hold(topicAnchor(raw.trim(), resolveTopic)));
+    s = s.replace(/:plateau:([^\n]+)/g, (whole, rest) => {
+      const hit = longestTopicPrefix(rest, resolveTopic);
+      if (!hit) return hold(topicAnchor(rest.trim(), resolveTopic)); // unresolved → offer to create
+      // Only the matched prefix becomes the link; the rest of the line is
+      // returned to the parser untouched.
+      return hold(topicAnchor(hit.name, resolveTopic)) + rest.slice(hit.length);
+    });
+  } else {
+    s = s.replace(/\[\[([^\]\n]+)\]\]/g, (_, raw) => raw);
+    s = s.replace(/:plateau:([^\s\n]+)/g, (_, raw) => raw);
+  }
   // Images ![alt](src) — R-0077, extracted BEFORE links so `![…](…)` never
   // half-matches as a link with a stray "!". src passes safeImgSrc (https or
   // base64 raster data URI); anything else renders as inert escaped text.
@@ -152,4 +176,42 @@ function inline(text) {
   t = t.replace(/\*([^*]+)\*/g, "<em>$1</em>");
   t = t.replace(/(^|[^A-Za-z0-9])_([^_]+)_(?=[^A-Za-z0-9]|$)/g, "$1<em>$2</em>");
   return t;
+}
+
+/**
+ * The longest prefix of `rest` that names a real topic. Tries the whole run of
+ * words first and shortens one word at a time, so ":plateau:Introducción al
+ * cálculo hoy" links "Introducción al cálculo" and leaves " hoy" as prose.
+ * Bounded to 12 words — a topic name is never longer, and it keeps this O(1)-ish.
+ */
+function longestTopicPrefix(rest, resolveTopic) {
+  const words = rest.split(/(\s+)/); // keep separators so offsets stay exact
+  let candidate = "";
+  let best = null;
+  for (let i = 0; i < words.length && i < 24; i++) {
+    candidate += words[i];
+    if (!words[i].trim()) continue; // don't test on a separator boundary
+    const trimmed = candidate.trim();
+    // strip trailing sentence punctuation before testing, but keep it out of the link
+    const probe = trimmed.replace(/[.,;:!?)\]]+$/, "");
+    // length must stop at the END OF THE PROBE, not the end of the candidate —
+    // otherwise stripped punctuation ("…cálculo, then") is swallowed with the
+    // link instead of being handed back to the prose.
+    if (probe && resolveTopic(probe)) {
+      best = { name: probe, length: candidate.indexOf(probe) + probe.length };
+    }
+  }
+  return best;
+}
+
+/** One topic link: resolved → an anchor the app wires up; unresolved → an
+ *  affordance to create that topic. Both carry only escaped text. */
+function topicAnchor(name, resolveTopic) {
+  const clean = String(name || "").trim();
+  if (!clean) return "";
+  const hit = resolveTopic(clean);
+  if (hit && hit.id) {
+    return `<a class="mp-topic" data-topic-id="${esc(hit.id)}" title="Open ${esc(hit.name || clean)}">${esc(hit.name || clean)}</a>`;
+  }
+  return `<a class="mp-topic mp-topic-new" data-topic-new="${esc(clean)}" title="No topic called this yet — create it">${esc(clean)}</a>`;
 }

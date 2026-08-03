@@ -1818,7 +1818,7 @@ async function main() {
       head.textContent = `Your saved ${kindLabel(local.kind)} (private)`;
       const body = document.createElement("div");
       body.className = "proofs-body";
-      body.innerHTML = renderMarkdown(local.body); // SAFE sanitiser — learner text inert
+      body.innerHTML = renderMarkdown(local.body, { resolveTopic }); // SAFE sanitiser — learner text inert
       typesetMath(body);
       const pub = document.createElement("button");
       pub.type = "button";
@@ -1843,7 +1843,7 @@ async function main() {
         who.textContent = `${pr.pubkey === myPubkey ? "you" : shortKey(pr.pubkey)} · ${kindLabel(pr.kind)}`;
         const body = document.createElement("div");
         body.className = "proofs-body";
-        body.innerHTML = renderMarkdown(pr.body); // SAFE sanitiser — untrusted peer text inert
+        body.innerHTML = renderMarkdown(pr.body, { resolveTopic }); // SAFE sanitiser — untrusted peer text inert
         typesetMath(body);
         detailProofs.append(who, body);
       }
@@ -1947,7 +1947,7 @@ async function main() {
     bar.append(practiceBtn, workedBtn, note);
 
     const showWorked = () => {
-      inner.innerHTML = renderMarkdown(derivationMd);
+      inner.innerHTML = renderMarkdown(derivationMd, { resolveTopic });
       typesetMath(inner);
       workedBtn.hidden = true;
       practiceBtn.hidden = false;
@@ -1958,7 +1958,7 @@ async function main() {
       inner.replaceChildren();
       if (preamble) {
         const d = document.createElement("div");
-        d.innerHTML = renderMarkdown(preamble);
+        d.innerHTML = renderMarkdown(preamble, { resolveTopic });
         inner.append(d);
       }
       let unrevealed = 0;
@@ -1968,7 +1968,7 @@ async function main() {
       for (const { step, hidden } of fadedView(steps, k)) {
         if (!hidden) {
           const d = document.createElement("div");
-          d.innerHTML = renderMarkdown(step.md);
+          d.innerHTML = renderMarkdown(step.md, { resolveTopic });
           inner.append(d);
           continue;
         }
@@ -1985,7 +1985,7 @@ async function main() {
         reveal.addEventListener("click", () => {
           card.classList.add("revealed");
           card.replaceChildren();
-          card.innerHTML = renderMarkdown(step.md);
+          card.innerHTML = renderMarkdown(step.md, { resolveTopic });
           typesetMath(card);
           if (--unrevealed === 0) assess.hidden = false; // all checked → self-assess
         });
@@ -2041,14 +2041,14 @@ async function main() {
     // "### Worked derivation" section becomes a collapsible, so the full
     // step-by-step math is one tap away without intimidating the first read.
     const { main: bodyMain, derivation } = splitDerivation(stripChallenges(p.description || ""));
-    detailBody.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+    detailBody.innerHTML = renderMarkdown(bodyMain || "_No description yet._", { resolveTopic });
     if (derivation) {
       const det = document.createElement("details");
       det.className = "derivation";
       const sum = document.createElement("summary");
       sum.textContent = "📜 Worked derivation — step by step";
       const inner = document.createElement("div");
-      inner.innerHTML = renderMarkdown(derivation);
+      inner.innerHTML = renderMarkdown(derivation, { resolveTopic });
       det.append(sum, inner);
       attachFadedPractice(det, inner, derivation, p.id); // R-0083 fill-the-missing-step
       detailBody.append(det);
@@ -2281,7 +2281,7 @@ async function main() {
       ol.className = "pretest-qs";
       for (const q of questions) {
         const li = document.createElement("li");
-        li.innerHTML = renderMarkdown(q); // esc-safe; q may contain $…$/markdown from the deliverable
+        li.innerHTML = renderMarkdown(q, { resolveTopic }); // esc-safe; q may contain $…$/markdown from the deliverable
         ol.append(li);
       }
       lessonBody.append(ol);
@@ -2300,6 +2300,7 @@ async function main() {
     } else if (step.kind === "read") {
       lessonBody.innerHTML = renderMarkdown(
         ctx.notes || "_This topic has no notes yet — jump to an analogy or example below to build them._",
+        { resolveTopic },
       );
       typesetMath(lessonBody); // lazy, fire-and-forget
       const listen = document.createElement("button");
@@ -2385,6 +2386,73 @@ async function main() {
   // path you haven't studied yet (path ORDER is the prereq truth; bridge direction
   // is unreliable). Each is tappable; a "Guide me →" hand-off builds a plan from the
   // resources pinned on each prereq (R-0069/R-0023). Hoisted; called by openPlateau.
+  // ── R-0108: link a topic from inside prose ──────────────────────────────────
+  // The prereq chips already open their topic, but nothing in your own WRITING
+  // could point at a topic — so a note saying "revisit Introducción al cálculo"
+  // was a dead string. Now `[[Name]]` or `:plateau:Name` in any rendered
+  // Markdown (topic bodies, notepad preview, lessons, derivations) resolves
+  // against YOUR graph and becomes a link. An unknown name is not a dead end
+  // either: it offers to create that topic via ⚡ Capture.
+  const foldName = (x) =>
+    String(x || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  let topicByName = new Map(); // rebuilt lazily; the graph changes under us
+  let topicByNameStamp = -1;
+  function resolveTopic(name) {
+    const key = foldName(name);
+    if (!key) return null;
+    // Cheap invalidation: rebuild when the plateau count changes.
+    let plateaus;
+    try {
+      plateaus = doc.to_graph().plateaus();
+    } catch {
+      return null;
+    }
+    if (plateaus.length !== topicByNameStamp) {
+      topicByName = new Map();
+      for (const q of plateaus) topicByName.set(foldName(q.name), { id: q.id, name: q.name });
+      topicByNameStamp = plateaus.length;
+    }
+    const exact = topicByName.get(key);
+    if (exact) return exact;
+    // Real topic names carry subtitles ("Rotors: Rotation without Matrices"), so
+    // exact-only would reject the way you actually write. Fall back to a UNIQUE
+    // prefix: [[Rotors]] resolves, but an ambiguous prefix stays unresolved
+    // rather than guessing and silently linking the wrong topic.
+    if (key.length < 3) return null;
+    let hit = null;
+    for (const [name, t] of topicByName) {
+      if (!name.startsWith(key)) continue;
+      if (hit) return null; // ambiguous — refuse to guess
+      hit = t;
+    }
+    return hit;
+  }
+  // Rendered markdown is injected in many places; ONE delegated listener covers
+  // them all (topic body, notepad preview, lesson cards, derivations, print).
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest?.("a.mp-topic");
+    if (!a) return;
+    e.preventDefault();
+    const id = a.dataset.topicId;
+    if (id) {
+      const target = plateauById(id);
+      if (target) flyTo(target.position, () => openPlateau(target));
+      return;
+    }
+    // Unknown topic → hand the name to ⚡ Capture, prefilled.
+    const fresh = a.dataset.topicNew;
+    if (fresh) {
+      capturePanel.hidden = false;
+      captureNameEl.value = fresh;
+      captureNameEl.dispatchEvent(new Event("input", { bubbles: true }));
+      captureNameEl.focus();
+    }
+  });
+
   // R-0100 → R-0107: prerequisites the reader adds themselves. These used to be
   // localStorage-only ({ topicId: [prereqId…] }), which meant the single most
   // useful correction you can make to a curriculum — "actually, Analytical
@@ -2871,7 +2939,7 @@ async function main() {
   });
   notepadPreviewBtn.addEventListener("click", () => {
     if (notepadPreview.hidden) {
-      notepadPreview.innerHTML = renderMarkdown(notepadInput.value || "_Nothing yet._");
+      notepadPreview.innerHTML = renderMarkdown(notepadInput.value || "_Nothing yet._", { resolveTopic });
       typesetMath(notepadPreview); // KaTeX, lazy + fire-and-forget
       notepadPreview.hidden = false;
       notepadPreviewBtn.textContent = "Hide preview";
@@ -3015,7 +3083,7 @@ async function main() {
   // the raw source defeats the point. `renderMarkdown` is the SAME injection-safe
   // sanitiser the study body and the OCR reply use — model text stays inert.
   function showStudyReply(text) {
-    detailReply.innerHTML = renderMarkdown(String(text ?? ""));
+    detailReply.innerHTML = renderMarkdown(String(text ?? ""), { resolveTopic });
     typesetMath(detailReply); // lazy, fire-and-forget; falls back to raw TeX
     detailReply.hidden = false;
   }
@@ -3110,7 +3178,7 @@ async function main() {
                 // "mp-model" localStorage key, so OCR silently ran offline
                 // even with a multimodal model connected).
                 const res = await sendVisionTurn(modelConfig, msgs);
-                detailReply.innerHTML = renderMarkdown(res);
+                detailReply.innerHTML = renderMarkdown(res, { resolveTopic });
                 typesetMath(detailReply);
               } catch (e) {
                 detailReply.textContent = "Error: " + e.message;
@@ -3984,7 +4052,7 @@ async function main() {
   proofInput.addEventListener("input", () => {
     // R-0020 SAFE path: same sanitiser as a plateau body — the learner's
     // LaTeX/markdown is inert (no innerHTML injection), then KaTeX typesets it.
-    proofPreview.innerHTML = renderMarkdown(proofInput.value);
+    proofPreview.innerHTML = renderMarkdown(proofInput.value, { resolveTopic });
     typesetMath(proofPreview);
   });
   proofCheck.addEventListener("click", () => {
@@ -4064,7 +4132,7 @@ async function main() {
   }
   function renderSolveProblem() {
     if (!solveCurrent) return;
-    solvePrompt.innerHTML = renderMarkdown(solveCurrent.prompt || "Solve:"); // app/author markdown — safe sanitiser
+    solvePrompt.innerHTML = renderMarkdown(solveCurrent.prompt || "Solve:", { resolveTopic }); // app/author markdown — safe sanitiser
     typesetMath(solvePrompt);
   }
   // Build the problem provider for plateau `p`: authored challenges first, then
@@ -4233,7 +4301,7 @@ async function main() {
       // Same renderer as the main pane, minus the study machinery — this side is
       // for reading the other formalism, not for re-running the whole workflow.
       const { main: bodyMain } = splitDerivation(stripChallenges(mate.description || ""));
-      art.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+      art.innerHTML = renderMarkdown(bodyMain || "_No description yet._", { resolveTopic });
       twinBodyEl.append(art);
       typesetMath(art);
     } else {
@@ -6719,7 +6787,7 @@ async function main() {
     meta.className = "np-meta";
     meta.textContent = `Private note · A Million Plateaus · ${new Date().toLocaleDateString()}`;
     const noteEl = document.createElement("div");
-    noteEl.innerHTML = renderMarkdown(text);
+    noteEl.innerHTML = renderMarkdown(text, { resolveTopic });
     box.replaceChildren(h, meta, noteEl);
     await typesetMath(noteEl);
     document.body.classList.add("print-note");
@@ -6850,6 +6918,7 @@ async function main() {
       deliverable
         ? `**Recall from memory, then check:** ${deliverable}`
         : `**Recall from memory:** what is _${p.name}_ about? State the key idea and one formula or example, out loud or on paper.`,
+      { resolveTopic },
     );
     typesetMath(reviewPromptEl);
     reviewPanel.dataset.reviewId = id; // the card the grade buttons apply to
@@ -6861,14 +6930,14 @@ async function main() {
     // derivation collapsible — same treatment as openPlateau) + your own note,
     // images included.
     const { main: bodyMain, derivation } = splitDerivation(stripChallenges(p.description || ""));
-    reviewAnswerEl.innerHTML = renderMarkdown(bodyMain || "_No description yet._");
+    reviewAnswerEl.innerHTML = renderMarkdown(bodyMain || "_No description yet._", { resolveTopic });
     if (derivation) {
       const det = document.createElement("details");
       det.className = "derivation";
       const sum = document.createElement("summary");
       sum.textContent = "📜 Worked derivation — step by step";
       const inner = document.createElement("div");
-      inner.innerHTML = renderMarkdown(derivation);
+      inner.innerHTML = renderMarkdown(derivation, { resolveTopic });
       det.append(sum, inner);
       reviewAnswerEl.append(det);
     }
@@ -6877,7 +6946,7 @@ async function main() {
       const h = document.createElement("p");
       h.innerHTML = "<strong>Your note:</strong>";
       const div = document.createElement("div");
-      div.innerHTML = renderMarkdown(note);
+      div.innerHTML = renderMarkdown(note, { resolveTopic });
       reviewAnswerEl.append(h, div);
     }
     typesetMath(reviewAnswerEl);
