@@ -109,6 +109,7 @@ import {
 import { podcastPrompt, parseScript, pickVoices } from "./podcast.js";
 import { pdfCheck, paneTarget } from "./library.js";
 import { loadShelf, saveShelf, shelfFor, addToShelf, removeFromShelf } from "./private-shelf.js";
+import { driveFolderName, topicFolder, describeFolder } from "./drive-folder.js"; // R-0109 one tap to this topic's notes folder in Drive
 import { loadNotes, saveNotes, noteFor, setNote } from "./private-notes.js";
 import { HANDOFF_TARGETS, handoffPrompt, notebookLmPack, handoffOpenUrl } from "./handoff.js";
 import { extractDeliverable, deliverableCoachPrompt, splitDerivation } from "./deliverable.js"; // R-0073 coach · R-0074 derivations
@@ -3443,6 +3444,45 @@ async function main() {
     if (!studyPlateau) return;
     privateList.replaceChildren();
     const rows = shelfFor(privateShelf, studyPlateau.id);
+    // R-0109: one big tap to this topic's notes folder in Drive. The notes that
+    // matter are often Google Docs from a study chat, and hunting for the right
+    // folder by scrolling Drive on a monochrome e-ink screen is the worst part of
+    // studying on the Boox. A folder pinned on this shelf opens exactly; otherwise
+    // we open Drive already searching for the conventional `plateaus-<topic>` name,
+    // which needs no OAuth, no token and no new dependency.
+    const folder = topicFolder(studyPlateau.name, rows);
+    const fbox = document.createElement("div");
+    fbox.className = "priv-folder";
+    const open = document.createElement("a");
+    open.className = "priv-folder-open";
+    open.href = folder.url;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.textContent = folder.kind === "pinned" ? "📁 Open my notes folder ↗" : "📁 Find my notes in Drive ↗";
+    open.title = describeFolder(folder);
+    fbox.append(open);
+    const hint = document.createElement("span");
+    hint.className = "priv-folder-hint";
+    if (folder.kind === "pinned") {
+      hint.textContent = folder.title || "";
+    } else {
+      // Name the convention so the folder you create is the one this button finds.
+      const code = document.createElement("code");
+      code.textContent = folder.name;
+      hint.append(document.createTextNode("name it "), code);
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "priv-folder-copy";
+      copy.textContent = "Copy name";
+      copy.addEventListener("click", async () => {
+        const ok = await copyToClipboard(folder.name);
+        copy.textContent = ok ? "Copied ✓" : "Copy failed";
+        setTimeout(() => (copy.textContent = "Copy name"), 2500);
+      });
+      hint.append(document.createTextNode(" "), copy);
+    }
+    fbox.append(hint);
+    privateList.append(fbox);
     if (!rows.length) {
       const empty = document.createElement("div");
       empty.className = "priv-empty";

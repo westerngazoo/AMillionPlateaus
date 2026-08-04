@@ -394,6 +394,14 @@
       .mp-topic-new { color: #e0b483; border-bottom-style: dashed; border-bottom-color: #7a5c3a; }
       .mp-topic-new:hover { color: #ffd7a8; background: #2c2113; }
       .mp-topic-new::after { content: " ＋"; font-size: 10px; opacity: 0.8; }
+      /* R-0109: the Drive notes-folder jump. Deliberately a LARGE tap target —
+         it exists for the Boox, where scrolling Drive in greyscale is the pain. */
+      .priv-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; background: #13202a; border: 1px solid #24384a; border-radius: 8px; }
+      .priv-folder-open { font-size: 14px; font-weight: 600; color: #9fd0ff; text-decoration: none; padding: 6px 10px; border: 1px solid #2f5f83; border-radius: 6px; background: #1c3a52; }
+      .priv-folder-open:hover { background: #24506f; color: #cfe6ff; }
+      .priv-folder-hint { font-size: 12px; color: #8aa0b4; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .priv-folder-hint code { background: #0f151d; border: 1px solid #2a3543; border-radius: 4px; padding: 1px 5px; color: #cdd9e6; font-size: 11.5px; }
+      .priv-folder-copy { font-size: 11.5px; padding: 2px 8px; }
       .prereq-label { margin: 0; font-size: 12px; color: #e0b483; }
       .prereq-chips { display: flex; flex-wrap: wrap; gap: 6px; }
       .prereq-chip { font-size: 12px; background: #2c2113; border: 1px solid #4a3a2a; color: #f0d5b0; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; overflow: hidden; }
